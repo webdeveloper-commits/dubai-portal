@@ -31,11 +31,15 @@ function mapRow(r: Record<string, unknown>): Project {
   };
 }
 
+export const revalidate = 3600;
+
 export default async function Home() {
-  const { data: rows } = await supabase
+  const { data: rows, error } = await supabase
     .from("projects")
     .select("id,name,slug,status,price_from,handover_quarter,handover_year,bedroom_min,bedroom_max,property_types,lifestyle_tags,image_main,images_all,geo_summary,developer")
     .order("created_at", { ascending: false });
+
+  console.log("DEBUG homepage projects — count:", rows?.length, "error:", JSON.stringify(error));
 
   const projects: Project[] = (rows ?? []).map(mapRow);
 
