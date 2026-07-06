@@ -46,9 +46,11 @@ export default function HeroSection({ projects }: { projects: Project[] }) {
     return () => clearInterval(interval);
   }, []);
 
-  const areas = [...new Set(projects.map(p => p.area).filter(Boolean))].sort();
-  const developers = [...new Set(projects.map(p => p.developer).filter(Boolean))].sort();
-  const projectNames = projects.map(p => p.name).filter(Boolean).sort();
+  const areas          = [...new Set(projects.map(p => p.area).filter(Boolean))].sort();
+  const developers     = [...new Set(projects.map(p => p.developer).filter(Boolean))].sort();
+  const projectNames   = projects.map(p => p.name).filter(Boolean).sort();
+  const propertyTypes  = [...new Set(projects.flatMap(p => p.propertyTypes ?? []).filter(Boolean))].sort();
+  const lifestyleOptions = [...new Set(projects.flatMap(p => p.lifestyle ?? []).filter(Boolean))].sort();
 
   function handleSearch(filters: FilterState) {
     setLoading(true);
@@ -152,7 +154,7 @@ export default function HeroSection({ projects }: { projects: Project[] }) {
           </p>
 
           <div style={{ marginBottom: 24, width: "100%" }}>
-            <FilterBar onSearch={handleSearch} onShowMap={() => console.log("show map")} areas={areas} developers={developers} projectNames={projectNames} />
+            <FilterBar onSearch={handleSearch} onShowMap={() => console.log("show map")} areas={areas} developers={developers} projectNames={projectNames} propertyTypes={propertyTypes} lifestyleOptions={lifestyleOptions} />
           </div>
 
           <div className="hero-tags">

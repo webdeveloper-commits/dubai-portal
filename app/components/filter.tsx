@@ -218,13 +218,20 @@ function PriceDropdown({ priceFrom, priceTo, onChange }: {
 // ─── Main FilterBar ───────────────────────────────────────────────────────────
 
 export default function FilterBar({
-  onSearch, onShowMap, areas = AREAS, developers = DEVELOPERS, projectNames = [],
+  onSearch, onShowMap,
+  areas = AREAS,
+  developers = DEVELOPERS,
+  projectNames = [],
+  propertyTypes = PROPERTY_TYPES,
+  lifestyleOptions = LIFESTYLE_OPTIONS,
 }: {
   onSearch?: (filters: FilterState) => void;
   onShowMap?: () => void;
   areas?: string[];
   developers?: string[];
   projectNames?: string[];
+  propertyTypes?: string[];
+  lifestyleOptions?: string[];
 }) {
   const [filters, setFilters] = useState<FilterState>({
     projectSearch: "", priceFrom: 0, priceTo: 100_000_000,
@@ -399,7 +406,7 @@ export default function FilterBar({
             onChange={(from, to) => setFilters(prev => ({ ...prev, priceFrom: from, priceTo: to }))}
           />
 
-          <CheckboxDropdown label="Property Type" options={PROPERTY_TYPES}
+          <CheckboxDropdown label="Property Type" options={propertyTypes}
             selected={filters.propertyTypes} onChange={vals => update("propertyTypes", vals)} />
         </div>
 
@@ -416,7 +423,7 @@ export default function FilterBar({
           <CheckboxDropdown label="Handover" options={HANDOVER_OPTIONS}
             selected={filters.handover} onChange={vals => update("handover", vals)} />
 
-          <CheckboxDropdown label="Lifestyle" options={LIFESTYLE_OPTIONS}
+          <CheckboxDropdown label="Lifestyle" options={lifestyleOptions}
             selected={filters.lifestyle} onChange={vals => update("lifestyle", vals)} />
 
           {/* Buttons visible only on desktop (>900px) */}
