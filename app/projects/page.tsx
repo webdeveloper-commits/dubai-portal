@@ -28,7 +28,7 @@ function mapRow(r: Record<string, unknown>) {
   return {
     id:            r.id as string,
     name:          (r.name as string) ?? "Unnamed Project",
-    developer:     (r.developer as string) ?? "",
+    developer:     ((r.developer_slug as string) ?? "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
     area:          (r.geo_summary as string) ?? "Dubai, UAE",
     propertyTypes: (r.property_types as string[]) ?? [],
     priceFrom:     (r.price_from as number) ?? 0,
@@ -45,7 +45,7 @@ function mapRow(r: Record<string, unknown>) {
 export default async function ProjectsPage() {
   const { data } = await supabase
     .from("projects")
-    .select("id,name,slug,status,price_from,handover_quarter,handover_year,bedroom_min,bedroom_max,property_types,lifestyle_tags,image_main,images_all,geo_summary,developer")
+    .select("id,name,slug,status,price_from,handover_quarter,handover_year,bedroom_min,bedroom_max,property_types,lifestyle_tags,image_main,images_all,geo_summary,developer_slug")
     .order("created_at", { ascending: false });
 
   const projects = (data ?? []).map(mapRow);
