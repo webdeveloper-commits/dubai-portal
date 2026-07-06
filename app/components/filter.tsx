@@ -218,20 +218,44 @@ function PriceDropdown({ priceFrom, priceTo, onChange }: {
 // ─── Main FilterBar ───────────────────────────────────────────────────────────
 
 export default function FilterBar({
-  onSearch, onShowMap, areas = AREAS, developers = DEVELOPERS,
+  onSearch, onShowMap, areas = AREAS, developers = DEVELOPERS, projectNames = [],
 }: {
   onSearch?: (filters: FilterState) => void;
   onShowMap?: () => void;
   areas?: string[];
   developers?: string[];
+  projectNames?: string[];
 }) {
   const [filters, setFilters] = useState<FilterState>({
     projectSearch: "", priceFrom: 0, priceTo: 100_000_000,
     propertyTypes: [], areas: [], developers: [], handover: [], lifestyle: [],
   });
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const suggestions = filters.projectSearch.trim().length > 0
+    ? projectNames.filter(n => n.toLowerCase().includes(filters.projectSearch.toLowerCase())).slice(0, 8)
+    : [];
 
   function update<K extends keyof FilterState>(key: K, val: FilterState[K]) {
     setFilters(prev => ({ ...prev, [key]: val }));
+  }
+
+  function selectSuggestion(name: string) {
+    const updated = { ...filters, projectSearch: name };
+    setFilters(updated);
+    setShowSuggestions(false);
+    onSearch?.(updated);
   }
 
   return (
@@ -325,19 +349,49 @@ export default function FilterBar({
 
         {/* ── Row 1: search + price + property type ── */}
         <div className="fb-row1">
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-            border: "1.5px solid #e0e0e0", borderRadius: 12,
-            padding: "0 14px", height: 48, background: "white",
-            boxSizing: "border-box", width: "100%",
-          }}>
-            <Search size={15} color="#aaa" style={{ flexShrink: 0 }} />
-            <input
-              type="text" placeholder="Search Project Name"
-              value={filters.projectSearch}
-              onChange={e => update("projectSearch", e.target.value)}
-              style={{ border: "none", outline: "none", fontFamily: "Verdana", fontSize: 13, color: "#222", width: "100%", background: "transparent" }}
-            />
+          <div ref={searchRef} style={{ position: "relative", width: "100%" }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8,
+              border: `1.5px solid ${filters.projectSearch ? "#7fe2e3" : "#e0e0e0"}`, borderRadius: 12,
+              padding: "0 14px", height: 48, background: "white",
+              boxSizing: "border-box", width: "100%",
+            }}>
+              <Search size={15} color="#aaa" style={{ flexShrink: 0 }} />
+              <input
+                type="text" placeholder="Search Project Name"
+                value={filters.projectSearch}
+                onChange={e => { update("projectSearch", e.target.value); setShowSuggestions(true); }}
+                onFocus={() => setShowSuggestions(true)}
+                style={{ border: "none", outline: "none", fontFamily: "Verdana", fontSize: 13, color: "#222", width: "100%", background: "transparent" }}
+              />
+              {filters.projectSearch && (
+                <button onClick={() => { update("projectSearch", ""); setShowSuggestions(false); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", padding: 0, lineHeight: 1 }}>✕</button>
+              )}
+            </div>
+            {showSuggestions && suggestions.length > 0 && (
+              <div style={{
+                position: "absolute", top: 54, left: 0, right: 0,
+                background: "white", border: "1.5px solid #e5e5e5", borderRadius: 14,
+                zIndex: 300, boxShadow: "0 8px 32px rgba(0,0,0,0.14)", overflow: "hidden",
+              }}>
+                {suggestions.map(name => (
+                  <button key={name} onMouseDown={() => selectSuggestion(name)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      width: "100%", padding: "11px 16px", background: "white",
+                      border: "none", borderBottom: "0.5px solid #f5f5f5",
+                      cursor: "pointer", textAlign: "left", fontFamily: "Verdana", fontSize: 13, color: "#333",
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "#f0fbfb")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "white")}
+                  >
+                    <Search size={12} color="#7fe2e3" style={{ flexShrink: 0 }} />
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <PriceDropdown

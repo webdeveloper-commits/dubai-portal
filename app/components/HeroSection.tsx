@@ -38,6 +38,7 @@ export default function HeroSection({ projects }: { projects: Project[] }) {
 
   const areas = [...new Set(projects.map(p => p.area).filter(Boolean))].sort();
   const developers = [...new Set(projects.map(p => p.developer).filter(Boolean))].sort();
+  const projectNames = projects.map(p => p.name).filter(Boolean).sort();
 
   function handleSearch(filters: FilterState) {
     setLoading(true);
@@ -141,7 +142,7 @@ export default function HeroSection({ projects }: { projects: Project[] }) {
           </p>
 
           <div style={{ marginBottom: 24, width: "100%" }}>
-            <FilterBar onSearch={handleSearch} onShowMap={() => console.log("show map")} areas={areas} developers={developers} />
+            <FilterBar onSearch={handleSearch} onShowMap={() => console.log("show map")} areas={areas} developers={developers} projectNames={projectNames} />
           </div>
 
           <div className="hero-tags">
