@@ -23,6 +23,8 @@ const breadcrumbSchema = JSON.stringify({
   ],
 });
 
+export const revalidate = 3600;
+
 export const metadata = {
   title: "Dubai Area Guides | Elysian Real Estate",
   description: "Explore our comprehensive guides to Dubai's most sought-after neighbourhoods — average prices, ROI, lifestyle, schools, and more.",

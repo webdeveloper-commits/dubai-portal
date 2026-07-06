@@ -4,6 +4,8 @@ import Footer from "@/app/components/Footer";
 import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import SearchableDevGrid from "./SearchableDevGrid";
 
+export const revalidate = 3600;
+
 export const metadata = {
   title: "Top Property Developers in Dubai | Elysian Real Estate",
   description: "Explore projects from the most trusted names in Dubai real estate — from iconic landmarks to master-planned communities.",

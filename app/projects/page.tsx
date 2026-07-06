@@ -3,6 +3,8 @@ import Footer from "@/app/components/Footer";
 import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import ProjectsClientGrid from "./ProjectsClientGrid";
 
+export const revalidate = 3600;
+
 export const metadata = {
   title: "Off-Plan Projects & Properties in Dubai | Elysian Real Estate",
   description: "Browse every off-plan and ready property we represent across Dubai and the UAE. Filter by area, developer, price, and handover date.",

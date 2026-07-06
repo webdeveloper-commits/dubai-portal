@@ -4,6 +4,8 @@ import Footer from "@/app/components/Footer";
 import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import BlogClientGrid from "./BlogClientGrid";
 
+export const revalidate = 3600;
+
 export const metadata = {
   title: "Dubai Property Expert Insights | Elysian Real Estate Blog",
   description: "Market analysis, area guides, investment tips, and everything you need to know about Dubai real estate.",
