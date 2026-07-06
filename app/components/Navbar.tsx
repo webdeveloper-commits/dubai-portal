@@ -3,22 +3,13 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ChevronDown, Menu, X } from "lucide-react";
 
-const developers = [
-  { name: "Emaar Properties", slug: "emaar" },
-  { name: "Damac Properties", slug: "damac" },
-  { name: "Nakheel", slug: "nakheel" },
-  { name: "Meraas", slug: "meraas" },
-  { name: "Sobha Realty", slug: "sobha" },
-  { name: "Aldar Properties", slug: "aldar" },
-];
-
 const navLinks = [
   { label: "Properties", href: "/projects" },
   { label: "Communities", href: "/area-guides" },
   { label: "Blog", href: "/blog" },
 ];
 
-export default function Navbar() {
+export default function Navbar({ developers = [] }: { developers?: { name: string; slug: string }[] }) {
   const [devOpen, setDevOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);

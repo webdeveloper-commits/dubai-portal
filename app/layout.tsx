@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Montserrat } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/app/components/Navbar";
+import { supabase } from "@/lib/supabase";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -22,11 +23,19 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const { data } = await supabase
+    .from("developers")
+    .select("name,slug")
+    .eq("published", true)
+    .order("name", { ascending: true });
+
+  const developers = (data ?? []) as { name: string; slug: string }[];
+
   return (
     <html lang="en" className={montserrat.variable}>
       <body style={{ fontFamily: "var(--font-montserrat), sans-serif", background: "#f9f9f9", color: "#192537" }}>
-        <Navbar />
+        <Navbar developers={developers} />
         {children}
       </body>
     </html>

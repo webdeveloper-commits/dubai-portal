@@ -218,10 +218,12 @@ function PriceDropdown({ priceFrom, priceTo, onChange }: {
 // ─── Main FilterBar ───────────────────────────────────────────────────────────
 
 export default function FilterBar({
-  onSearch, onShowMap,
+  onSearch, onShowMap, areas = AREAS, developers = DEVELOPERS,
 }: {
   onSearch?: (filters: FilterState) => void;
   onShowMap?: () => void;
+  areas?: string[];
+  developers?: string[];
 }) {
   const [filters, setFilters] = useState<FilterState>({
     projectSearch: "", priceFrom: 0, priceTo: 100_000_000,
@@ -349,13 +351,13 @@ export default function FilterBar({
 
         {/* ── Row 2: 4 filter dropdowns + buttons (desktop only) ── */}
         <div className="fb-row2">
-          <CheckboxDropdown label="Area" options={AREAS}
+          <CheckboxDropdown label="Area" options={areas}
             selected={filters.areas} onChange={vals => update("areas", vals)}
-            searchable searchPlaceholder="Search Emirates" />
+            searchable searchPlaceholder="Search area" />
 
-          <CheckboxDropdown label="Developer" options={DEVELOPERS}
+          <CheckboxDropdown label="Developer" options={developers}
             selected={filters.developers} onChange={vals => update("developers", vals)}
-            searchable searchPlaceholder="Search Developer" />
+            searchable searchPlaceholder="Search developer" />
 
           <CheckboxDropdown label="Handover" options={HANDOVER_OPTIONS}
             selected={filters.handover} onChange={vals => update("handover", vals)} />

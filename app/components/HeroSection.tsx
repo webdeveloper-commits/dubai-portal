@@ -6,40 +6,18 @@ import ProjectResults, { Project } from "@/app/components/ProjectResults";
 
 const rotatingWords = ["Dream Home", "Investment", "Future", "Lifestyle"];
 
-// ─── Demo data — replace with Supabase fetch in Session 6 ────────────────────
-const DEMO_PROJECTS: Project[] = [
-  { id: "1", name: "Le Château by BEYOND", developer: "BEYOND Developments", area: "Dubai Marina", propertyTypes: ["Apartments", "Penthouses"], priceFrom: 2_800_000, handover: "Q4 2026", bedrooms: "1–4 BR", image: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=600&q=80", tag: "Off-Plan", slug: "le-chateau-beyond" },
-  { id: "2", name: "Emaar Beachfront", developer: "Emaar Properties", area: "Dubai Harbour", propertyTypes: ["Apartments"], priceFrom: 1_950_000, handover: "Q2 2026", bedrooms: "1–3 BR", image: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=600&q=80", tag: "Ready", slug: "emaar-beachfront" },
-  { id: "3", name: "DAMAC Lagoons", developer: "DAMAC Properties", area: "DAMAC Hills", propertyTypes: ["Villas", "Townhouses"], priceFrom: 1_200_000, handover: "Q1 2027", bedrooms: "3–6 BR", image: "https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=600&q=80", tag: "New Launch", slug: "damac-lagoons" },
-  { id: "4", name: "Sobha Hartland II", developer: "Sobha Realty", area: "MBR City", propertyTypes: ["Apartments", "Villas"], priceFrom: 900_000, handover: "Q3 2026", bedrooms: "Studio–4 BR", image: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=600&q=80", slug: "sobha-hartland-ii" },
-  { id: "5", name: "Nakheel Palm Beach Towers", developer: "Nakheel", area: "Palm Jumeirah", propertyTypes: ["Apartments", "Penthouses"], priceFrom: 3_500_000, handover: "Q4 2027", bedrooms: "1–5 BR", image: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=600&q=80", tag: "Off-Plan", slug: "palm-beach-towers" },
-  { id: "6", name: "Binghatti Nova", developer: "Binghatti", area: "JVC", propertyTypes: ["Apartments", "Studios"], priceFrom: 650_000, handover: "Q2 2025", bedrooms: "Studio–2 BR", image: "https://images.unsplash.com/photo-1582407947304-fd86f028f716?w=600&q=80", tag: "Ready", slug: "binghatti-nova" },
-  { id: "7", name: "Ellington Cove", developer: "Ellington Properties", area: "Dubai Creek Harbour", propertyTypes: ["Apartments"], priceFrom: 1_400_000, handover: "Q3 2027", bedrooms: "1–3 BR", image: "https://images.unsplash.com/photo-1571939228382-b2f2b585ce15?w=600&q=80", tag: "Off-Plan", slug: "ellington-cove" },
-  { id: "8", name: "Aldar Yas Park Views", developer: "Aldar", area: "Yas Island", propertyTypes: ["Apartments", "Townhouses"], priceFrom: 780_000, handover: "Q1 2026", bedrooms: "1–4 BR", image: "https://images.unsplash.com/photo-1574362848149-11496d93a7c7?w=600&q=80", slug: "yas-park-views" },
- { id: "9", name: "Le Château by BEYOND", developer: "BEYOND Developments", area: "Dubai Marina", propertyTypes: ["Apartments", "Penthouses"], priceFrom: 2_800_000, handover: "Q4 2026", bedrooms: "1–4 BR", image: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=600&q=80", tag: "Off-Plan", slug: "le-chateau-beyond" },
-  { id: "10", name: "Emaar Beachfront", developer: "Emaar Properties", area: "Dubai Harbour", propertyTypes: ["Apartments"], priceFrom: 1_950_000, handover: "Q2 2026", bedrooms: "1–3 BR", image: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=600&q=80", tag: "Ready", slug: "emaar-beachfront" },
-  { id: "11", name: "DAMAC Lagoons", developer: "DAMAC Properties", area: "DAMAC Hills", propertyTypes: ["Villas", "Townhouses"], priceFrom: 1_200_000, handover: "Q1 2027", bedrooms: "3–6 BR", image: "https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=600&q=80", tag: "New Launch", slug: "damac-lagoons" },
-  { id: "12", name: "Sobha Hartland II", developer: "Sobha Realty", area: "MBR City", propertyTypes: ["Apartments", "Villas"], priceFrom: 900_000, handover: "Q3 2026", bedrooms: "Studio–4 BR", image: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=600&q=80", slug: "sobha-hartland-ii" },
-  { id: "13", name: "Nakheel Palm Beach Towers", developer: "Nakheel", area: "Palm Jumeirah", propertyTypes: ["Apartments", "Penthouses"], priceFrom: 3_500_000, handover: "Q4 2027", bedrooms: "1–5 BR", image: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=600&q=80", tag: "Off-Plan", slug: "palm-beach-towers" },
-  { id: "14", name: "Binghatti Nova", developer: "Binghatti", area: "JVC", propertyTypes: ["Apartments", "Studios"], priceFrom: 650_000, handover: "Q2 2025", bedrooms: "Studio–2 BR", image: "https://images.unsplash.com/photo-1582407947304-fd86f028f716?w=600&q=80", tag: "Ready", slug: "binghatti-nova" },
-  { id: "15", name: "Ellington Cove", developer: "Ellington Properties", area: "Dubai Creek Harbour", propertyTypes: ["Apartments"], priceFrom: 1_400_000, handover: "Q3 2027", bedrooms: "1–3 BR", image: "https://images.unsplash.com/photo-1571939228382-b2f2b585ce15?w=600&q=80", tag: "Off-Plan", slug: "ellington-cove" },
-  { id: "16", name: "Aldar Yas Park Views", developer: "Aldar", area: "Yas Island", propertyTypes: ["Apartments", "Townhouses"], priceFrom: 780_000, handover: "Q1 2026", bedrooms: "1–4 BR", image: "https://images.unsplash.com/photo-1574362848149-11496d93a7c7?w=600&q=80", slug: "yas-park-views" },
-
-
-];
-
 function applyFilters(projects: Project[], filters: FilterState): Project[] {
   return projects.filter(p => {
     if (filters.projectSearch && !p.name.toLowerCase().includes(filters.projectSearch.toLowerCase())) return false;
-    if (filters.areas.length && !filters.areas.includes(p.area)) return false;
-    if (filters.developers.length && !filters.developers.some(d => p.developer.includes(d))) return false;
-    if (filters.propertyTypes.length && !filters.propertyTypes.some(t => p.propertyTypes.includes(t))) return false;
+    if (filters.areas.length && !filters.areas.some(a => p.area?.toLowerCase().includes(a.toLowerCase()))) return false;
+    if (filters.developers.length && !filters.developers.some(d => p.developer?.toLowerCase().includes(d.toLowerCase()))) return false;
+    if (filters.propertyTypes.length && !filters.propertyTypes.some(t => p.propertyTypes?.includes(t))) return false;
     if (p.priceFrom < filters.priceFrom || p.priceFrom > filters.priceTo) return false;
     return true;
   });
 }
 
-export default function HeroSection() {
+export default function HeroSection({ projects }: { projects: Project[] }) {
   const [wordIndex, setWordIndex] = useState(0);
   const [visible, setVisible] = useState(true);
   const [activeFilters, setActiveFilters] = useState<FilterState | null>(null);
@@ -58,11 +36,14 @@ export default function HeroSection() {
     return () => clearInterval(interval);
   }, []);
 
+  const areas = [...new Set(projects.map(p => p.area).filter(Boolean))].sort();
+  const developers = [...new Set(projects.map(p => p.developer).filter(Boolean))].sort();
+
   function handleSearch(filters: FilterState) {
     setLoading(true);
     setActiveFilters(filters);
     setTimeout(() => {
-      setResults(applyFilters(DEMO_PROJECTS, filters));
+      setResults(applyFilters(projects, filters));
       setLoading(false);
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     }, 400);
@@ -160,7 +141,7 @@ export default function HeroSection() {
           </p>
 
           <div style={{ marginBottom: 24, width: "100%" }}>
-            <FilterBar onSearch={handleSearch} onShowMap={() => console.log("show map")} />
+            <FilterBar onSearch={handleSearch} onShowMap={() => console.log("show map")} areas={areas} developers={developers} />
           </div>
 
           <div className="hero-tags">
