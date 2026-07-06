@@ -13,11 +13,13 @@ export const metadata = {
 };
 
 export default async function DevelopersPage() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("developers")
     .select("id,name,slug,tagline,logo_url,founded_year,headquarters,total_units,areas,property_types,price_range")
     .eq("published", true)
     .order("name", { ascending: true });
+
+  console.log("DEBUG developers — count:", data?.length, "error:", JSON.stringify(error));
 
   const devs = (data ?? []) as {
     id: string; name: string; slug: string; tagline: string;
