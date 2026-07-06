@@ -13,8 +13,9 @@ const developers = [
 ];
 
 const navLinks = [
-  { label: "Properties", href: "#" },
-  { label: "Communities", href: "#" },
+  { label: "Properties", href: "/projects" },
+  { label: "Communities", href: "/area-guides" },
+  { label: "Blog", href: "/blog" },
 ];
 
 export default function Navbar() {
@@ -207,8 +208,10 @@ export default function Navbar() {
               FAQ
             </Link>
 
-            <Link
-              href="#"
+            <a
+              href="https://wa.me/971400000000"
+              target="_blank"
+              rel="noopener noreferrer"
               style={{
                 fontFamily: "var(--font-montserrat), Montserrat, sans-serif",
                 fontWeight: 700,
@@ -227,7 +230,7 @@ export default function Navbar() {
               onMouseLeave={e => (e.currentTarget.style.background = "#7fe2e3")}
             >
               Contact Us
-            </Link>
+            </a>
           </div>
 
           {/* Mobile hamburger */}
@@ -303,13 +306,15 @@ export default function Navbar() {
             FAQ
           </Link>
 
-          <Link
-            href="#"
+          <a
+            href="https://wa.me/971400000000"
+            target="_blank"
+            rel="noopener noreferrer"
             onClick={() => setMobileOpen(false)}
             style={{ fontFamily: "var(--font-montserrat), Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#192537", background: "#7fe2e3", textDecoration: "none", padding: "14px 20px", borderRadius: 999, textAlign: "center", marginTop: 16 }}
           >
             Contact Us
-          </Link>
+          </a>
         </div>
       )}
 
