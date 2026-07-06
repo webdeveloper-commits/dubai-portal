@@ -11,8 +11,18 @@ function applyFilters(projects: Project[], filters: FilterState): Project[] {
     if (filters.projectSearch && !p.name.toLowerCase().includes(filters.projectSearch.toLowerCase())) return false;
     if (filters.areas.length && !filters.areas.some(a => p.area?.toLowerCase().includes(a.toLowerCase()))) return false;
     if (filters.developers.length && !filters.developers.some(d => p.developer?.toLowerCase().includes(d.toLowerCase()))) return false;
-    if (filters.propertyTypes.length && !filters.propertyTypes.some(t => p.propertyTypes?.includes(t))) return false;
+    if (filters.propertyTypes.length && !filters.propertyTypes.some(t => (p.propertyTypes ?? []).some(pt => pt.toLowerCase() === t.toLowerCase()))) return false;
     if (p.priceFrom < filters.priceFrom || p.priceFrom > filters.priceTo) return false;
+    if (filters.handover.length) {
+      const yr = p.handoverYear ?? 0;
+      const matches = filters.handover.some(h => {
+        if (h === "Ready Now") return p.tag === "Ready" || yr === 0;
+        if (h === "2028+")    return yr >= 2028;
+        return p.handover?.includes(h);
+      });
+      if (!matches) return false;
+    }
+    if (filters.lifestyle.length && !filters.lifestyle.some(l => (p.lifestyle ?? []).some(pl => pl.toLowerCase() === l.toLowerCase()))) return false;
     return true;
   });
 }

@@ -12,10 +12,12 @@ export interface Project {
   priceFrom: number;
   priceTo?: number;
   handover: string;
+  handoverYear?: number;
   bedrooms: string;
   image: string;
   tag?: string;
   slug: string;
+  lifestyle?: string[];
 }
 
 interface ProjectResultsProps {
