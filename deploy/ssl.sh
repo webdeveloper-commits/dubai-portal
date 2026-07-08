@@ -1,8 +1,8 @@
 #!/bin/bash
 # Run after DNS is pointed to this server.
-# Usage: bash ssl.sh admin.elysian.ae
+# Usage: bash ssl.sh admin.propsale.co
 
-DOMAIN=${1:-"admin.elysian.ae"}
+DOMAIN=${1:-"admin.propsale.co"}
 APP_DIR="/var/www/dubai-portal"
 
 echo "Setting up nginx + SSL for $DOMAIN..."
