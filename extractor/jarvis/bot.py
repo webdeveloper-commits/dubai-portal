@@ -1,0 +1,107 @@
+import logging
+import asyncio
+from telegram import Update, BotCommand
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    filters, ContextTypes
+)
+from .brain import chat, clear_history
+from .config import TELEGRAM_TOKEN, ADMIN_CHAT_ID
+
+logger = logging.getLogger(__name__)
+
+# Global app reference so scheduler can send messages
+_app: Application | None = None
+
+
+def get_app() -> Application:
+    return _app
+
+
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    await update.message.reply_text(
+        f"JARVIS online.\n\n"
+        f"Your Telegram chat ID: {chat_id}\n\n"
+        f"Add this to your server .env file:\n"
+        f"ADMIN_CHAT_ID={chat_id}\n\n"
+        f"Then restart JARVIS. After that, only your account can control it."
+    )
+
+
+async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        return
+    clear_history(update.effective_chat.id)
+    await update.message.reply_text("Conversation cleared.")
+
+
+async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        return
+    await update.message.reply_text(
+        "JARVIS is running.\n"
+        "Next runs: Tuesday and Friday at 9:00am UAE time.\n"
+        "Send any message to talk to me."
+    )
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        await update.message.reply_text("Unauthorized.")
+        return
+
+    chat_id = update.effective_chat.id
+    user_text = update.message.text
+
+    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+
+    try:
+        reply = chat(chat_id, user_text)
+        # Telegram message limit is 4096 chars — split if needed
+        for chunk in _split(reply):
+            await update.message.reply_text(chunk)
+    except Exception as e:
+        logger.error(f"handle_message error: {e}")
+        await update.message.reply_text(f"Error: {e}")
+
+
+async def notify(text: str) -> None:
+    """Send a message to admin — called by scheduler and tools."""
+    if not _app or not ADMIN_CHAT_ID:
+        logger.warning("notify() called but app or ADMIN_CHAT_ID not set")
+        return
+    try:
+        for chunk in _split(text):
+            await _app.bot.send_message(chat_id=ADMIN_CHAT_ID, text=chunk)
+    except Exception as e:
+        logger.error(f"notify() failed: {e}")
+
+
+def _is_admin(update: Update) -> bool:
+    if ADMIN_CHAT_ID == 0:
+        return True  # dev mode — no restriction until ADMIN_CHAT_ID is set
+    return update.effective_chat.id == ADMIN_CHAT_ID
+
+
+def _split(text: str, limit: int = 4000) -> list[str]:
+    return [text[i:i+limit] for i in range(0, len(text), limit)]
+
+
+def run() -> None:
+    global _app
+
+    logging.basicConfig(
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        level=logging.INFO,
+    )
+
+    _app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    _app.add_handler(CommandHandler("start", cmd_start))
+    _app.add_handler(CommandHandler("reset", cmd_reset))
+    _app.add_handler(CommandHandler("status", cmd_status))
+    _app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    logger.info("JARVIS starting — polling Telegram...")
+    _app.run_polling(allowed_updates=Update.ALL_TYPES)

@@ -1,0 +1,13 @@
+[Unit]
+Description=Elysian JARVIS AI Agent
+After=network.target
+
+[Service]
+WorkingDirectory=/var/www/dubai-portal/extractor
+EnvironmentFile=/var/www/dubai-portal/extractor/.env
+ExecStart=/var/www/dubai-portal/extractor/venv/bin/python run_jarvis.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
