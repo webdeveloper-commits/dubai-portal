@@ -99,8 +99,20 @@ async def scan_new_projects(existing_slugs: set[str]) -> list[dict]:
 
     try:
         logger.info("Loading opr.ae/projects...")
-        await page.goto(PROJECTS_URL, wait_until="networkidle", timeout=45_000)
-        await asyncio.sleep(3)  # extra wait — page loads projects after DOM ready
+        await page.goto(PROJECTS_URL, wait_until="domcontentloaded", timeout=45_000)
+
+        # Wait for at least one "Discover more" link to appear (projects are JS-rendered)
+        try:
+            await page.wait_for_selector("a:has-text('Discover more')", timeout=30_000)
+            logger.info("Project cards detected on page")
+        except Exception:
+            logger.warning("Timed out waiting for project cards — page may be blocked or slow")
+
+        await asyncio.sleep(3)  # extra wait for remaining cards to render
+
+        # Debug: log page title so we can detect Cloudflare challenge pages
+        title = await page.title()
+        logger.info(f"Page title: {title}")
 
         for attempt in range(MAX_LOAD_MORE + 1):
             # All cards that have a "Discover more" button = real project cards
@@ -198,7 +210,12 @@ async def scrape_project_detail(url: str) -> dict | None:
     for attempt in range(3):
         try:
             logger.info(f"Scraping {url} (attempt {attempt + 1})")
-            await page.goto(url, wait_until="networkidle", timeout=45_000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+            # Wait for h1 (project name) to confirm page content loaded
+            try:
+                await page.wait_for_selector("h1", timeout=15_000)
+            except Exception:
+                logger.warning(f"h1 not found on {url}")
             await asyncio.sleep(2)
 
             data: dict = {"opr_url": url}
