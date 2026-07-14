@@ -22,6 +22,8 @@ def _make_slug(name: str) -> str:
 
 EXTRACT_PROMPT = """You are a real estate data extractor. Given raw scraped text from a Dubai/UAE property listing page, extract structured data and return ONLY valid JSON.
 
+IMPORTANT: If the project is NOT in the UAE (Dubai, Abu Dhabi, Sharjah, Ajman, RAK, Fujairah, Umm Al Quwain) — for example if it's in Egypt, Bali, Georgia, Turkey, or any other country — return exactly: {"skip": true}
+
 Extract these fields (use null if not found):
 {
   "name": "Project name",
@@ -89,6 +91,9 @@ async def parse_and_humanize(raw: dict) -> dict | None:
             text = re.sub(r"^```(?:json)?\s*", "", text)
             text = re.sub(r"\s*```$", "", text)
             structured = json.loads(text)
+            if structured.get("skip"):
+                logger.info("Claude flagged project as non-UAE — skipping")
+                return None
             break
         except (json.JSONDecodeError, Exception) as e:
             logger.warning(f"Extract attempt {attempt + 1} failed: {e}")

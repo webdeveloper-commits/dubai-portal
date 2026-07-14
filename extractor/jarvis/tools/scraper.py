@@ -12,13 +12,7 @@ logger = logging.getLogger(__name__)
 
 OPR_BASE      = "https://opr.ae"
 PROJECTS_URL  = "https://opr.ae/projects"
-MAX_LOAD_MORE = 5  # max clicks = 50 projects per scan
-
-UAE_KEYWORDS = [
-    "dubai", "abu dhabi", "sharjah", "ajman",
-    "ras al khaimah", "fujairah", "umm al quwain",
-    "uae", "united arab emirates",
-]
+MAX_LOAD_MORE = 5
 
 # ── Browser singleton ──────────────────────────────────────────────────────────
 
@@ -149,14 +143,6 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             url = href if href.startswith("http") else OPR_BASE + href
             slug = url.rstrip("/").split("/")[-1]
             card_text = (card.get("text") or "").lower()
-            # Also check slug — it always contains location (e.g. -arjan-dubai, -ajman)
-            slug_text = slug.replace("-", " ")
-            combined = card_text + " " + slug_text
-
-            # Skip only if clearly non-UAE (no UAE keyword found anywhere)
-            if combined and not any(kw in combined for kw in UAE_KEYWORDS):
-                logger.info(f"Skipping non-UAE: {slug}")
-                continue
 
             # Stop at known projects
             if slug in existing_slugs:
