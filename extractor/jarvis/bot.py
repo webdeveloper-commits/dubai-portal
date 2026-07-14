@@ -65,8 +65,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("Processing approvals...")
             return
 
+        # ── Stop current run ──
+        if upper in ("STOP", "STOP RUN", "CANCEL"):
+            if runner.stop_run():
+                await update.message.reply_text("Stopping run — current project will finish, then it will halt.")
+            else:
+                await update.message.reply_text("No run is currently active.")
+            return
+
+        # ── Status check ──
+        if upper == "STATUS":
+            status = "Running" if runner.is_running() else "Idle"
+            await update.message.reply_text(f"JARVIS status: {status}\nNext scheduled runs: Tuesday and Friday at 9:00am UAE time.")
+            return
+
         # ── Manual run triggers ──
         if upper in ("RUN TUESDAY", "RUN NOW", "START TUESDAY"):
+            if runner.is_running():
+                await update.message.reply_text("A run is already in progress. Send STOP to cancel it first.")
+                return
             await update.message.reply_text("Starting Tuesday run now...")
             asyncio.create_task(runner.run_tuesday())
             return

@@ -18,10 +18,13 @@ logger = logging.getLogger(__name__)
 
 # Notify function is injected at startup to avoid circular imports
 _notify = None
+_active_task: asyncio.Task | None = None
+
 
 def set_notify(fn):
     global _notify
     _notify = fn
+
 
 async def notify(msg: str):
     if _notify:
@@ -30,9 +33,24 @@ async def notify(msg: str):
         logger.info(f"[NOTIFY] {msg}")
 
 
+def is_running() -> bool:
+    return _active_task is not None and not _active_task.done()
+
+
+def stop_run() -> bool:
+    """Cancel the active run task. Returns True if there was something to cancel."""
+    global _active_task
+    if _active_task and not _active_task.done():
+        _active_task.cancel()
+        return True
+    return False
+
+
 # ── Tuesday Run — Projects + Blog ──────────────────────────────────────────────
 
 async def run_tuesday():
+    global _active_task
+    _active_task = asyncio.current_task()
     await notify("JARVIS — Tuesday run started\nScanning opr.ae for new projects...")
 
     existing_slugs = get_existing_slugs()
@@ -109,6 +127,13 @@ async def run_tuesday():
 
             # Polite delay between project scrapes — randomised to avoid rate limiting
             await asyncio.sleep(random.uniform(8, 14))
+
+        except asyncio.CancelledError:
+            await notify(
+                f"Run stopped by user.\n"
+                f"Published so far: {len(published)}, skipped: {len(skipped)}, failed: {len(errors)}"
+            )
+            raise  # let asyncio clean up the task properly
 
         except Exception as e:
             logger.error(f"Error processing '{name}': {e}")
