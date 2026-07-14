@@ -84,115 +84,108 @@ def _parse_href_url(href: str) -> str | None:
 
 # ── Step 1: Scan listing page for new project URLs ─────────────────────────────
 
-async def scan_new_projects(existing_slugs: set[str]) -> list[dict]:
+async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list[dict]:
     """
-    Visit opr.ae/projects, paginate via Load More, collect new project URLs.
+    Visit opr.ae/projects, collect up to max_new new project URLs.
+    Uses a single JS call per batch to extract card data fast.
     Stops early when it hits a project already in existing_slugs.
-    Returns list of lightweight dicts: {url, slug, name, price_text, thumbnail}
     """
     browser = await get_browser()
     page = await browser.new_page()
     await page.set_extra_http_headers(_stealth_headers())
 
     new_projects: list[dict] = []
-    stop = False
 
     try:
         logger.info("Loading opr.ae/projects...")
         await page.goto(PROJECTS_URL, wait_until="domcontentloaded", timeout=45_000)
 
-        # Wait for at least one "Discover more" link to appear (projects are JS-rendered)
         try:
             await page.wait_for_selector("a:has-text('Discover more')", timeout=30_000)
             logger.info("Project cards detected on page")
         except Exception:
-            logger.warning("Timed out waiting for project cards — page may be blocked or slow")
+            logger.warning("Timed out waiting for project cards — may be blocked")
 
-        await asyncio.sleep(3)  # extra wait for remaining cards to render
+        await asyncio.sleep(3)
 
-        # Debug: log page title so we can detect Cloudflare challenge pages
         title = await page.title()
         logger.info(f"Page title: {title}")
 
-        for attempt in range(MAX_LOAD_MORE + 1):
-            # All cards that have a "Discover more" button = real project cards
-            cards = page.locator("div, article").filter(
-                has=page.locator("a:has-text('Discover more')")
-            )
-            card_count = await cards.count()
-            logger.info(f"Found {card_count} project cards on page")
+        # Extract all card data in one JS call — much faster than per-card Playwright calls
+        cards_data: list[dict] = await page.evaluate("""() => {
+            const results = [];
+            const links = Array.from(document.querySelectorAll('a')).filter(
+                a => a.textContent.trim().toLowerCase().includes('discover more')
+            );
+            links.forEach(link => {
+                const card = link.closest('div[class], article') || link.parentElement;
+                if (!card) return;
+                const href = link.getAttribute('href') || '';
+                const text = card.innerText || '';
+                // Thumbnail: find element with background-image style
+                let thumbnail = '';
+                const bgEl = card.querySelector('[style*="background-image"]');
+                if (bgEl) {
+                    const style = bgEl.getAttribute('style') || '';
+                    const m = style.match(/url\\([\"']?(https?:\\/\\/[^\"')]+)[\"']?\\)/);
+                    if (m) thumbnail = m[1].replace(/%7B.*$/, '');
+                }
+                results.push({ href, text, thumbnail });
+            });
+            return results;
+        }""")
 
-            for i in range(card_count):
-                card = cards.nth(i)
+        logger.info(f"JS extracted {len(cards_data)} cards")
 
-                # ── Get project URL ──
-                link = card.locator("a:has-text('Discover more')").first
-                href = await link.get_attribute("href") or ""
-                if not href:
-                    continue
-                url = href if href.startswith("http") else OPR_BASE + href
-                slug = url.rstrip("/").split("/")[-1]
+        for card in cards_data:
+            if len(new_projects) >= max_new:
+                logger.info(f"Reached max_new limit ({max_new})")
+                break
 
-                # ── Skip non-UAE locations ──
-                card_text = (await card.inner_text()).lower()
-                is_uae = any(kw in card_text for kw in UAE_KEYWORDS)
-                if not is_uae:
-                    logger.info(f"Skipping non-UAE card: {slug}")
-                    continue
+            href = card.get("href", "")
+            if not href:
+                continue
 
-                # ── Stop when we hit something already in Supabase ──
-                if slug in existing_slugs:
-                    logger.info(f"Reached known project '{slug}' — stopping scan")
-                    stop = True
+            url = href if href.startswith("http") else OPR_BASE + href
+            slug = url.rstrip("/").split("/")[-1]
+            card_text = (card.get("text") or "").lower()
+
+            # Skip non-UAE
+            if card_text and not any(kw in card_text for kw in UAE_KEYWORDS):
+                logger.info(f"Skipping non-UAE: {slug}")
+                continue
+
+            # Stop at known projects
+            if slug in existing_slugs:
+                logger.info(f"Reached known project '{slug}' — stopping")
+                break
+
+            # Parse name and price from card text
+            lines = [l.strip() for l in card_text.split("\n") if l.strip()]
+            name = slug.replace("-", " ").title()
+            price_text = ""
+            for line in lines:
+                if "aed" in line and any(c.isdigit() for c in line):
+                    price_text = line
+                elif len(line) > 3 and "discover" not in line and "from" not in line:
+                    name = line.title()
                     break
 
-                # ── Thumbnail from wrapper1 background-image ──
-                thumbnail = None
-                wrapper = card.locator("[class*='wrapper1'], [style*='background-image']").first
-                if await wrapper.count() > 0:
-                    style = await wrapper.get_attribute("style") or ""
-                    thumbnail = _parse_bg_url(style)
-
-                # ── Price text ──
-                price_el = card.locator("[class*='price']").first
-                price_text = ""
-                if await price_el.count() > 0:
-                    price_text = (await price_el.inner_text()).strip()
-
-                # ── Project name ──
-                name_el = card.locator("h2, h3, [class*='name'], [class*='title']").first
-                name = slug.replace("-", " ").title()
-                if await name_el.count() > 0:
-                    name = (await name_el.inner_text()).strip()
-
-                new_projects.append({
-                    "url": url,
-                    "slug": slug,
-                    "name": name,
-                    "price_text": price_text,
-                    "thumbnail": thumbnail,
-                })
-
-            if stop or attempt >= MAX_LOAD_MORE:
-                break
-
-            # ── Click Load More ──
-            load_more = page.locator("text=Load More").first
-            if await load_more.count() == 0:
-                logger.info("No Load More button — end of list")
-                break
-
-            await load_more.scroll_into_view_if_needed()
-            await load_more.click()
-            await asyncio.sleep(3)
-            logger.info(f"Clicked Load More ({attempt + 1}/{MAX_LOAD_MORE})")
+            new_projects.append({
+                "url": url,
+                "slug": slug,
+                "name": name,
+                "price_text": price_text,
+                "thumbnail": card.get("thumbnail", ""),
+            })
+            logger.info(f"Queued: {name} ({slug})")
 
     except Exception as e:
         logger.error(f"scan_new_projects failed: {e}")
     finally:
         await page.close()
 
-    logger.info(f"scan_new_projects complete — {len(new_projects)} new projects found")
+    logger.info(f"scan_new_projects complete — {len(new_projects)} new projects queued")
     return new_projects
 
 
