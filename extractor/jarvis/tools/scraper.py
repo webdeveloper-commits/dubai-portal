@@ -149,9 +149,12 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             url = href if href.startswith("http") else OPR_BASE + href
             slug = url.rstrip("/").split("/")[-1]
             card_text = (card.get("text") or "").lower()
+            # Also check slug — it always contains location (e.g. -arjan-dubai, -ajman)
+            slug_text = slug.replace("-", " ")
+            combined = card_text + " " + slug_text
 
-            # Skip non-UAE
-            if card_text and not any(kw in card_text for kw in UAE_KEYWORDS):
+            # Skip only if clearly non-UAE (no UAE keyword found anywhere)
+            if combined and not any(kw in combined for kw in UAE_KEYWORDS):
                 logger.info(f"Skipping non-UAE: {slug}")
                 continue
 
