@@ -93,7 +93,7 @@ async def parse_and_humanize(raw: dict) -> dict | None:
             structured = json.loads(text)
             if structured.get("skip"):
                 logger.info("Claude flagged project as non-UAE — skipping")
-                return None
+                return {"_skip": True}
             break
         except (json.JSONDecodeError, Exception) as e:
             logger.warning(f"Extract attempt {attempt + 1} failed: {e}")

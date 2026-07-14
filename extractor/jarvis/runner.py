@@ -51,17 +51,22 @@ async def run_tuesday():
         name = stub.get("name", stub["slug"])
         try:
             # ── Scrape detail page ──
+            await notify(f"Scraping: {name}...")
             raw = await scrape_project_detail(stub["url"])
             if not raw:
-                errors.append(name)
+                errors.append(f"{name} (scrape failed)")
                 log_error("opr.ae", "scrape_failed", "returned None", False)
                 continue
+            logger.info(f"Scraped {name}: {len(raw.get('description_raw',''))} chars, {raw.get('image_count',0)} images")
 
             # ── Parse + humanize via Claude ──
             parsed = await parse_and_humanize(raw)
             if not parsed:
-                errors.append(name)
-                log_error("opr.ae", "parse_failed", "Claude returned None", False)
+                errors.append(f"{name} (scrape/parse error)")
+                log_error("opr.ae", "parse_failed", "returned None after scrape", False)
+                continue
+            if parsed.get("_skip"):
+                skipped.append(f"{name} (non-UAE)")
                 continue
 
             # ── Duplicate check (slug may differ from URL slug) ──
