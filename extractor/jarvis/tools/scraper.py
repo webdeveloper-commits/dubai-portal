@@ -193,80 +193,132 @@ async def scrape_project_detail(url: str) -> dict | None:
         try:
             logger.info(f"Scraping {url} (attempt {attempt + 1})")
             await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
-            # Wait for h1 (project name) to confirm page content loaded
-            try:
-                await page.wait_for_selector("h1", timeout=15_000)
-            except Exception:
-                logger.warning(f"h1 not found on {url}")
-            await asyncio.sleep(2)
+
+            # Wait for page content — opr.ae detail pages are JS-rendered
+            # Try multiple selectors that indicate real content has loaded
+            content_loaded = False
+            for selector in [".wrapper1", "[style*='background-image']", "h1", "h2"]:
+                try:
+                    await page.wait_for_selector(selector, timeout=20_000)
+                    content_loaded = True
+                    logger.info(f"Content detected via '{selector}' on {url}")
+                    break
+                except Exception:
+                    continue
+
+            if not content_loaded:
+                logger.warning(f"No content selectors found on {url}")
+
+            # Extra wait for JS to finish rendering
+            await asyncio.sleep(4)
 
             data: dict = {"opr_url": url}
 
-            # ── Project name ──
-            h1 = page.locator("h1").first
-            data["name"] = (await h1.inner_text()).strip() if await h1.count() > 0 else ""
+            # ── Use JS to extract everything in one call (faster + more reliable) ──
+            extracted = await page.evaluate("""() => {
+                const result = {};
 
-            # ── Main thumbnail (wrapper1 div) ──
-            wrapper1 = page.locator(".wrapper1, [class*='wrapper1']").first
-            if await wrapper1.count() > 0:
-                style = await wrapper1.get_attribute("style") or ""
-                data["image_main"] = _parse_bg_url(style)
-            else:
-                data["image_main"] = None
+                // Project name — try h1, h2, title
+                const h1 = document.querySelector('h1');
+                const h2 = document.querySelector('h2');
+                result.name = (h1 && h1.innerText.trim()) || (h2 && h2.innerText.trim()) || document.title || '';
 
-            # ── Raw description text ──
-            desc_chunks = []
-            paras = page.locator("p")
-            for j in range(min(await paras.count(), 15)):
-                txt = (await paras.nth(j).inner_text()).strip()
-                if len(txt) > 50:
-                    desc_chunks.append(txt)
-            data["description_raw"] = "\n\n".join(desc_chunks)
+                // Main image from wrapper1 background-image
+                const wrapper = document.querySelector('.wrapper1, [class*="wrapper1"]');
+                if (wrapper) {
+                    const style = wrapper.getAttribute('style') || wrapper.style.backgroundImage || '';
+                    const m = style.match(/url\\([\"']?(https?:\\/\\/[^\"')\\s]+)[\"']?\\)/);
+                    result.image_main = m ? m[1].replace(/%7B.*$/, '') : '';
+                }
 
-            # ── All visible text on page (Claude will extract fields from this) ──
-            body_text = await page.inner_text("body")
-            data["body_text"] = body_text[:8000]  # cap to avoid huge payloads
+                // All paragraph text for description
+                const paras = Array.from(document.querySelectorAll('p, .description, [class*="desc"], [class*="text"]'));
+                const descParts = paras
+                    .map(p => p.innerText.trim())
+                    .filter(t => t.length > 60 && !t.includes('cookie') && !t.includes('©'));
+                result.description_raw = [...new Set(descParts)].slice(0, 8).join('\\n\\n');
 
-            # ── Gallery images ──
-            images: list[str] = []
+                // Full body text for Claude to extract structured fields
+                result.body_text = document.body.innerText.slice(0, 8000);
 
-            async def _collect_gallery_images():
-                # Method 1: href on cr-slider-page-image anchor tags
-                links = page.locator(".cr-slider-page-image")
-                for j in range(await links.count()):
-                    href = await links.nth(j).get_attribute("href") or ""
-                    img = _parse_href_url(href)
-                    if img and img not in images:
-                        images.append(img)
+                // Gallery images — try multiple approaches
+                const galleryImages = [];
 
-                # Method 2: background-image on inner divs
-                inner = page.locator(".cr-slider-page-image div[style*='background-image']")
-                for j in range(await inner.count()):
-                    style = await inner.nth(j).get_attribute("style") or ""
-                    img = _parse_bg_url(style)
-                    if img and img not in images:
-                        images.append(img)
+                // Approach 1: cr-slider links with href
+                document.querySelectorAll('.cr-slider-page-image').forEach(el => {
+                    const href = el.getAttribute('href') || '';
+                    if (href.startsWith('http')) {
+                        galleryImages.push(href.replace(/%7B.*$/, '').replace(/\\{.*$/, ''));
+                    }
+                    // background-image on child div
+                    const inner = el.querySelector('[style*="background-image"]');
+                    if (inner) {
+                        const s = inner.getAttribute('style') || '';
+                        const m = s.match(/url\\([\"']?(https?:\\/\\/[^\"')]+)[\"']?\\)/);
+                        if (m) galleryImages.push(m[1].replace(/%7B.*$/, ''));
+                    }
+                });
 
-            # Exteriors tab
-            ext_tab = page.locator("text=Exteriors, text=Exterior").first
-            if await ext_tab.count() > 0:
-                await ext_tab.click()
-                await asyncio.sleep(1)
-            await _collect_gallery_images()
+                // Approach 2: any div with background-image containing img3.creatium.ru
+                if (galleryImages.length === 0) {
+                    document.querySelectorAll('[style*="background-image"]').forEach(el => {
+                        const s = el.getAttribute('style') || '';
+                        const m = s.match(/url\\([\"']?(https?:\\/\\/[^\"')]+)[\"']?\\)/);
+                        if (m && m[1].includes('creatium')) {
+                            galleryImages.push(m[1].replace(/%7B.*$/, ''));
+                        }
+                    });
+                }
 
-            # Interiors tab
-            int_tab = page.locator("text=Interiors, text=Interior").first
-            if await int_tab.count() > 0:
-                await int_tab.click()
-                await asyncio.sleep(1)
-                await _collect_gallery_images()
+                // Approach 3: any img tags
+                if (galleryImages.length === 0) {
+                    document.querySelectorAll('img[src*="creatium"], img[src*="cloudinary"], img[data-src]').forEach(img => {
+                        const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+                        if (src.startsWith('http') && !src.includes('gif') && src.length > 30) {
+                            galleryImages.push(src);
+                        }
+                    });
+                }
 
-            data["images_all"] = images
-            data["image_count"] = len(images)
+                result.images_all = [...new Set(galleryImages)].slice(0, 20);
+                return result;
+            }""")
+
+            data["name"]            = extracted.get("name", "")
+            data["image_main"]      = extracted.get("image_main") or None
+            data["description_raw"] = extracted.get("description_raw", "")
+            data["body_text"]       = extracted.get("body_text", "")
+            data["images_all"]      = extracted.get("images_all", [])
+
+            # If gallery still empty, try clicking tabs then re-extracting
+            if not data["images_all"]:
+                for tab_text in ["Exteriors", "Exterior", "Gallery"]:
+                    tab = page.locator(f"text={tab_text}").first
+                    if await tab.count() > 0:
+                        await tab.click()
+                        await asyncio.sleep(2)
+                        extra_imgs = await page.evaluate("""() => {
+                            const imgs = [];
+                            document.querySelectorAll('[style*="background-image"]').forEach(el => {
+                                const s = el.getAttribute('style') || '';
+                                const m = s.match(/url\\([\"']?(https?:\\/\\/[^\"')]+)[\"']?\\)/);
+                                if (m) imgs.push(m[1].replace(/%7B.*$/, ''));
+                            });
+                            document.querySelectorAll('.cr-slider-page-image').forEach(el => {
+                                const href = el.getAttribute('href') || '';
+                                if (href.startsWith('http')) imgs.push(href.replace(/%7B.*$/, ''));
+                            });
+                            return [...new Set(imgs)].slice(0, 20);
+                        }""")
+                        if extra_imgs:
+                            data["images_all"] = extra_imgs
+                            break
+
+            data["image_count"] = len(data["images_all"])
 
             logger.info(
                 f"Scraped '{data['name']}' — "
-                f"{len(images)} gallery images, "
+                f"{data['image_count']} images, "
                 f"{len(data['description_raw'])} chars description"
             )
             return data

@@ -45,14 +45,17 @@ Return ONLY the JSON object. No explanation."""
 
 HUMANIZE_PROMPT = """You are a professional real estate copywriter for a Dubai property portal.
 
-Rewrite the following property description into 3 paragraphs. Rules:
+Given the property text below, produce a JSON object with exactly two keys:
+
+"short": One or two sentences (max 40 words) that work as a standalone teaser — what the project is and what makes it worth looking at. No clichés.
+
+"long": Three paragraphs (max 200 words total). Rules:
 - Sound like a senior human copywriter, NOT an AI
 - No clichés: avoid "nestled", "boasting", "seamlessly", "elevate your lifestyle"
 - Be specific: mention actual features, views, amenities from the text
 - First paragraph: what the project is and what makes it stand out
 - Second paragraph: location advantages and community
 - Third paragraph: investment angle and handover/payment plan if available
-- Maximum 200 words total
 - Do not copy sentences from the original text
 
 Original text:
@@ -62,7 +65,7 @@ Project name: {name}
 Developer: {developer}
 Location: {location}
 
-Write the 3 paragraphs only. No heading. No intro sentence."""
+Return ONLY the JSON object. No markdown fences. No explanation."""
 
 
 async def parse_and_humanize(raw: dict) -> dict | None:
@@ -105,12 +108,13 @@ async def parse_and_humanize(raw: dict) -> dict | None:
         return None
 
     # ── Step 2: Humanize description ──────────────────────────────────────────
-    description = ""
+    description_short = ""
+    description_long  = ""
     for attempt in range(3):
         try:
             resp = client.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=400,
+                max_tokens=600,
                 messages=[{
                     "role": "user",
                     "content": HUMANIZE_PROMPT.format(
@@ -121,31 +125,39 @@ async def parse_and_humanize(raw: dict) -> dict | None:
                     )
                 }],
             )
-            description = resp.content[0].text.strip()
+            text = resp.content[0].text.strip()
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+            humanized = json.loads(text)
+            description_short = humanized.get("short", "")
+            description_long  = humanized.get("long", "")
             break
         except Exception as e:
             logger.warning(f"Humanize attempt {attempt + 1} failed: {e}")
             if attempt == 2:
-                description = raw.get("description_raw", "")[:500]
+                fallback = raw.get("description_raw", "")[:500]
+                description_short = fallback[:120]
+                description_long  = fallback
 
     # ── Assemble final payload ────────────────────────────────────────────────
     name = structured.get("name") or raw.get("name", "Unnamed Project")
     slug = _make_slug(name)
 
     return {
-        "slug":             slug,
-        "name":             name,
-        "developer_slug":   structured.get("developer_slug") or _make_slug(structured.get("developer", "")),
-        "geo_summary":      structured.get("geo_summary", "Dubai, UAE"),
-        "area_slug":        structured.get("area_slug", ""),
-        "price_from":       int(structured.get("price_from") or 0),
-        "handover_quarter": structured.get("handover_quarter"),
-        "handover_year":    structured.get("handover_year"),
-        "bedroom_min":      structured.get("bedroom_min"),
-        "bedroom_max":      structured.get("bedroom_max"),
-        "property_types":   structured.get("property_types") or [],
-        "lifestyle_tags":   structured.get("lifestyle_tags") or [],
-        "status":           structured.get("status") or "off_plan",
-        "description":      description,
-        "opr_url":          raw.get("opr_url", ""),
+        "slug":              slug,
+        "name":              name,
+        "developer_slug":    structured.get("developer_slug") or _make_slug(structured.get("developer", "")),
+        "geo_summary":       structured.get("geo_summary", "Dubai, UAE"),
+        "area_slug":         structured.get("area_slug", ""),
+        "price_from":        int(structured.get("price_from") or 0),
+        "handover_quarter":  structured.get("handover_quarter"),
+        "handover_year":     structured.get("handover_year"),
+        "bedroom_min":       structured.get("bedroom_min"),
+        "bedroom_max":       structured.get("bedroom_max"),
+        "property_types":    structured.get("property_types") or [],
+        "lifestyle_tags":    structured.get("lifestyle_tags") or [],
+        "status":            structured.get("status") or "off_plan",
+        "description_short": description_short,
+        "description_long":  description_long,
+        "opr_url":           raw.get("opr_url", ""),
     }
