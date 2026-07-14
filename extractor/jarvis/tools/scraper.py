@@ -9,7 +9,6 @@ import random
 import logging
 from urllib.parse import unquote
 from playwright.async_api import async_playwright, Browser, Page, Playwright
-from playwright_stealth import stealth_async
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +22,14 @@ _pw: Playwright | None = None
 _browser: Browser | None = None
 
 
+_STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+Object.defineProperty(navigator, 'languages', {get: () => ['en-US','en']});
+window.chrome = {runtime: {}};
+""".strip()
+
+
 async def get_browser() -> Browser:
     global _pw, _browser
     if _browser is None or not _browser.is_connected():
@@ -33,6 +40,14 @@ async def get_browser() -> Browser:
         )
         logger.info("Chromium launched")
     return _browser
+
+
+async def _new_stealth_page(browser: Browser) -> Page:
+    """Create a new page with stealth JS and headers applied."""
+    page = await browser.new_page()
+    await page.add_init_script(_STEALTH_JS)
+    await page.set_extra_http_headers(_stealth_headers())
+    return page
 
 
 async def close_browser() -> None:
@@ -88,9 +103,7 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
     Stops early when it hits a project already in existing_slugs.
     """
     browser = await get_browser()
-    page = await browser.new_page()
-    await stealth_async(page)
-    await page.set_extra_http_headers(_stealth_headers())
+    page = await _new_stealth_page(browser)
 
     new_projects: list[dict] = []
 
@@ -190,9 +203,7 @@ async def scrape_project_detail(url: str) -> dict | None:
     Returns raw dict — Claude will parse details + rewrite description.
     """
     browser = await get_browser()
-    page = await browser.new_page()
-    await stealth_async(page)
-    await page.set_extra_http_headers(_stealth_headers())
+    page = await _new_stealth_page(browser)
 
     for attempt in range(3):
         try:
