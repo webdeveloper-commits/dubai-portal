@@ -48,13 +48,13 @@ def get_unindexed_projects() -> list[dict]:
 def publish_project(data: dict) -> str | None:
     """
     Insert project into Supabase. Returns the new row id or None on failure.
-    data keys: slug, name, developer_slug, geo_summary, price_from,
-               handover_quarter, handover_year, bedroom_min, bedroom_max,
-               property_types, lifestyle_tags, description, image_main,
-               images_all, status, opr_url
     """
     try:
         payload = {**data, "is_published": True, "google_indexed": False}
+        # opr_url → data_source_url (actual column name in schema)
+        if "opr_url" in payload:
+            payload["data_source_url"] = payload.pop("opr_url")
+            payload.setdefault("data_source", "opr.ae")
         res = db().table("projects").insert(payload).execute()
         row_id = res.data[0]["id"] if res.data else None
         logger.info(f"Published project '{data.get('name')}' id={row_id}")

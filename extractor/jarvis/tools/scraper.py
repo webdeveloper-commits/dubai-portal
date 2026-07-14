@@ -7,6 +7,7 @@ import re
 import asyncio
 import random
 import logging
+from urllib.parse import unquote
 from playwright.async_api import async_playwright, Browser, Page, Playwright
 from playwright_stealth import stealth_async
 
@@ -144,7 +145,7 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
                 continue
 
             url = href if href.startswith("http") else OPR_BASE + href
-            slug = url.rstrip("/").split("/")[-1]
+            slug = unquote(url.rstrip("/").split("/")[-1])
             card_text = (card.get("text") or "").lower()
 
             # Stop at known projects
@@ -294,13 +295,13 @@ async def scrape_project_detail(url: str) -> dict | None:
             data["body_text"]       = extracted.get("body_text", "")
             data["images_all"]      = extracted.get("images_all", [])
 
-            # If gallery still empty, try clicking tabs then re-extracting
-            if not data["images_all"]:
+            # If gallery sparse (≤2), try clicking tabs to trigger slider load
+            if len(data["images_all"]) < 3:
                 for tab_text in ["Exteriors", "Exterior", "Gallery"]:
                     tab = page.locator(f"text={tab_text}").first
                     if await tab.count() > 0:
                         await tab.click()
-                        await asyncio.sleep(2)
+                        await asyncio.sleep(4)
                         extra_imgs = await page.evaluate("""() => {
                             const imgs = [];
                             document.querySelectorAll('[style*="background-image"]').forEach(el => {
