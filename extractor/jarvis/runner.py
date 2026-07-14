@@ -4,6 +4,7 @@ Tuesday: scan opr.ae → scrape → humanize → upload images → publish → n
 Friday:  area guides + developer profiles (built in next phase)
 """
 import asyncio
+import random
 import logging
 from .tools.scraper import scan_new_projects, scrape_project_detail
 from .tools.humanizer import parse_and_humanize
@@ -106,8 +107,8 @@ async def run_tuesday():
             if (i + 1) % 3 == 0:
                 await notify(f"Progress: {i + 1}/{len(stubs)} processed...")
 
-            # Polite delay between project scrapes
-            await asyncio.sleep(4)
+            # Polite delay between project scrapes — randomised to avoid rate limiting
+            await asyncio.sleep(random.uniform(8, 14))
 
         except Exception as e:
             logger.error(f"Error processing '{name}': {e}")

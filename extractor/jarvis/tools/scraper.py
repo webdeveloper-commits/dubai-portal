@@ -5,8 +5,10 @@ gallery tabs, non-UAE filtering, ad card filtering.
 """
 import re
 import asyncio
+import random
 import logging
 from playwright.async_api import async_playwright, Browser, Page, Playwright
+from playwright_stealth import stealth_async
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,7 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
     """
     browser = await get_browser()
     page = await browser.new_page()
+    await stealth_async(page)
     await page.set_extra_http_headers(_stealth_headers())
 
     new_projects: list[dict] = []
@@ -187,6 +190,7 @@ async def scrape_project_detail(url: str) -> dict | None:
     """
     browser = await get_browser()
     page = await browser.new_page()
+    await stealth_async(page)
     await page.set_extra_http_headers(_stealth_headers())
 
     for attempt in range(3):
@@ -210,7 +214,7 @@ async def scrape_project_detail(url: str) -> dict | None:
                 logger.warning(f"No content selectors found on {url}")
 
             # Extra wait for JS to finish rendering
-            await asyncio.sleep(4)
+            await asyncio.sleep(random.uniform(4, 7))
 
             data: dict = {"opr_url": url}
 
