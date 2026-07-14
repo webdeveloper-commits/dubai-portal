@@ -7,6 +7,7 @@ from telegram.ext import (
 )
 from .brain import chat, clear_history
 from .config import TELEGRAM_TOKEN, ADMIN_CHAT_ID
+from . import runner
 
 logger = logging.getLogger(__name__)
 
@@ -52,15 +53,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     chat_id = update.effective_chat.id
-    user_text = update.message.text
+    user_text = update.message.text.strip()
+    upper = user_text.upper()
 
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
     try:
+        # ── APPROVE commands → runner ──
+        if upper.startswith("APPROVE"):
+            asyncio.create_task(runner.handle_approve(user_text))
+            await update.message.reply_text("Processing approvals...")
+            return
+
+        # ── Manual run triggers ──
+        if upper in ("RUN TUESDAY", "RUN NOW", "START TUESDAY"):
+            await update.message.reply_text("Starting Tuesday run now...")
+            asyncio.create_task(runner.run_tuesday())
+            return
+
+        # ── Everything else → Claude brain ──
         reply = chat(chat_id, user_text)
-        # Telegram message limit is 4096 chars — split if needed
         for chunk in _split(reply):
             await update.message.reply_text(chunk)
+
     except Exception as e:
         logger.error(f"handle_message error: {e}")
         await update.message.reply_text(f"Error: {e}")
@@ -97,6 +112,9 @@ def run() -> None:
     )
 
     _app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    # Wire notify function into runner so it can send Telegram messages
+    runner.set_notify(notify)
 
     _app.add_handler(CommandHandler("start", cmd_start))
     _app.add_handler(CommandHandler("reset", cmd_reset))
