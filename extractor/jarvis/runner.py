@@ -230,5 +230,5 @@ async def _ping_google(projects: list[dict]) -> bool:
     # TODO: implement Google Indexing API OAuth flow
     # For now, log the URLs that would be submitted
     for p in projects:
-        logger.info(f"[GOOGLE INDEX] Would ping: propsale.co/projects/{p['slug']}")
+        logger.info(f"[GOOGLE INDEX] Would ping: dubai-portal.vercel.app/projects/{p['slug']}")
     return True  # Return True so indexing flag is set
