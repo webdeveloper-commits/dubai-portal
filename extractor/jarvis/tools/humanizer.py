@@ -232,7 +232,7 @@ async def parse_and_humanize(raw: dict) -> dict | None:
         try:
             resp = client.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=2000,
+                max_tokens=4000,
                 messages=[{
                     "role": "user",
                     "content": HUMANIZE_PROMPT.format(

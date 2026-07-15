@@ -368,19 +368,23 @@ async def scrape_project_detail(url: str) -> dict | None:
                             sib = sib.nextElementSibling;
                         }
                     }
-                    // Find area background image: walk up to widget/node level, then look for .wrapper1 sibling
-                    let node = aboutH2.closest('[class*="node"], [class*="widget"]') || aboutH2.parentElement;
-                    for (let i = 0; i < 6 && node && node !== document.body; i++) {
-                        const par = node.parentElement;
-                        if (par) {
-                            const wEl = par.querySelector('.wrapper1, [style*="background-image"]');
-                            if (wEl) {
-                                const ws = wEl.getAttribute('style') || '';
-                                const wm = ws.match(/url\\([\"']?(https?:\\/\\/[^\"')\\s]+)[\"']?\\)/);
-                                if (wm) { result.area_image = wm[1].replace(/%7B.*$/, ''); break; }
-                            }
+                    // Find area background image: walk up and check DIRECT children only
+                    // (querySelector would find the project's main .wrapper1 instead)
+                    let areaNode = aboutH2;
+                    for (let i = 0; i < 8 && areaNode && areaNode !== document.body; i++) {
+                        const par = areaNode.parentElement;
+                        if (!par) break;
+                        const directChildren = Array.from(par.children);
+                        const wrapper = directChildren.find(c =>
+                            (c.className && typeof c.className === 'string' && c.className.includes('wrapper')) ||
+                            ((c.getAttribute('style') || '').includes('background-image'))
+                        );
+                        if (wrapper) {
+                            const ws = wrapper.getAttribute('style') || '';
+                            const wm = ws.match(/url\\([\"']?(https?:\\/\\/[^\"')\\s]+)[\"']?\\)/);
+                            if (wm) { result.area_image = wm[1].replace(/%7B.*$/, ''); break; }
                         }
-                        node = node.parentElement;
+                        areaNode = par;
                     }
                 }
 
