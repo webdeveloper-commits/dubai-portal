@@ -20,10 +20,23 @@ def db() -> Client:
 # ── Projects ───────────────────────────────────────────────────────────────────
 
 def get_existing_slugs() -> set[str]:
-    """Return all project slugs already in Supabase."""
+    """
+    Return all known slugs — both the DB slug and the opr.ae URL slug.
+    This prevents re-scraping projects where the URL slug (e.g. 'eira-by-neoterra-...')
+    differs from the stored slug (e.g. 'eira').
+    """
     try:
-        res = db().table("projects").select("slug").execute()
-        return {r["slug"] for r in (res.data or [])}
+        res = db().table("projects").select("slug, data_source_url").execute()
+        slugs: set[str] = set()
+        for r in (res.data or []):
+            if r.get("slug"):
+                slugs.add(r["slug"])
+            url = r.get("data_source_url") or ""
+            if "/projects/" in url:
+                url_slug = url.rstrip("/").split("/")[-1]
+                if url_slug:
+                    slugs.add(url_slug)
+        return slugs
     except Exception as e:
         logger.error(f"get_existing_slugs failed: {e}")
         return set()
