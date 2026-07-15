@@ -85,22 +85,73 @@ def _sig_words(name: str) -> set:
 
 # ── Bayut area guide — find URL ────────────────────────────────────────────────
 
+def _search_next_data_for_area(nd: dict, area_name: str) -> str | None:
+    """
+    Recursively search __NEXT_DATA__ JSON for an entry whose name matches area_name.
+    Returns a full Bayut URL if found, else None.
+    """
+    target_sig = _sig_words(area_name)
+    if not target_sig:
+        return None
+
+    def _search(obj, depth=0) -> str | None:
+        if depth > 12:
+            return None
+        if isinstance(obj, dict):
+            name = str(
+                obj.get("name") or obj.get("title") or obj.get("communityName") or
+                obj.get("displayName") or obj.get("areaName") or ""
+            )
+            if name:
+                name_sig = _sig_words(name)
+                if name_sig:
+                    shared = len(target_sig & name_sig)
+                    ratio  = shared / max(len(target_sig), len(name_sig))
+                    if ratio >= 0.5:
+                        slug = (
+                            obj.get("slug") or obj.get("communitySlug") or
+                            obj.get("url") or obj.get("href") or ""
+                        )
+                        if slug:
+                            if slug.startswith("http"):
+                                return slug
+                            slug = slug.strip("/")
+                            if "area-guides" not in slug:
+                                slug = f"area-guides/{slug}"
+                            return f"https://www.bayut.com/{slug}/"
+            for val in obj.values():
+                r = _search(val, depth + 1)
+                if r:
+                    return r
+        elif isinstance(obj, list):
+            for item in obj:
+                r = _search(item, depth + 1)
+                if r:
+                    return r
+        return None
+
+    try:
+        return _search(nd)
+    except Exception as e:
+        logger.warning(f"_search_next_data_for_area failed: {e}")
+        return None
+
+
 async def find_bayut_area_guide_url(area_name: str) -> str | None:
     """
     Find the actual Bayut area guide URL by scraping the index page.
 
     URL slugs cannot be guessed — Bayut uses their own naming, e.g.:
       'The Acres Dubailand' → /area-guides/the-acres-by-meraas/
-    The only reliable method: expand all area lists on bayut.com/area-guides/
-    by clicking every 'View All' button, then score-match by link text.
 
-    Matching:
-      exact text match       → 100
-      one starts with other  → 85
-      sig-word overlap ≥60 % → 70
-      sig-word overlap ≥50 % → 50  (minimum accepted)
-    Also checks slug words, not just link text.
-    Result is title-validated: if the page we land on is the index, reject it.
+    Strategy:
+      1. Load bayut.com/area-guides/ with networkidle, scroll to trigger lazy-load
+      2. Extract window.__NEXT_DATA__ from the index page — Bayut stores all areas
+         as JSON inside the Next.js data blob. Parse and match there first.
+      3. Fall back: click all 'View All' buttons via proper Playwright clicks
+         (not raw JS el.click() — React ignores those), scroll between clicks,
+         then match by link text/slug using word-overlap scoring.
+      4. Title-validate the found URL before returning.
     """
     browser = await get_browser()
     page = await _new_stealth_page(browser)
@@ -108,44 +159,100 @@ async def find_bayut_area_guide_url(area_name: str) -> str | None:
     try:
         logger.info(f"Loading Bayut area guides index for '{area_name}'...")
         try:
-            await page.goto(BAYUT_AREA_GUIDES, wait_until="load", timeout=60_000)
+            await page.goto(BAYUT_AREA_GUIDES, wait_until="networkidle", timeout=60_000)
         except Exception:
             pass
-        await asyncio.sleep(6)
+        await asyncio.sleep(5)
 
-        # Click every "View All / View More" button repeatedly until no new links appear.
-        # Bayut has one expand button per emirate × category (Ready / Off-plan) ≈ 14 total.
+        # Slow scroll to trigger lazy-loading of area cards throughout the page
+        scroll_height = await page.evaluate("() => document.body.scrollHeight")
+        for y in range(0, min(scroll_height, 8000), 600):
+            await page.evaluate(f"window.scrollTo(0, {y})")
+            await asyncio.sleep(0.3)
+        await page.evaluate("window.scrollTo(0, 0)")
+        await asyncio.sleep(2)
+
+        # ── Step 1: __NEXT_DATA__ search ──────────────────────────────────
+        nd = await page.evaluate(
+            "() => { try { return window.__NEXT_DATA__ || null; } catch(e) { return null; } }"
+        )
+        if nd:
+            import json as _json
+            try:
+                with open("/tmp/bayut_index_debug.json", "w") as f:
+                    _json.dump(nd, f)
+                logger.info("Saved index __NEXT_DATA__ to /tmp/bayut_index_debug.json")
+            except Exception:
+                pass
+            url = _search_next_data_for_area(nd, area_name)
+            if url:
+                logger.info(f"Found via __NEXT_DATA__: {url}")
+                # Quick title validation
+                try:
+                    await page.goto(url, wait_until="load", timeout=40_000)
+                    await asyncio.sleep(3)
+                    title = await page.title()
+                    if not _bayut_is_index_page(title):
+                        logger.info(f"  Confirmed: {title}")
+                        return url
+                    logger.warning(f"  __NEXT_DATA__ URL leads to index page — continuing")
+                except Exception:
+                    pass
+
+        # ── Step 2: Expand lists via proper Playwright clicks ──────────────
+        logger.info("Trying View All button expansion...")
+        try:
+            await page.goto(BAYUT_AREA_GUIDES, wait_until="networkidle", timeout=60_000)
+        except Exception:
+            pass
+        await asyncio.sleep(5)
+
         prev_count = 0
-        for attempt in range(30):
-            clicked = await page.evaluate("""() => {
-                const kw = ['view all', 'view more', 'show all', 'show more', 'see all'];
-                let n = 0;
-                document.querySelectorAll('button, a').forEach(el => {
-                    const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-                    if (kw.some(k => t === k || t.startsWith(k))) {
-                        try { el.click(); n++; } catch(e) {}
-                    }
-                });
-                return n;
-            }""")
-            await asyncio.sleep(2.5)
+        for attempt in range(25):
+            # Scroll down incrementally so buttons enter viewport (Playwright won't
+            # click off-screen elements, and React won't trigger without real events)
+            cur_height = await page.evaluate("() => document.body.scrollHeight")
+            for y in range(0, min(cur_height, 10000), 800):
+                await page.evaluate(f"window.scrollTo(0, {y})")
+                await asyncio.sleep(0.2)
 
+            # Find all expand buttons visible right now
+            btns = page.locator(
+                "button:has-text('View All'), a:has-text('View All'), "
+                "button:has-text('View More'), a:has-text('View More'), "
+                "button:has-text('VIEW ALL'), a:has-text('VIEW ALL'), "
+                "button:has-text('Show All'), a:has-text('Show All')"
+            )
+            count = await btns.count()
+            clicked_this_pass = 0
+            for i in range(count):
+                try:
+                    btn = btns.nth(i)
+                    if await btn.is_visible():
+                        await btn.scroll_into_view_if_needed()
+                        await asyncio.sleep(0.3)
+                        await btn.click()
+                        await asyncio.sleep(1.5)
+                        clicked_this_pass += 1
+                except Exception:
+                    continue
+
+            await asyncio.sleep(2)
             cur_count = await page.evaluate(
                 "() => document.querySelectorAll('a[href*=\"/area-guides/\"]').length"
             )
-            logger.info(f"  expand pass {attempt+1}: clicked={clicked}, links={cur_count}")
-            if clicked == 0 or cur_count == prev_count:
+            logger.info(f"  expand pass {attempt+1}: clicked={clicked_this_pass}, links={cur_count}")
+            if clicked_this_pass == 0 or cur_count == prev_count:
                 break
             prev_count = cur_count
 
         await asyncio.sleep(2)
 
+        # ── Step 3: Score-match all visible area-guide links ───────────────
         target_lower = area_name.lower().strip()
         target_sig   = list(_sig_words(area_name))
 
-        candidates: list = await page.evaluate("""(args) => {
-            const target     = args.target;
-            const targetSig  = new Set(args.targetSig);
+        all_links: list = await page.evaluate("""(args) => {
             const stopWords  = new Set(args.stopWords);
             const emirSlug   = new Set(args.emirateSlugs);
 
@@ -153,80 +260,84 @@ async def find_bayut_area_guide_url(area_name: str) -> str | None:
                 return str.toLowerCase().split(/[\\s\\-]+/)
                     .filter(w => w.length > 2 && !stopWords.has(w));
             }
-            function overlap(setA, arrB) {
-                let m = 0;
-                for (const w of setA) {
-                    if (arrB.some(b => b === w || b.startsWith(w) || w.startsWith(b))) m++;
-                }
-                return setA.size > 0 ? m / setA.size : 0;
-            }
 
             const seen = new Set();
             const results = [];
-
             document.querySelectorAll('a[href*="/area-guides/"]').forEach(a => {
                 const href = (a.href || '').split('?')[0].replace(/\\/+$/, '');
                 if (seen.has(href)) return;
                 seen.add(href);
-
                 const parts = href.replace('https://www.bayut.com', '').split('/').filter(Boolean);
                 if (parts.length < 2) return;
                 const slug = parts[parts.length - 1];
                 if (emirSlug.has(slug) || !slug) return;
-
                 const text = (a.innerText || a.textContent || '').trim().toLowerCase();
-                if (!text || text.length < 3) return;
-
-                const textSig = sigW(text);
-                const slugSig = sigW(slug);
-
-                let score = 0;
-                if (text === target) {
-                    score = 100;
-                } else if (text.startsWith(target) || target.startsWith(text)) {
-                    score = 85;
-                } else {
-                    const fwd     = overlap(targetSig, textSig);
-                    const bwd     = overlap(new Set(textSig), Array.from(targetSig));
-                    const slugFwd = overlap(targetSig, slugSig);
-                    const best    = Math.max(fwd, slugFwd);
-                    if (best >= 0.6 && bwd >= 0.5) score = 70;
-                    else if (best >= 0.5)           score = 50;
-                }
-
-                if (score >= 50) results.push({ href, text, score });
+                results.push({ href, text, slug, slugWords: sigW(slug) });
             });
+            return results;
+        }""", {"stopWords": list(_STOP_WORDS), "emirateSlugs": list(_EMIRATE_SLUGS)})
 
-            results.sort((a, b) => b.score - a.score);
-            return results.slice(0, 5);
-        }""", {
-            "target":       target_lower,
-            "targetSig":    target_sig,
-            "stopWords":    list(_STOP_WORDS),
-            "emirateSlugs": list(_EMIRATE_SLUGS),
-        })
+        logger.info(f"Total area-guide links after expansion: {len(all_links)}")
+        # Log first 30 so we can debug what's actually on the page
+        for lnk in all_links[:30]:
+            logger.info(f"  link text='{lnk['text'][:60]}' slug='{lnk['slug']}'")
 
-        if not candidates:
-            logger.warning(f"No matching links in Bayut index for '{area_name}'")
+        # Score each link
+        best_url   = None
+        best_score = 0
+        for lnk in all_links:
+            text     = lnk["text"]
+            slug_sig = set(lnk["slugWords"])
+
+            score = 0
+            if text == target_lower:
+                score = 100
+            elif text.startswith(target_lower) or target_lower.startswith(text):
+                score = 85
+            else:
+                text_sig  = _sig_words(text)
+                t_sig_set = set(target_sig)
+                if text_sig and t_sig_set:
+                    shared_t = len(t_sig_set & text_sig)
+                    fwd = shared_t / len(t_sig_set)
+                    bwd = shared_t / len(text_sig)
+                elif not text_sig:
+                    fwd = bwd = 0
+                else:
+                    fwd = bwd = 0
+
+                shared_s  = len(set(target_sig) & slug_sig)
+                slug_fwd  = shared_s / max(len(target_sig), 1) if target_sig else 0
+
+                best_overlap = max(fwd, slug_fwd)
+                if best_overlap >= 0.6 and bwd >= 0.4:
+                    score = 70
+                elif best_overlap >= 0.5:
+                    score = 50
+
+            logger.info(f"  scored {score}: text='{text[:50]}' slug='{lnk['slug']}'")
+            if score > best_score:
+                best_score = score
+                best_url   = lnk["href"]
+
+        if not best_url or best_score < 50:
+            logger.warning(f"No good match in Bayut index for '{area_name}' (best score: {best_score})")
             return None
 
-        logger.info(f"Candidates for '{area_name}':")
-        for c in candidates:
-            logger.info(f"  score={c['score']} text='{c['text']}' → {c['href']}")
+        logger.info(f"Best match (score={best_score}): {best_url}")
 
-        best_url = candidates[0]["href"]
+        # Title validate
         try:
             await page.goto(best_url, wait_until="load", timeout=40_000)
         except Exception:
             pass
         await asyncio.sleep(3)
         title = await page.title()
-
         if _bayut_is_index_page(title):
-            logger.warning(f"Candidate '{best_url}' → index/app page — no area guide for '{area_name}'")
+            logger.warning(f"Best match leads to index page — rejecting")
             return None
 
-        logger.info(f"Confirmed Bayut area guide for '{area_name}': {best_url} (title: {title})")
+        logger.info(f"Confirmed Bayut area guide for '{area_name}': {best_url}")
         return best_url
 
     except Exception as e:
@@ -512,22 +623,91 @@ async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
 
 async def test_area_scrape(area_name: str) -> str:
     """
-    Debug helper: find Bayut URL + scrape for one area, return a detailed
-    report string (sent via Telegram TEST AREA command).
-    Saves raw __NEXT_DATA__ to /tmp/bayut_debug.json for inspection.
+    Debug helper: loads Bayut index, shows link texts + scores, finds URL,
+    then scrapes that URL. All intermediate data saved to /tmp/ for inspection.
+    Called by TEST AREA [name] Telegram command.
     """
-    import json, os
+    import json as _json
     lines = [f"TEST AREA: {area_name}\n"]
 
+    # ── Phase 1: index page inspection ──────────────────────────────────
+    lines.append("Phase 1: Loading bayut.com/area-guides/ index...")
+    browser = await get_browser()
+    idx_page = await _new_stealth_page(browser)
+    try:
+        try:
+            await idx_page.goto(BAYUT_AREA_GUIDES, wait_until="networkidle", timeout=60_000)
+        except Exception:
+            pass
+        await asyncio.sleep(5)
+
+        # scroll
+        h = await idx_page.evaluate("() => document.body.scrollHeight")
+        for y in range(0, min(h, 6000), 500):
+            await idx_page.evaluate(f"window.scrollTo(0, {y})")
+            await asyncio.sleep(0.2)
+        await idx_page.evaluate("window.scrollTo(0, 0)")
+
+        # __NEXT_DATA__ from index
+        nd = await idx_page.evaluate(
+            "() => { try { return window.__NEXT_DATA__ || null; } catch(e) { return null; } }"
+        )
+        if nd:
+            try:
+                with open("/tmp/bayut_index_debug.json", "w") as f:
+                    _json.dump(nd, f)
+                lines.append("Index __NEXT_DATA__: YES → /tmp/bayut_index_debug.json")
+                nd_url = _search_next_data_for_area(nd, area_name)
+                lines.append(f"  Area found in ND: {'YES → ' + nd_url if nd_url else 'NO'}")
+            except Exception as e:
+                lines.append(f"Index __NEXT_DATA__: YES but failed: {e}")
+        else:
+            lines.append("Index __NEXT_DATA__: NOT FOUND")
+
+        idx_title = await idx_page.title()
+        lines.append(f"Index page title: {idx_title}")
+
+        # Dump ALL area-guide link texts from the current DOM (before expansion)
+        raw_links = await idx_page.evaluate("""(args) => {
+            const stop = new Set(args.stop);
+            const emir = new Set(args.emir);
+            const seen = new Set();
+            const out = [];
+            document.querySelectorAll('a[href*="/area-guides/"]').forEach(a => {
+                const href = (a.href||'').split('?')[0].replace(/\\/+$/,'');
+                if (seen.has(href)) return;
+                seen.add(href);
+                const parts = href.replace('https://www.bayut.com','').split('/').filter(Boolean);
+                if (parts.length < 2) return;
+                const slug = parts[parts.length-1];
+                if (emir.has(slug)||!slug) return;
+                const text = (a.innerText||a.textContent||'').trim().slice(0,80);
+                out.push(slug + ' | ' + text);
+            });
+            return out;
+        }""", {"stop": list(_STOP_WORDS), "emir": list(_EMIRATE_SLUGS)})
+
+        lines.append(f"Area-guide links (before expansion): {len(raw_links)}")
+        for lnk in raw_links[:25]:
+            lines.append(f"  {lnk}")
+    except Exception as e:
+        lines.append(f"Index page error: {e}")
+    finally:
+        await idx_page.close()
+
+    # ── Phase 2: find URL (uses full expansion logic) ────────────────────
+    lines.append("\nPhase 2: Finding Bayut URL...")
+    await asyncio.sleep(3)  # brief pause to avoid rate-limiting
     url = await find_bayut_area_guide_url(area_name)
     if not url:
-        lines.append("Bayut URL: NOT FOUND (fallback patterns also failed)")
+        lines.append("Bayut URL: NOT FOUND")
         return "\n".join(lines)
-
     lines.append(f"Bayut URL: {url}")
 
-    browser = await get_browser()
-    page = await _new_stealth_page(browser)
+    # ── Phase 3: scrape the found URL ────────────────────────────────────
+    lines.append("\nPhase 3: Scraping found URL...")
+    browser2 = await get_browser()
+    page = await _new_stealth_page(browser2)
     try:
         try:
             await page.goto(url, wait_until="load", timeout=60_000)
@@ -536,64 +716,39 @@ async def test_area_scrape(area_name: str) -> str:
         await asyncio.sleep(5)
         for y in [400, 1000, 2000, 3500, 0]:
             await page.evaluate(f"window.scrollTo(0, {y})")
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.8)
 
-        nd = await page.evaluate(
+        nd2 = await page.evaluate(
             "() => { try { return window.__NEXT_DATA__ || null; } catch(e) { return null; } }"
         )
-        if nd:
+        if nd2:
             try:
                 with open("/tmp/bayut_debug.json", "w") as f:
-                    json.dump(nd, f, indent=2)
-                lines.append("__NEXT_DATA__: YES — saved to /tmp/bayut_debug.json")
-                nd_result = _parse_next_data(nd, area_name)
-                lines.append(f"  desc from ND: {len(nd_result.get('description',''))} chars")
-                lines.append(f"  hero from ND: {'yes' if nd_result.get('hero_image') else 'no'}")
+                    _json.dump(nd2, f, indent=2)
+                nd_result = _parse_next_data(nd2, area_name)
+                lines.append(f"Page __NEXT_DATA__: YES → /tmp/bayut_debug.json")
+                lines.append(f"  desc={len(nd_result.get('description',''))} chars  hero={'yes' if nd_result.get('hero_image') else 'no'}")
             except Exception as e:
-                lines.append(f"__NEXT_DATA__: YES but parse failed: {e}")
+                lines.append(f"Page __NEXT_DATA__: YES but failed: {e}")
         else:
-            lines.append("__NEXT_DATA__: NOT FOUND")
+            lines.append("Page __NEXT_DATA__: NOT FOUND")
 
         title = await page.title()
         lines.append(f"Page title: {title}")
 
-        # Quick DOM text sample to show what we're seeing
         sample = await page.evaluate("""() => {
             const scope = document.querySelector('main') || document.body;
-            const texts = Array.from(scope.querySelectorAll('p')).map(p => p.innerText.trim()).filter(t => t.length > 30).slice(0, 5);
-            return texts;
+            return Array.from(scope.querySelectorAll('p'))
+                .map(p => p.innerText.trim())
+                .filter(t => t.length > 30)
+                .slice(0, 5);
         }""")
-        lines.append("First 5 <p> texts in <main>:")
+        lines.append(f"First <p> texts in <main>: {len(sample)} found")
         for i, t in enumerate(sample, 1):
             lines.append(f"  {i}. {t[:120]}")
 
-        # Hero image check
-        hero_result = await page.evaluate("""() => {
-            const bgSels = ['[class*="pageHeader"]','[class*="_hero"]','[class*="_banner"]','[class*="_cover"]','[class*="communityHeader"]'];
-            for (const sel of bgSels) {
-                const el = document.querySelector(sel);
-                if (el) {
-                    const bg = window.getComputedStyle(el).backgroundImage;
-                    if (bg && bg !== 'none') return {found: true, method: 'bg-image:'+sel, src: bg.slice(0,100)};
-                }
-            }
-            for (const src of document.querySelectorAll('picture source')) {
-                const ss = src.getAttribute('srcset') || src.getAttribute('data-srcset') || '';
-                if (ss) return {found: true, method: 'picture srcset', src: ss.slice(0,100)};
-            }
-            const img = document.querySelector('main img') || document.querySelector('article img');
-            if (img) {
-                const s = img.getAttribute('src') || img.getAttribute('data-src') || '';
-                return {found: !!s, method: 'main img', src: s.slice(0,100)};
-            }
-            return {found: false, method: 'none', src: ''};
-        }""")
-        lines.append(f"Hero image: found={hero_result['found']} method={hero_result['method']}")
-        if hero_result['src']:
-            lines.append(f"  src preview: {hero_result['src'][:100]}")
-
     except Exception as e:
-        lines.append(f"Error during test scrape: {e}")
+        lines.append(f"Scrape error: {e}")
     finally:
         await page.close()
 
