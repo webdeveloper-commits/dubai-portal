@@ -1,7 +1,7 @@
 """
 Uses Claude to:
-1. Extract structured fields from raw scraped body text
-2. Rewrite description in a professional, human tone (never AI-sounding)
+1. Extract every structured field from raw scraped body text
+2. Generate humanized copy, SEO fields, FAQ, tagline, and WhatsApp share text
 """
 import json
 import re
@@ -20,77 +20,129 @@ def _make_slug(name: str) -> str:
     return slug.strip("-")
 
 
-EXTRACT_PROMPT = """You are a real estate data extractor. Given raw scraped text from a Dubai/UAE property listing page, extract structured data and return ONLY valid JSON.
+EXTRACT_PROMPT = """You are a real estate data extractor. Given raw scraped text from a UAE property page, extract structured data and return ONLY valid JSON.
 
-IMPORTANT: If the project is NOT in the UAE (Dubai, Abu Dhabi, Sharjah, Ajman, RAK, Fujairah, Umm Al Quwain) — for example if it's in Egypt, Bali, Georgia, Turkey, or any other country — return exactly: {"skip": true}
+IMPORTANT: If the project is NOT in the UAE (Dubai, Abu Dhabi, Sharjah, Ajman, RAK, Fujairah, Umm Al Quwain) — return exactly: {"skip": true}
 
-Extract these fields (use null if not found):
+Extract ALL fields below. Use null for anything not found on the page.
+
 {
   "name": "Project name",
-  "developer": "Developer company name",
-  "developer_slug": "developer-name-as-slug",
-  "geo_summary": "Area, Dubai" or "Area, Abu Dhabi" etc,
-  "area_slug": "area-name-as-slug",
-  "price_from": 1500000,  // number only, AED, 0 if unknown
-  "handover_quarter": "Q2",  // Q1/Q2/Q3/Q4 or null
-  "handover_year": 2026,  // number or null
-  "bedroom_min": 1,  // number or null
-  "bedroom_max": 4,  // number or null
-  "property_types": ["Apartment", "Penthouse"],  // from: Apartment, Villa, Townhouse, Penthouse, Studio, Duplex, Office
-  "lifestyle_tags": ["Beachfront", "Family"],  // from: Beachfront, Golf, Marina, Downtown, Family, Luxury, Investment, Waterfront, Community
-  "status": "off_plan"  // off_plan / ready / new_launch
+  "developer_name": "Developer company — exact spelling, preserve capitals (e.g. DAMAC Properties)",
+  "developer_slug": "damac-properties",
+  "developer_about": "1-2 sentences about the developer from the page text, or null",
+  "area_name": "Community/area only (e.g. Dubai Marina — not Dubai Marina, Dubai)",
+  "area_slug": "dubai-marina",
+  "emirate": "Dubai",
+  "geo_summary": "Area, Emirate (e.g. Dubai Marina, Dubai)",
+  "price_from": 1500000,
+  "price_to": null,
+  "handover_quarter": "Q4",
+  "handover_year": 2027,
+  "bedroom_min": 1,
+  "bedroom_max": 3,
+  "bedroom_types": ["1BR", "2BR", "3BR"],
+  "size_sqft_min": 650,
+  "size_sqft_max": 2100,
+  "property_types": ["Apartment"],
+  "lifestyle_tags": ["Marina", "Luxury"],
+  "status": "off_plan",
+  "amenities": ["Swimming Pool", "Gym", "Concierge", "Children Play Area"],
+  "payment_plan_summary": "60/40",
+  "payment_plan_detail": [
+    {"stage": "On Booking", "percentage": 20},
+    {"stage": "During Construction", "percentage": 40},
+    {"stage": "On Handover", "percentage": 40}
+  ],
+  "investment_potential": ["Strong rental demand in Dubai Marina", "Freehold ownership"],
+  "floor_plans": [
+    {"type": "1BR", "beds": 1, "baths": 1, "sqft_min": 650, "sqft_max": 750}
+  ],
+  "commute_times": [
+    "Dubai Mall — 15 min by car",
+    "DXB Airport — 25 min by car"
+  ],
+  "nearby_attractions": ["Burj Khalifa", "Dubai Frame"],
+  "nearby_hospitals": ["Mediclinic City Hospital — 5 min"],
+  "nearby_schools": ["GEMS Wellington — 8 min"]
 }
 
-Return ONLY the JSON object. No explanation."""
+Rules:
+- bedroom_types: derive from text. "Studio" for 0-bed. Format: "Studio", "1BR", "2BR", "3BR", "4BR", "5BR+"
+- lifestyle_tags must be from: Beachfront, Golf, Marina, Downtown, Family, Luxury, Investment, Waterfront, Community
+- property_types must be from: Apartment, Villa, Townhouse, Penthouse, Studio, Duplex, Office
+- status: off_plan / ready / new_launch
+- payment_plan_detail: look for percentages at booking/construction/handover. Return as array of stage objects.
+- floor_plans: extract from any unit type table/list. Include beds, baths, sqft per type.
+- commute_times: extract ALL distance/time mentions to landmarks, malls, airports, metro.
+- investment_potential: 2-4 specific bullet points (not generic). Mention actual location advantages.
+- developer_name: preserve exact company name with correct capitalisation — this is shown on the site.
+
+Return ONLY valid JSON. No explanation. No markdown."""
+
 
 HUMANIZE_PROMPT = """You are a professional real estate copywriter for a Dubai property portal.
 
-Given the property text below, produce a JSON object with exactly two keys:
+Return a JSON object with exactly these keys:
 
-"short": One or two sentences (max 40 words) that work as a standalone teaser — what the project is and what makes it worth looking at. No clichés.
+"tagline": One punchy line (max 12 words) capturing what makes this project special. Examples: "Waterfront apartments in Dubai Islands from AED 1.6M" / "Golf-view villas in Emirates Hills with 60/40 plan"
 
-"long": Three paragraphs (max 200 words total). Rules:
-- Sound like a senior human copywriter, NOT an AI
-- No clichés: avoid "nestled", "boasting", "seamlessly", "elevate your lifestyle"
-- Be specific: mention actual features, views, amenities from the text
-- First paragraph: what the project is and what makes it stand out
-- Second paragraph: location advantages and community
-- Third paragraph: investment angle and handover/payment plan if available
-- Do not copy sentences from the original text
+"short": 1-2 sentences (max 40 words). Standalone teaser. No clichés (no nestled, boasting, seamlessly).
 
-Original text:
-{text}
+"long": 3 paragraphs (max 200 words total). Sound human, not AI. Be specific — mention actual features, views, amenities.
+  Para 1: What the project is and what makes it stand out
+  Para 2: Location and community advantages
+  Para 3: Investment angle, payment plan, handover
+
+"seo_title": Under 60 chars. Format: "{name} by {developer} | {type} in {area} from AED {price}"
+
+"seo_description": 140-155 chars. Compelling, includes price and handover date.
+
+"seo_keywords": Array of 6 real search phrases people type (e.g. "off plan apartments dubai marina 2027").
+
+"aeo_faq": Array of 8 objects with "question" and "answer". Cover: starting price, developer, handover date, payment plan, location, unit types, amenities, foreign ownership eligibility.
+
+"whatsapp_share_text": 4 short lines someone would forward to a friend. Use developer exact name (not slug). Last line: dubai-portal.vercel.app/projects/{slug}
 
 Project name: {name}
 Developer: {developer}
 Location: {location}
+Price from: {price}
+Handover: {handover}
+Bedrooms: {bedrooms}
+Status: {status}
+Payment plan: {payment_plan}
+Slug: {slug}
+
+Raw description:
+{text}
 
 Return ONLY the JSON object. No markdown fences. No explanation."""
 
 
 async def parse_and_humanize(raw: dict) -> dict | None:
     """
-    Takes raw scraped dict, returns structured + humanized dict ready for Supabase.
+    Takes raw scraped dict, returns full structured + humanized dict ready for Supabase.
+    Private keys (_developer, _area) are for the runner to use for upserts — not sent to DB.
     """
     body_text = raw.get("body_text", "") or raw.get("description_raw", "")
     if not body_text:
         logger.error("No body text to parse")
         return None
 
-    # ── Step 1: Extract structured fields ────────────────────────────────────
+    # ── Step 1: Extract all structured fields ─────────────────────────────────
     structured = None
     for attempt in range(3):
         try:
             resp = client.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=800,
+                max_tokens=2000,
                 messages=[{
                     "role": "user",
                     "content": f"{EXTRACT_PROMPT}\n\nRAW TEXT:\n{body_text[:6000]}"
                 }],
             )
             text = resp.content[0].text.strip()
-            # Strip markdown code fences if present
             text = re.sub(r"^```(?:json)?\s*", "", text)
             text = re.sub(r"\s*```$", "", text)
             structured = json.loads(text)
@@ -107,21 +159,37 @@ async def parse_and_humanize(raw: dict) -> dict | None:
     if not structured:
         return None
 
-    # ── Step 2: Humanize description ──────────────────────────────────────────
-    description_short = ""
-    description_long  = ""
+    # ── Step 2: Generate copy, SEO, FAQ, tagline ──────────────────────────────
+    name     = structured.get("name") or raw.get("name", "Unnamed Project")
+    slug     = _make_slug(name)
+    dev_name = structured.get("developer_name", "")
+    location = structured.get("geo_summary", "")
+    handover = f"{structured.get('handover_quarter') or ''} {structured.get('handover_year') or ''}".strip() or "TBA"
+    price    = f"AED {structured['price_from']:,}" if structured.get("price_from") else "Price on request"
+    bmin     = structured.get("bedroom_min")
+    bmax     = structured.get("bedroom_max")
+    bedrooms = f"{bmin}–{bmax} BR" if bmin and bmax else (f"{bmin} BR" if bmin else "Various")
+    payment  = structured.get("payment_plan_summary") or "Flexible"
+
+    humanized: dict = {}
     for attempt in range(3):
         try:
             resp = client.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=600,
+                max_tokens=2000,
                 messages=[{
                     "role": "user",
                     "content": HUMANIZE_PROMPT.format(
                         text=raw.get("description_raw", body_text)[:3000],
-                        name=structured.get("name", ""),
-                        developer=structured.get("developer", ""),
-                        location=structured.get("geo_summary", ""),
+                        name=name,
+                        developer=dev_name,
+                        location=location,
+                        price=price,
+                        handover=handover,
+                        bedrooms=bedrooms,
+                        status=structured.get("status", "off_plan"),
+                        payment_plan=payment,
+                        slug=slug,
                     )
                 }],
             )
@@ -129,35 +197,80 @@ async def parse_and_humanize(raw: dict) -> dict | None:
             text = re.sub(r"^```(?:json)?\s*", "", text)
             text = re.sub(r"\s*```$", "", text)
             humanized = json.loads(text)
-            description_short = humanized.get("short", "")
-            description_long  = humanized.get("long", "")
             break
         except Exception as e:
             logger.warning(f"Humanize attempt {attempt + 1} failed: {e}")
             if attempt == 2:
                 fallback = raw.get("description_raw", "")[:500]
-                description_short = fallback[:120]
-                description_long  = fallback
+                humanized = {
+                    "tagline":            name,
+                    "short":              fallback[:120],
+                    "long":               fallback,
+                    "seo_title":          name[:60],
+                    "seo_description":    fallback[:155],
+                    "seo_keywords":       [],
+                    "aeo_faq":            [],
+                    "whatsapp_share_text": f"{name} by {dev_name}\n{location}\n{price}\ndubai-portal.vercel.app/projects/{slug}",
+                }
 
-    # ── Assemble final payload ────────────────────────────────────────────────
-    name = structured.get("name") or raw.get("name", "Unnamed Project")
-    slug = _make_slug(name)
+    # ── Assemble slugs ────────────────────────────────────────────────────────
+    developer_slug = structured.get("developer_slug") or _make_slug(dev_name)
+    area_slug      = structured.get("area_slug") or _make_slug(structured.get("area_name", ""))
 
     return {
-        "slug":              slug,
-        "name":              name,
-        "developer_slug":    structured.get("developer_slug") or _make_slug(structured.get("developer", "")),
-        "geo_summary":       structured.get("geo_summary", "Dubai, UAE"),
-        "area_slug":         structured.get("area_slug", ""),
-        "price_from":        int(structured.get("price_from") or 0),
-        "handover_quarter":  structured.get("handover_quarter"),
-        "handover_year":     structured.get("handover_year"),
-        "bedroom_min":       structured.get("bedroom_min"),
-        "bedroom_max":       structured.get("bedroom_max"),
-        "property_types":    structured.get("property_types") or [],
-        "lifestyle_tags":    structured.get("lifestyle_tags") or [],
-        "status":            structured.get("status") or "off_plan",
-        "description_short": description_short,
-        "description_long":  description_long,
-        "opr_url":           raw.get("opr_url", ""),
+        # ── Core project fields ───────────────────────────────────────────────
+        "slug":                  slug,
+        "name":                  name,
+        "tagline":               humanized.get("tagline", ""),
+        "geo_summary":           location,
+        "area_slug":             area_slug,
+        "developer_slug":        developer_slug,
+        "price_from":            int(structured.get("price_from") or 0),
+        "price_to":              structured.get("price_to"),
+        "handover_quarter":      structured.get("handover_quarter"),
+        "handover_year":         structured.get("handover_year"),
+        "bedroom_min":           structured.get("bedroom_min"),
+        "bedroom_max":           structured.get("bedroom_max"),
+        "bedroom_types":         structured.get("bedroom_types") or [],
+        "size_sqft_min":         structured.get("size_sqft_min"),
+        "size_sqft_max":         structured.get("size_sqft_max"),
+        "property_types":        structured.get("property_types") or [],
+        "lifestyle_tags":        structured.get("lifestyle_tags") or [],
+        "status":                structured.get("status") or "off_plan",
+        "amenities":             structured.get("amenities") or [],
+        "payment_plan_summary":  structured.get("payment_plan_summary"),
+        "payment_plan_detail":   structured.get("payment_plan_detail"),
+        "investment_potential":  structured.get("investment_potential") or [],
+        "floor_plans":           structured.get("floor_plans"),
+        "commute_times":         structured.get("commute_times") or [],
+        "latitude":              raw.get("latitude"),
+        "longitude":             raw.get("longitude"),
+        # ── Descriptions & copy ───────────────────────────────────────────────
+        "description_short":     humanized.get("short", ""),
+        "description_long":      humanized.get("long", ""),
+        # ── SEO ───────────────────────────────────────────────────────────────
+        "seo_title":             humanized.get("seo_title", ""),
+        "seo_description":       humanized.get("seo_description", ""),
+        "seo_keywords":          humanized.get("seo_keywords") or [],
+        # ── AEO ───────────────────────────────────────────────────────────────
+        "aeo_faq":               humanized.get("aeo_faq") or [],
+        # ── Social ────────────────────────────────────────────────────────────
+        "whatsapp_share_text":   humanized.get("whatsapp_share_text", ""),
+        # ── Source ────────────────────────────────────────────────────────────
+        "opr_url":               raw.get("opr_url", ""),
+        # ── Private: for runner to upsert to developers / areas tables ────────
+        "_developer": {
+            "name":        dev_name,
+            "slug":        developer_slug,
+            "intro_short": structured.get("developer_about") or "",
+            "logo_url":    raw.get("developer_logo") or None,
+        },
+        "_area": {
+            "name":               structured.get("area_name", ""),
+            "slug":               area_slug,
+            "emirate":            structured.get("emirate", "Dubai"),
+            "nearby_attractions": structured.get("nearby_attractions") or [],
+            "nearby_hospitals":   structured.get("nearby_hospitals") or [],
+            "nearby_schools":     structured.get("nearby_schools") or [],
+        },
     }

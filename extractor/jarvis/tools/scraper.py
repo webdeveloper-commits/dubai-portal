@@ -297,6 +297,28 @@ async def scrape_project_detail(url: str) -> dict | None:
                 }
 
                 result.images_all = [...new Set(galleryImages)].slice(0, 20);
+
+                // Latitude/longitude from map iframe or data attributes
+                let lat = null, lng = null;
+                const mapIframe = document.querySelector('iframe[src*="maps.google"], iframe[src*="google.com/maps"]');
+                if (mapIframe) {
+                    const src = mapIframe.getAttribute('src') || '';
+                    const m = src.match(/[?&](?:q|center)=(-?\\d+\\.?\\d*),(-?\\d+\\.?\\d*)/);
+                    if (m) { lat = parseFloat(m[1]); lng = parseFloat(m[2]); }
+                }
+                if (!lat) {
+                    const latEl = document.querySelector('[data-lat],[data-latitude]');
+                    const lngEl = document.querySelector('[data-lng],[data-longitude]');
+                    if (latEl) lat = parseFloat(latEl.getAttribute('data-lat') || latEl.getAttribute('data-latitude') || '');
+                    if (lngEl) lng = parseFloat(lngEl.getAttribute('data-lng') || lngEl.getAttribute('data-longitude') || '');
+                }
+                result.latitude  = (lat && !isNaN(lat)) ? lat : null;
+                result.longitude = (lng && !isNaN(lng)) ? lng : null;
+
+                // Developer logo
+                const devLogo = document.querySelector('[class*="developer"] img[src], [class*="partner"] img[src]');
+                result.developer_logo = devLogo ? devLogo.getAttribute('src') : null;
+
                 return result;
             }""")
 
@@ -305,6 +327,9 @@ async def scrape_project_detail(url: str) -> dict | None:
             data["description_raw"] = extracted.get("description_raw", "")
             data["body_text"]       = extracted.get("body_text", "")
             data["images_all"]      = extracted.get("images_all", [])
+            data["latitude"]        = extracted.get("latitude")
+            data["longitude"]       = extracted.get("longitude")
+            data["developer_logo"]  = extracted.get("developer_logo")
 
             # If gallery sparse (≤2), try clicking tabs to trigger slider load
             if len(data["images_all"]) < 3:

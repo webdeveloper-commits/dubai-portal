@@ -46,12 +46,13 @@ def get_unindexed_projects() -> list[dict]:
 
 
 def publish_project(data: dict) -> str | None:
-    """
-    Insert project into Supabase. Returns the new row id or None on failure.
-    """
+    """Insert project into Supabase. Returns the new row id or None on failure."""
     try:
         payload = {**data, "is_published": True, "google_indexed": False}
-        # opr_url → data_source_url (actual column name in schema)
+        # Strip private runner-only keys
+        payload.pop("_developer", None)
+        payload.pop("_area", None)
+        # opr_url → data_source_url
         if "opr_url" in payload:
             payload["data_source_url"] = payload.pop("opr_url")
             payload.setdefault("data_source", "opr.ae")
@@ -61,6 +62,74 @@ def publish_project(data: dict) -> str | None:
         return row_id
     except Exception as e:
         logger.error(f"publish_project failed: {e}")
+        return None
+
+
+# ── Developers ─────────────────────────────────────────────────────────────────
+
+def upsert_developer(data: dict) -> str | None:
+    """
+    Find existing developer by slug or create new one.
+    Returns the developer id, or None on failure.
+    """
+    slug = data.get("slug", "").strip()
+    if not slug:
+        return None
+    try:
+        res = db().table("developers").select("id").eq("slug", slug).execute()
+        if res.data:
+            logger.info(f"Developer '{slug}' already exists — reusing id")
+            return res.data[0]["id"]
+        payload = {
+            "name":          data.get("name", ""),
+            "slug":          slug,
+            "intro_short":   data.get("intro_short", "") or "",
+            "logo_url":      data.get("logo_url"),
+            "logo_color_url": data.get("logo_url"),
+            "is_published":  True,
+            "published":     True,
+            "data_source":   "opr.ae",
+        }
+        res = db().table("developers").insert(payload).execute()
+        dev_id = res.data[0]["id"] if res.data else None
+        logger.info(f"Created developer '{slug}' id={dev_id}")
+        return dev_id
+    except Exception as e:
+        logger.error(f"upsert_developer failed for '{slug}': {e}")
+        return None
+
+
+# ── Areas ──────────────────────────────────────────────────────────────────────
+
+def upsert_area(data: dict) -> str | None:
+    """
+    Find existing area by slug or create new one.
+    Returns the area id, or None on failure.
+    """
+    slug = data.get("slug", "").strip()
+    if not slug:
+        return None
+    try:
+        res = db().table("areas").select("id").eq("slug", slug).execute()
+        if res.data:
+            logger.info(f"Area '{slug}' already exists — reusing id")
+            return res.data[0]["id"]
+        payload = {
+            "name":               data.get("name", ""),
+            "slug":               slug,
+            "emirate":            data.get("emirate", "Dubai"),
+            "nearby_attractions": data.get("nearby_attractions") or [],
+            "nearby_hospitals":   data.get("nearby_hospitals") or [],
+            "nearby_schools":     data.get("nearby_schools") or [],
+            "is_published":       True,
+            "data_source":        "opr.ae",
+        }
+        res = db().table("areas").insert(payload).execute()
+        area_id = res.data[0]["id"] if res.data else None
+        logger.info(f"Created area '{slug}' id={area_id}")
+        return area_id
+    except Exception as e:
+        logger.error(f"upsert_area failed for '{slug}': {e}")
         return None
 
 

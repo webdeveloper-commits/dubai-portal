@@ -12,6 +12,7 @@ from .tools.images import upload_project_images
 from .tools.storage import (
     get_existing_slugs, publish_project,
     get_unindexed_projects, mark_google_indexed, log_error,
+    upsert_developer, upsert_area,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,16 @@ async def run_tuesday():
                 skipped.append(parsed["name"])
                 continue
 
+            # ── Upsert developer and area — get IDs to link to project ──
+            dev_data  = parsed.pop("_developer", {})
+            area_data = parsed.pop("_area", {})
+            dev_id  = upsert_developer(dev_data)
+            area_id = upsert_area(area_data)
+            if dev_id:
+                parsed["developer_id"] = dev_id
+            if area_id:
+                parsed["area_id"] = area_id
+
             # ── Upload images to Cloudinary ──
             main_cloud, gallery_cloud = await upload_project_images(
                 slug=parsed["slug"],
@@ -152,7 +163,7 @@ def _build_project_summary(published: list, errors: list, skipped: list) -> str:
         for i, p in enumerate(published, 1):
             price = f"AED {p['price']:,}" if p["price"] else "Price on request"
             lines.append(f"  {i}. {p['name']} — {price}")
-            lines.append(f"     propsale.co/projects/{p['slug']}")
+            lines.append(f"     dubai-portal.vercel.app/projects/{p['slug']}")
 
     if skipped:
         lines.append(f"\nSkipped {len(skipped)} duplicates: {', '.join(skipped)}")
