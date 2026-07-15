@@ -94,14 +94,19 @@ def upsert_developer(data: dict) -> str | None:
             logger.info(f"Developer '{slug}' already exists — reusing id")
             return res.data[0]["id"]
         payload = {
-            "name":          data.get("name", ""),
-            "slug":          slug,
-            "intro_short":   data.get("intro_short", "") or "",
-            "logo_url":      data.get("logo_url"),
-            "logo_color_url": data.get("logo_url"),
-            "is_published":  True,
-            "published":     True,
-            "data_source":   "opr.ae",
+            "name":            data.get("name", ""),
+            "slug":            slug,
+            "intro_short":     data.get("intro_short", "") or "",
+            "logo_url":        data.get("logo_url"),
+            "logo_color_url":  data.get("logo_url"),
+            "tagline":         data.get("tagline", "") or "",
+            "seo_title":       data.get("seo_title", "") or "",
+            "seo_description": data.get("seo_description", "") or "",
+            "seo_keywords":    data.get("seo_keywords") or [],
+            "aeo_faq":         data.get("aeo_faq") or [],
+            "is_published":    True,
+            "published":       True,
+            "data_source":     "opr.ae",
         }
         res = db().table("developers").insert(payload).execute()
         dev_id = res.data[0]["id"] if res.data else None
@@ -131,6 +136,14 @@ def upsert_area(data: dict) -> str | None:
             "name":               data.get("name", ""),
             "slug":               slug,
             "emirate":            data.get("emirate", "Dubai"),
+            "description_short":  data.get("description_short", "") or "",
+            "image_url":          data.get("image_url"),
+            "cover_image_url":    data.get("cover_image_url") or data.get("image_url"),
+            "tagline":            data.get("tagline", "") or "",
+            "seo_title":          data.get("seo_title", "") or "",
+            "seo_description":    data.get("seo_description", "") or "",
+            "seo_keywords":       data.get("seo_keywords") or [],
+            "aeo_faq":            data.get("aeo_faq") or [],
             "nearby_attractions": data.get("nearby_attractions") or [],
             "nearby_hospitals":   data.get("nearby_hospitals") or [],
             "nearby_schools":     data.get("nearby_schools") or [],

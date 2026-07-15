@@ -77,6 +77,9 @@ Rules:
 - commute_times: extract ALL distance/time mentions to landmarks, malls, airports, metro.
 - investment_potential: 2-4 specific bullet points (not generic). Mention actual location advantages.
 - developer_name: preserve exact company name with correct capitalisation — this is shown on the site.
+- nearby_attractions: look for sections titled "Attractions" or "Landmarks" — extract all listed items.
+- nearby_hospitals: look for "Premier Healthcare", "Healthcare", "Medical" sections — extract all listed items.
+- nearby_schools: look for "Elite Education", "Education", "Schools" sections — extract all listed items.
 
 Return ONLY valid JSON. No explanation. No markdown."""
 
@@ -118,6 +121,59 @@ Raw description:
 {text}
 
 Return ONLY the JSON object. No markdown fences. No explanation."""
+
+
+ENTITY_SEO_PROMPT = """You are an SEO copywriter for a UAE real estate portal.
+
+Write SEO content for this {entity_type}. Return ONLY valid JSON with these exact keys:
+
+{{
+  "tagline": "One punchy line max 12 words — what makes {name} special",
+  "seo_title": "Under 60 chars — e.g. '{name} Properties | Dubai Real Estate Portal'",
+  "seo_description": "140-155 chars, compelling, mentions what makes {name} notable.",
+  "seo_keywords": ["6 real search phrases people type — e.g. 'properties in {name} dubai'"],
+  "aeo_faq": [
+    {{"question": "...", "answer": "..."}},
+    {{"question": "...", "answer": "..."}},
+    {{"question": "...", "answer": "..."}},
+    {{"question": "...", "answer": "..."}},
+    {{"question": "...", "answer": "..."}},
+    {{"question": "...", "answer": "..."}}
+  ]
+}}
+
+{entity_type}: {name}
+{extra_context}
+
+FAQ should cover what someone searching for '{name}' in a UAE property context would ask.
+Return ONLY the JSON object. No markdown fences."""
+
+
+def _generate_entity_seo(entity_type: str, name: str, extra_context: str = "") -> dict:
+    """Generate tagline + SEO fields for an area or developer via Claude."""
+    if not name:
+        return {}
+    prompt = ENTITY_SEO_PROMPT.format(
+        entity_type=entity_type,
+        name=name,
+        extra_context=extra_context.strip(),
+    )
+    for attempt in range(2):
+        try:
+            resp = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=1500,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = resp.content[0].text.strip()
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+            result = json.loads(text)
+            logger.info(f"Generated SEO for {entity_type} '{name}'")
+            return result
+        except Exception as e:
+            logger.warning(f"Entity SEO attempt {attempt + 1} failed for {entity_type} '{name}': {e}")
+    return {}
 
 
 async def parse_and_humanize(raw: dict) -> dict | None:
@@ -217,6 +273,27 @@ async def parse_and_humanize(raw: dict) -> dict | None:
     developer_slug = structured.get("developer_slug") or _make_slug(dev_name)
     area_slug      = structured.get("area_slug") or _make_slug(structured.get("area_name", ""))
 
+    # ── Generate SEO for area and developer ───────────────────────────────────
+    area_name = structured.get("area_name", "")
+    area_nearby = (
+        raw.get("nearby_attractions_raw") or
+        structured.get("nearby_attractions") or []
+    )
+    area_seo = _generate_entity_seo(
+        "area",
+        area_name,
+        f"Emirate: {structured.get('emirate', 'Dubai')}\n"
+        f"Description: {raw.get('area_description', '')}\n"
+        f"Nearby landmarks: {', '.join(area_nearby[:5])}"
+    ) if area_name else {}
+
+    dev_seo = _generate_entity_seo(
+        "developer",
+        dev_name,
+        f"About: {structured.get('developer_about', '')}\n"
+        f"Projects in UAE: apartments, villas, mixed-use"
+    ) if dev_name else {}
+
     return {
         # ── Core project fields ───────────────────────────────────────────────
         "slug":                  slug,
@@ -260,17 +337,22 @@ async def parse_and_humanize(raw: dict) -> dict | None:
         "opr_url":               raw.get("opr_url", ""),
         # ── Private: for runner to upsert to developers / areas tables ────────
         "_developer": {
-            "name":        dev_name,
-            "slug":        developer_slug,
-            "intro_short": structured.get("developer_about") or "",
-            "logo_url":    raw.get("developer_logo") or None,
+            "name":           dev_name,
+            "slug":           developer_slug,
+            "intro_short":    structured.get("developer_about") or "",
+            "logo_url":       raw.get("developer_logo") or None,
+            **dev_seo,
         },
         "_area": {
-            "name":               structured.get("area_name", ""),
+            "name":               area_name,
             "slug":               area_slug,
             "emirate":            structured.get("emirate", "Dubai"),
-            "nearby_attractions": structured.get("nearby_attractions") or [],
-            "nearby_hospitals":   structured.get("nearby_hospitals") or [],
-            "nearby_schools":     structured.get("nearby_schools") or [],
+            "description_short":  raw.get("area_description") or "",
+            "image_url":          raw.get("area_image"),
+            "cover_image_url":    raw.get("area_image"),
+            "nearby_attractions": raw.get("nearby_attractions_raw") or structured.get("nearby_attractions") or [],
+            "nearby_hospitals":   raw.get("nearby_hospitals_raw") or structured.get("nearby_hospitals") or [],
+            "nearby_schools":     raw.get("nearby_schools_raw") or structured.get("nearby_schools") or [],
+            **area_seo,
         },
     }

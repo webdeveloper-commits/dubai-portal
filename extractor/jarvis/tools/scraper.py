@@ -99,8 +99,8 @@ def _parse_href_url(href: str) -> str | None:
 async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list[dict]:
     """
     Visit opr.ae/projects, collect up to max_new new project URLs.
-    Uses a single JS call per batch to extract card data fast.
-    Stops early when it hits a project already in existing_slugs.
+    Clicks Load More up to MAX_LOAD_MORE times to expose more cards.
+    Skips (does not break at) known projects — listing order isn't guaranteed newest-first.
     """
     browser = await get_browser()
     page = await _new_stealth_page(browser)
@@ -121,6 +121,20 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
 
         title = await page.title()
         logger.info(f"Page title: {title}")
+
+        # Click Load More to expose additional project cards before extracting
+        for load_n in range(MAX_LOAD_MORE):
+            try:
+                btn = page.locator("a:has-text('Load more'), button:has-text('Load more'), a:has-text('Show more'), button:has-text('Show more')").first
+                if await btn.count() == 0:
+                    logger.info(f"No Load More button after {load_n} click(s) — stopping pagination")
+                    break
+                await btn.click()
+                await asyncio.sleep(3)
+                logger.info(f"Clicked Load More ({load_n + 1}/{MAX_LOAD_MORE})")
+            except Exception as e:
+                logger.info(f"Load More stopped at click {load_n + 1}: {e}")
+                break
 
         # Extract all card data in one JS call — much faster than per-card Playwright calls
         cards_data: list[dict] = await page.evaluate("""() => {
@@ -146,7 +160,7 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             return results;
         }""")
 
-        logger.info(f"JS extracted {len(cards_data)} cards")
+        logger.info(f"JS extracted {len(cards_data)} total cards")
 
         for card in cards_data:
             if len(new_projects) >= max_new:
@@ -161,10 +175,10 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             slug = unquote(url.rstrip("/").split("/")[-1])
             card_text = (card.get("text") or "").lower()
 
-            # Stop at known projects
+            # Skip known projects (don't break — listing order isn't guaranteed newest-first)
             if slug in existing_slugs:
-                logger.info(f"Reached known project '{slug}' — stopping")
-                break
+                logger.debug(f"Known project '{slug}' — skipping")
+                continue
 
             # Parse name and price from card text
             lines = [l.strip() for l in card_text.split("\n") if l.strip()]
@@ -247,11 +261,23 @@ async def scrape_project_detail(url: str) -> dict | None:
                     result.image_main = m ? m[1].replace(/%7B.*$/, '') : '';
                 }
 
-                // All paragraph text for description
+                // All paragraph text for description — filter out cookie/privacy/tracking text
                 const paras = Array.from(document.querySelectorAll('p, .description, [class*="desc"], [class*="text"]'));
                 const descParts = paras
                     .map(p => p.innerText.trim())
-                    .filter(t => t.length > 60 && !t.includes('cookie') && !t.includes('©'));
+                    .filter(t => {
+                        const low = t.toLowerCase();
+                        return t.length > 60
+                            && !t.includes('©')
+                            && !low.includes('cookie')
+                            && !low.includes('personalization')
+                            && !low.includes('advertising')
+                            && !low.includes('data collected')
+                            && !low.includes('privacy policy')
+                            && !low.includes('consent')
+                            && !low.includes('purposes of')
+                            && !low.includes('third party');
+                    });
                 result.description_raw = [...new Set(descParts)].slice(0, 8).join('\\n\\n');
 
                 // Full body text for Claude to extract structured fields
@@ -319,17 +345,95 @@ async def scrape_project_detail(url: str) -> dict | None:
                 const devLogo = document.querySelector('[class*="developer"] img[src], [class*="partner"] img[src]');
                 result.developer_logo = devLogo ? devLogo.getAttribute('src') : null;
 
+                // ── Area "About [AreaName]" section ──────────────────────────────────
+                result.area_description = null;
+                result.area_image = null;
+                const aboutH2 = Array.from(document.querySelectorAll('h2')).find(
+                    h => /^about\\s/i.test(h.innerText.trim())
+                );
+                if (aboutH2) {
+                    // Look for description paragraph in the same .cont container or as sibling
+                    const cont = aboutH2.closest('[class*="cont"]') || aboutH2.parentElement;
+                    const dp = cont ? cont.querySelector('p') : null;
+                    if (dp && dp.innerText.trim().length > 30) {
+                        result.area_description = dp.innerText.trim();
+                    } else {
+                        let sib = aboutH2.nextElementSibling;
+                        for (let i = 0; i < 5 && sib; i++) {
+                            if (['H2','H3','H4'].includes(sib.tagName)) break;
+                            let pt = '';
+                            if (sib.tagName === 'P') pt = sib.innerText.trim();
+                            else { const p2 = sib.querySelector('p'); if (p2) pt = p2.innerText.trim(); }
+                            if (pt.length > 30) { result.area_description = pt; break; }
+                            sib = sib.nextElementSibling;
+                        }
+                    }
+                    // Find area background image: walk up to widget/node level, then look for .wrapper1 sibling
+                    let node = aboutH2.closest('[class*="node"], [class*="widget"]') || aboutH2.parentElement;
+                    for (let i = 0; i < 6 && node && node !== document.body; i++) {
+                        const par = node.parentElement;
+                        if (par) {
+                            const wEl = par.querySelector('.wrapper1, [style*="background-image"]');
+                            if (wEl) {
+                                const ws = wEl.getAttribute('style') || '';
+                                const wm = ws.match(/url\\([\"']?(https?:\\/\\/[^\"')\\s]+)[\"']?\\)/);
+                                if (wm) { result.area_image = wm[1].replace(/%7B.*$/, ''); break; }
+                            }
+                        }
+                        node = node.parentElement;
+                    }
+                }
+
+                // ── Nearby sections: Attractions / Premier Healthcare / Elite Education ──
+                result.nearby_attractions_raw = [];
+                result.nearby_hospitals_raw   = [];
+                result.nearby_schools_raw     = [];
+                const nearbyDefs = [
+                    ['nearby_attractions_raw', ['attraction', 'landmark', 'entertainment']],
+                    ['nearby_hospitals_raw',   ['healthcare', 'hospital', 'medical', 'clinic']],
+                    ['nearby_schools_raw',     ['education', 'school', 'universit', 'academy']]
+                ];
+                Array.from(document.querySelectorAll('h2, h3, h4')).forEach(heading => {
+                    const ht = heading.innerText.trim().toLowerCase();
+                    const def = nearbyDefs.find(d => d[1].some(t => ht.includes(t)));
+                    if (!def || result[def[0]].length > 0) return;
+                    const items = [];
+                    // Walk siblings to collect list items
+                    let sib2 = heading.nextElementSibling;
+                    for (let i = 0; i < 10 && sib2; i++) {
+                        if (['H2','H3','H4'].includes(sib2.tagName)) break;
+                        sib2.querySelectorAll('li').forEach(li => {
+                            const t = li.innerText.trim(); if (t.length > 2) items.push(t);
+                        });
+                        if (sib2.tagName === 'LI') { const t2 = sib2.innerText.trim(); if (t2.length > 2) items.push(t2); }
+                        sib2 = sib2.nextElementSibling;
+                    }
+                    // Fallback: check parent container's list items
+                    if (items.length === 0) {
+                        const cnt = heading.closest('[class*="col"], [class*="grid"]') || heading.parentElement;
+                        if (cnt) cnt.querySelectorAll('li').forEach(li => {
+                            const t = li.innerText.trim(); if (t.length > 2) items.push(t);
+                        });
+                    }
+                    if (items.length > 0) result[def[0]] = [...new Set(items)].slice(0, 10);
+                });
+
                 return result;
             }""")
 
-            data["name"]            = extracted.get("name", "")
-            data["image_main"]      = extracted.get("image_main") or None
-            data["description_raw"] = extracted.get("description_raw", "")
-            data["body_text"]       = extracted.get("body_text", "")
-            data["images_all"]      = extracted.get("images_all", [])
-            data["latitude"]        = extracted.get("latitude")
-            data["longitude"]       = extracted.get("longitude")
-            data["developer_logo"]  = extracted.get("developer_logo")
+            data["name"]                   = extracted.get("name", "")
+            data["image_main"]             = extracted.get("image_main") or None
+            data["description_raw"]        = extracted.get("description_raw", "")
+            data["body_text"]              = extracted.get("body_text", "")
+            data["images_all"]             = extracted.get("images_all", [])
+            data["latitude"]               = extracted.get("latitude")
+            data["longitude"]              = extracted.get("longitude")
+            data["developer_logo"]         = extracted.get("developer_logo")
+            data["area_description"]       = extracted.get("area_description")
+            data["area_image"]             = extracted.get("area_image")
+            data["nearby_attractions_raw"] = extracted.get("nearby_attractions_raw", [])
+            data["nearby_hospitals_raw"]   = extracted.get("nearby_hospitals_raw", [])
+            data["nearby_schools_raw"]     = extracted.get("nearby_schools_raw", [])
 
             # If gallery sparse (≤2), try clicking tabs to trigger slider load
             if len(data["images_all"]) < 3:
@@ -360,7 +464,11 @@ async def scrape_project_detail(url: str) -> dict | None:
             logger.info(
                 f"Scraped '{data['name']}' — "
                 f"{data['image_count']} images, "
-                f"{len(data['description_raw'])} chars description"
+                f"{len(data['description_raw'])} chars desc, "
+                f"area_desc={bool(data.get('area_description'))}, "
+                f"nearby a={len(data['nearby_attractions_raw'])} "
+                f"h={len(data['nearby_hospitals_raw'])} "
+                f"s={len(data['nearby_schools_raw'])}"
             )
             return data
 
