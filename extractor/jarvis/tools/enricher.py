@@ -90,19 +90,23 @@ async def find_bayut_area_guide_url(area_name: str) -> str | None:
             const target = {repr(area_lower)};
             const links = Array.from(document.querySelectorAll('a[href]'));
 
-            // Exact match first
-            let match = links.find(a => a.innerText.trim().toLowerCase() === target);
-            if (match) return match.href;
-
-            // Starts-with match
-            match = links.find(a => a.innerText.trim().toLowerCase().startsWith(target));
-            if (match) return match.href;
-
-            // Contains match
-            match = links.find(a => a.innerText.trim().toLowerCase().includes(target));
-            if (match) return match.href;
-
-            return null;
+            // Score each link by how well its text matches the target
+            // Prefer exact/starts-with over loose contains to avoid false positives
+            let best = null, bestScore = 0;
+            for (const a of links) {
+                const text = a.innerText.trim().toLowerCase();
+                if (!text) continue;
+                let score = 0;
+                if (text === target)                score = 100;
+                else if (text.startsWith(target))   score = 80;
+                else if (target.startsWith(text) && text.length > 4) score = 60;
+                else if (text.includes(target) && target.length > 6) score = 40;
+                // Penalise short link text (likely a card thumbnail label, not a guide link)
+                if (text.length < 5) score = 0;
+                if (score > bestScore) { bestScore = score; best = a; }
+            }
+            // Only return if score is strong enough to trust
+            return bestScore >= 40 ? (best ? best.href : null) : null;
         }}""")
 
         if found_url:
@@ -152,7 +156,12 @@ async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
     try:
         logger.info(f"Scraping Bayut area guide: {url}")
         await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
-        await asyncio.sleep(4)
+        await asyncio.sleep(3)
+        # Scroll to trigger Bayut's lazy-loaded images, then scroll back
+        await page.evaluate("window.scrollTo(0, 800)")
+        await asyncio.sleep(2)
+        await page.evaluate("window.scrollTo(0, 0)")
+        await asyncio.sleep(1)
 
         extracted = await page.evaluate("""() => {
             const r = {
@@ -165,17 +174,36 @@ async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
                 lifestyle: ''
             };
 
-            // ── Hero image ────────────────────────────────────────────────────
+            // ── Hero image — check data-src for lazy-loaded Bayut images ──────
+            function getImgSrc(el) {
+                if (!el) return null;
+                return el.getAttribute('src') ||
+                       el.getAttribute('data-src') ||
+                       el.getAttribute('data-lazy-src') ||
+                       el.getAttribute('data-original') || null;
+            }
             const heroSelectors = [
                 '[class*="hero"] img', '[class*="cover"] img',
                 '[class*="banner"] img', 'picture img',
-                'article img', '[class*="header"] img'
+                'article img', '[class*="header"] img',
+                'main img'
             ];
             for (const sel of heroSelectors) {
                 const el = document.querySelector(sel);
-                if (el && el.src && el.src.startsWith('http') && el.width > 200) {
-                    r.hero_image = el.src;
+                const src = getImgSrc(el);
+                if (src && src.startsWith('http') && !src.includes('placeholder') && !src.includes('logo')) {
+                    r.hero_image = src;
                     break;
+                }
+            }
+            // Last fallback: first sizeable img anywhere on page
+            if (!r.hero_image) {
+                for (const img of document.querySelectorAll('img')) {
+                    const src = getImgSrc(img);
+                    if (src && src.startsWith('http') && !src.includes('placeholder') &&
+                        !src.includes('logo') && !src.includes('icon') && src.length > 40) {
+                        r.hero_image = src; break;
+                    }
                 }
             }
 
@@ -411,17 +439,26 @@ async def enrich_areas() -> list[str]:
                 await asyncio.sleep(random.uniform(2, 4))
                 bayut = await scrape_bayut_area_guide(guide_url, area_name)
 
-                if bayut.get("hero_image") and not area.get("image_url"):
+                if bayut.get("hero_image"):
+                    updates["hero_image"]      = bayut["hero_image"]
                     updates["image_url"]       = bayut["hero_image"]
                     updates["cover_image_url"] = bayut["hero_image"]
-                if bayut.get("description") and not area.get("description_short"):
-                    updates["description_short"] = bayut["description"]
+                if bayut.get("description"):
+                    updates["about"] = bayut["description"]
+                    if not area.get("description_short"):
+                        updates["description_short"] = bayut["description"][:500]
+                if bayut.get("community_overview"):
+                    updates["description_long"] = bayut["community_overview"]
                 if bayut.get("schools"):
                     updates["nearby_schools"] = bayut["schools"]
+                    updates["schools"]         = bayut["schools"]
                 if bayut.get("hospitals"):
                     updates["nearby_hospitals"] = bayut["hospitals"]
+                    updates["hospitals"]         = bayut["hospitals"]
                 if bayut.get("attractions"):
                     updates["nearby_attractions"] = bayut["attractions"]
+                if bayut.get("lifestyle"):
+                    updates["lifestyle_dining_text"] = bayut["lifestyle"][:400]
 
             updates["enriched"] = True
             db().table("areas").update(updates).eq("id", area_id).execute()
