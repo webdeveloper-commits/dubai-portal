@@ -137,12 +137,73 @@ async def find_bayut_area_guide_url(area_name: str) -> str | None:
 
 # ── Bayut area guide — scrape detail page ─────────────────────────────────────
 
+def _parse_next_data(nd: dict, area_name: str) -> dict:
+    """
+    Extract area guide data from window.__NEXT_DATA__ (Next.js SSR JSON blob).
+    Bayut embeds all page props here — much cleaner than parsing rendered HTML.
+    """
+    result = {}
+    try:
+        props = nd.get("props", {}).get("pageProps", {})
+        # Try common key names Bayut may use
+        guide = (
+            props.get("areaGuide") or props.get("community") or
+            props.get("area") or props.get("data") or {}
+        )
+        if not guide:
+            for val in props.values():
+                if isinstance(val, dict) and any(k in val for k in ("description", "about", "name")):
+                    guide = val
+                    break
+
+        if not guide:
+            return result
+
+        desc = (
+            guide.get("description") or guide.get("about") or
+            guide.get("communityDescription") or guide.get("overview") or ""
+        )
+        if isinstance(desc, str) and len(desc) > 20:
+            result["description"] = desc[:800]
+
+        img = guide.get("heroImage") or guide.get("coverImage") or guide.get("image") or ""
+        if isinstance(img, str) and img.startswith("http"):
+            result["hero_image"] = img
+        elif isinstance(img, dict):
+            result["hero_image"] = img.get("url") or img.get("src") or ""
+
+        for field, keys in [
+            ("schools",   ["schools", "nearbySchools"]),
+            ("hospitals", ["hospitals", "nearbyHospitals"]),
+        ]:
+            for k in keys:
+                items = guide.get(k)
+                if isinstance(items, list) and items:
+                    result[field] = [
+                        (s if isinstance(s, str) else s.get("name", "")) for s in items[:10]
+                    ]
+                    break
+
+        tagline = guide.get("tagline") or guide.get("subtitle") or guide.get("shortDescription") or ""
+        if isinstance(tagline, str) and tagline:
+            result["tagline"] = tagline[:200]
+
+        logger.info(f"__NEXT_DATA__ parsed for '{area_name}': desc={len(result.get('description',''))} chars")
+    except Exception as e:
+        logger.warning(f"_parse_next_data failed: {e}")
+    return result
+
+
 async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
     """
-    Scrape a Bayut area guide detail page.
-    Extracts: hero image, about/description, community overview,
-    schools, hospitals, lifestyle highlights.
-    Skips: agent cards, property listings (contain AED prices, beds/baths).
+    Scrape a Bayut area guide detail page (fully client-side Next.js app).
+
+    Strategy:
+      1. Load with 'load' event + 5 s React render time
+      2. Scroll full page height to trigger lazy-loaded images
+      3. Try window.__NEXT_DATA__ for structured JSON (cleanest path)
+      4. DOM fallback: exclude nav/header/footer; skip navigation link text;
+         check CSS background-image for Bayut's hero
     """
     browser = await get_browser()
     page = await _new_stealth_page(browser)
@@ -150,126 +211,194 @@ async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
 
     try:
         logger.info(f"Scraping Bayut area guide: {url}")
-        await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
-        await asyncio.sleep(3)
-        # Scroll to trigger Bayut's lazy-loaded images, then scroll back
-        await page.evaluate("window.scrollTo(0, 800)")
-        await asyncio.sleep(2)
-        await page.evaluate("window.scrollTo(0, 0)")
-        await asyncio.sleep(1)
+        try:
+            await page.goto(url, wait_until="load", timeout=60_000)
+        except Exception:
+            pass  # timeout OK — React may still finish rendering
+        await asyncio.sleep(5)  # let React hydrate
 
-        extracted = await page.evaluate("""() => {
+        # Scroll progressively to trigger all lazy-loaded images
+        for y in [400, 1000, 2000, 3500, 0]:
+            await page.evaluate(f"window.scrollTo(0, {y})")
+            await asyncio.sleep(1)
+
+        # ── Step 1: __NEXT_DATA__ structured extraction ────────────────────
+        nd = await page.evaluate(
+            "() => { try { return window.__NEXT_DATA__ || null; } catch(e) { return null; } }"
+        )
+        if nd:
+            result = _parse_next_data(nd, area_name)
+
+        # ── Step 2: DOM extraction fills gaps ──────────────────────────────
+        dom_result = await page.evaluate("""() => {
             const r = {
-                hero_image: null,
-                description: '',
-                community_overview: '',
-                schools: [],
-                hospitals: [],
-                attractions: [],
-                lifestyle: ''
+                hero_image: null, tagline: '',
+                description: '', community_overview: '',
+                schools: [], hospitals: [], attractions: [], lifestyle: ''
             };
 
-            // ── Hero image — check data-src for lazy-loaded Bayut images ──────
+            // Exclude navigation, sidebar, footer, enquiry form
+            function isInExcludedArea(el) {
+                let p = el ? el.parentElement : null;
+                while (p && p !== document.body) {
+                    const tag = p.tagName;
+                    const cls = typeof p.className === 'string' ? p.className.toLowerCase() : '';
+                    if (tag === 'NAV' || tag === 'FOOTER') return true;
+                    if (cls.includes('navigation') || cls.includes('breadcrumb') ||
+                        cls.includes('enquir') || cls.includes('topbar') ||
+                        cls.includes('contactForm') || cls.includes('agentInfo') ||
+                        cls.includes('sidebar') || cls.includes('_footer') ||
+                        cls.includes('searchWidget') || cls.includes('_header')) return true;
+                    p = p.parentElement;
+                }
+                return false;
+            }
+
             function getImgSrc(el) {
                 if (!el) return null;
-                return el.getAttribute('src') ||
-                       el.getAttribute('data-src') ||
-                       el.getAttribute('data-lazy-src') ||
-                       el.getAttribute('data-original') || null;
+                return el.getAttribute('src') || el.getAttribute('data-src') ||
+                       el.getAttribute('data-lazy-src') || el.getAttribute('data-original') || null;
             }
-            const heroSelectors = [
-                '[class*="hero"] img', '[class*="cover"] img',
-                '[class*="banner"] img', 'picture img',
-                'article img', '[class*="header"] img',
-                'main img'
+
+            // Hero: CSS background-image first (Bayut's hero is usually a bg-image div)
+            const bgSels = [
+                '[class*="pageHeader"]', '[class*="_hero"]', '[class*="_banner"]',
+                '[class*="_cover"]', '[class*="communityHeader"]', '[class*="headerImage"]'
             ];
-            for (const sel of heroSelectors) {
+            for (const sel of bgSels) {
                 const el = document.querySelector(sel);
-                const src = getImgSrc(el);
-                if (src && src.startsWith('http') && !src.includes('placeholder') && !src.includes('logo')) {
-                    r.hero_image = src;
-                    break;
+                if (!el) continue;
+                const bg = window.getComputedStyle(el).backgroundImage;
+                if (bg && bg !== 'none') {
+                    const m = bg.match(/url\\(["']?([^"')]+)["']?\\)/);
+                    if (m && m[1].startsWith('http')) { r.hero_image = m[1]; break; }
                 }
             }
-            // Last fallback: first sizeable img anywhere on page
+            // picture source srcset
+            if (!r.hero_image) {
+                for (const src of document.querySelectorAll('picture source')) {
+                    const ss = src.getAttribute('srcset') || src.getAttribute('data-srcset') || '';
+                    const firstUrl = ss.split(',')[0].trim().split(' ')[0];
+                    if (firstUrl.startsWith('http') && !firstUrl.includes('logo') && !firstUrl.includes('icon')) {
+                        r.hero_image = firstUrl; break;
+                    }
+                }
+            }
+            // img src/data-src not in excluded area
+            if (!r.hero_image) {
+                const imgSels = [
+                    '[class*="_hero"] img', '[class*="_banner"] img',
+                    '[class*="_cover"] img', 'picture img', 'main img'
+                ];
+                for (const sel of imgSels) {
+                    const el = document.querySelector(sel);
+                    if (!el || isInExcludedArea(el)) continue;
+                    const src = getImgSrc(el);
+                    if (src && src.startsWith('http') && !src.includes('placeholder') &&
+                        !src.includes('logo') && !src.includes('icon') && !src.includes('spinner')) {
+                        r.hero_image = src; break;
+                    }
+                }
+            }
+            // Very first content img on page
             if (!r.hero_image) {
                 for (const img of document.querySelectorAll('img')) {
+                    if (isInExcludedArea(img)) continue;
                     const src = getImgSrc(img);
-                    if (src && src.startsWith('http') && !src.includes('placeholder') &&
-                        !src.includes('logo') && !src.includes('icon') && src.length > 40) {
+                    if (src && src.startsWith('http') && src.length > 40 &&
+                        !src.includes('placeholder') && !src.includes('logo') &&
+                        !src.includes('icon') && !src.includes('avatar') && !src.includes('spinner')) {
                         r.hero_image = src; break;
                     }
                 }
             }
 
-            // ── Section-by-section text extraction ───────────────────────────
-            // Bayut area guides are structured with h2/h3 headings.
-            // We skip sections that look like property/agent listings.
-            const SKIP_PATTERNS = [
+            // Skip patterns: listing prices, nav links, form labels
+            const SKIP = [
                 /aed\\s*[\\d,]+/i, /\\d+\\s*bed/i, /\\d+\\s*bath/i,
                 /per year/i, /per month/i, /call agent/i,
                 /whatsapp/i, /view details/i, /listed by/i,
-                /top broker/i, /top agent/i
+                /top broker/i, /top agent/i,
+                /apartments for sale/i, /villas for sale/i,
+                /for rent in/i, /floor plans/i, /truestimate/i,
+                /new projects/i, /send enquiry/i, /free consultation/i,
+                /no obligation/i, /reply within/i, /your name/i,
+                /email address/i, /phone.*whatsapp/i,
+                /^buy$/i, /^rent$/i, /^agents$/i,
             ];
+            function isSkip(t) { return SKIP.some(p => p.test(t)); }
 
-            function isListingText(text) {
-                return SKIP_PATTERNS.some(p => p.test(text));
-            }
-
+            // Walk content scoped to <main> or <article>
+            const scope = document.querySelector('main') || document.querySelector('article') || document.body;
+            const els = Array.from(scope.querySelectorAll('h1,h2,h3,h4,p,li'));
             const sections = {};
             let current = '__intro__';
             sections[current] = [];
 
-            const els = Array.from(document.querySelectorAll('h1, h2, h3, h4, p, li'));
             for (const el of els) {
+                if (isInExcludedArea(el)) continue;
                 const text = el.innerText.trim();
-                if (!text || text.length < 4) continue;
-
+                if (!text || text.length < 10) continue;
+                if (isSkip(text)) continue;
+                // Skip elements that are mostly anchor link text (navigation blobs)
+                const anchors = el.querySelectorAll('a');
+                if (anchors.length > 2) {
+                    const aLen = Array.from(anchors).reduce((s, a) => s + a.innerText.length, 0);
+                    if (aLen > text.length * 0.5) continue;
+                }
                 if (['H1','H2','H3','H4'].includes(el.tagName)) {
                     current = text;
                     if (!sections[current]) sections[current] = [];
                 } else {
-                    if (isListingText(text)) continue;
                     sections[current].push(text);
                 }
             }
 
-            // ── Map section headings to our fields ────────────────────────────
             for (const [heading, texts] of Object.entries(sections)) {
                 const h = heading.toLowerCase();
-                const content = texts.join(' ').trim();
+                const content = texts.join('\\n').trim();
                 if (!content) continue;
-
-                if (h === '__intro__' || h.includes('about') || h.includes('nutshell') || h.includes('highlights')) {
-                    if (!r.description) r.description = content.slice(0, 700);
-                } else if (h.includes('community overview') || h.includes('overview')) {
-                    r.community_overview = content.slice(0, 500);
-                } else if (h.includes('school') || h.includes('education') || h.includes('college') || h.includes('university')) {
-                    r.schools = texts.filter(t => t.length > 5 && !isListingText(t)).slice(0, 10);
-                } else if (h.includes('hospital') || h.includes('healthcare') || h.includes('medical') || h.includes('clinic')) {
-                    r.hospitals = texts.filter(t => t.length > 5 && !isListingText(t)).slice(0, 10);
-                } else if (h.includes('shopping') || h.includes('dining') || h.includes('nightlife') || h.includes('leisure') || h.includes('landmark') || h.includes('entertainment')) {
+                if (h === '__intro__' || h.includes('about') || h.includes('nutshell') ||
+                    h.includes('highlights') || h.includes('overview') || h.includes('community')) {
+                    if (!r.description) r.description = content.slice(0, 800);
+                } else if (h.includes('school') || h.includes('education') || h.includes('university')) {
+                    r.schools = texts.filter(t => t.length > 5 && !isSkip(t)).slice(0, 10);
+                } else if (h.includes('hospital') || h.includes('healthcare') || h.includes('clinic')) {
+                    r.hospitals = texts.filter(t => t.length > 5 && !isSkip(t)).slice(0, 10);
+                } else if (h.includes('shopping') || h.includes('dining') || h.includes('nightlife') ||
+                           h.includes('leisure') || h.includes('landmark') || h.includes('entertainment') ||
+                           h.includes('lifestyle') || h.includes('recreation') || h.includes('fitness')) {
                     r.attractions = r.attractions.concat(texts.filter(t => t.length > 5).slice(0, 5));
                     r.lifestyle += content.slice(0, 300) + '\\n';
-                } else if (h.includes('recreation') || h.includes('fitness') || h.includes('outdoor')) {
-                    r.lifestyle += content.slice(0, 200) + '\\n';
+                }
+            }
+
+            // Tagline: first short <p> right after the h1
+            const h1 = scope.querySelector('h1');
+            if (h1) {
+                let sib = h1.nextElementSibling;
+                for (let i = 0; i < 4 && sib; i++, sib = sib.nextElementSibling) {
+                    const t = sib.innerText.trim();
+                    if (t.length > 10 && t.length < 200 && !isSkip(t)) { r.tagline = t; break; }
                 }
             }
 
             r.attractions = [...new Set(r.attractions)].slice(0, 10);
             r.lifestyle = r.lifestyle.trim().slice(0, 600);
-
             return r;
         }""")
 
-        result = extracted
+        # Merge: __NEXT_DATA__ takes priority, DOM fills any gaps
+        for key, val in dom_result.items():
+            if not result.get(key) and val:
+                result[key] = val
+
         logger.info(
             f"Bayut guide '{area_name}' — "
             f"hero={'yes' if result.get('hero_image') else 'no'}, "
             f"desc={len(result.get('description',''))} chars, "
             f"schools={len(result.get('schools',[]))}, "
-            f"hospitals={len(result.get('hospitals',[]))}, "
-            f"attractions={len(result.get('attractions',[]))}"
+            f"hospitals={len(result.get('hospitals',[]))}"
         )
 
     except Exception as e:
@@ -278,6 +407,96 @@ async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
         await page.close()
 
     return result
+
+
+async def test_area_scrape(area_name: str) -> str:
+    """
+    Debug helper: find Bayut URL + scrape for one area, return a detailed
+    report string (sent via Telegram TEST AREA command).
+    Saves raw __NEXT_DATA__ to /tmp/bayut_debug.json for inspection.
+    """
+    import json, os
+    lines = [f"TEST AREA: {area_name}\n"]
+
+    url = await find_bayut_area_guide_url(area_name)
+    if not url:
+        lines.append("Bayut URL: NOT FOUND (fallback patterns also failed)")
+        return "\n".join(lines)
+
+    lines.append(f"Bayut URL: {url}")
+
+    browser = await get_browser()
+    page = await _new_stealth_page(browser)
+    try:
+        try:
+            await page.goto(url, wait_until="load", timeout=60_000)
+        except Exception:
+            pass
+        await asyncio.sleep(5)
+        for y in [400, 1000, 2000, 3500, 0]:
+            await page.evaluate(f"window.scrollTo(0, {y})")
+            await asyncio.sleep(1)
+
+        nd = await page.evaluate(
+            "() => { try { return window.__NEXT_DATA__ || null; } catch(e) { return null; } }"
+        )
+        if nd:
+            try:
+                with open("/tmp/bayut_debug.json", "w") as f:
+                    json.dump(nd, f, indent=2)
+                lines.append("__NEXT_DATA__: YES — saved to /tmp/bayut_debug.json")
+                nd_result = _parse_next_data(nd, area_name)
+                lines.append(f"  desc from ND: {len(nd_result.get('description',''))} chars")
+                lines.append(f"  hero from ND: {'yes' if nd_result.get('hero_image') else 'no'}")
+            except Exception as e:
+                lines.append(f"__NEXT_DATA__: YES but parse failed: {e}")
+        else:
+            lines.append("__NEXT_DATA__: NOT FOUND")
+
+        title = await page.title()
+        lines.append(f"Page title: {title}")
+
+        # Quick DOM text sample to show what we're seeing
+        sample = await page.evaluate("""() => {
+            const scope = document.querySelector('main') || document.body;
+            const texts = Array.from(scope.querySelectorAll('p')).map(p => p.innerText.trim()).filter(t => t.length > 30).slice(0, 5);
+            return texts;
+        }""")
+        lines.append("First 5 <p> texts in <main>:")
+        for i, t in enumerate(sample, 1):
+            lines.append(f"  {i}. {t[:120]}")
+
+        # Hero image check
+        hero_result = await page.evaluate("""() => {
+            const bgSels = ['[class*="pageHeader"]','[class*="_hero"]','[class*="_banner"]','[class*="_cover"]','[class*="communityHeader"]'];
+            for (const sel of bgSels) {
+                const el = document.querySelector(sel);
+                if (el) {
+                    const bg = window.getComputedStyle(el).backgroundImage;
+                    if (bg && bg !== 'none') return {found: true, method: 'bg-image:'+sel, src: bg.slice(0,100)};
+                }
+            }
+            for (const src of document.querySelectorAll('picture source')) {
+                const ss = src.getAttribute('srcset') || src.getAttribute('data-srcset') || '';
+                if (ss) return {found: true, method: 'picture srcset', src: ss.slice(0,100)};
+            }
+            const img = document.querySelector('main img') || document.querySelector('article img');
+            if (img) {
+                const s = img.getAttribute('src') || img.getAttribute('data-src') || '';
+                return {found: !!s, method: 'main img', src: s.slice(0,100)};
+            }
+            return {found: false, method: 'none', src: ''};
+        }""")
+        lines.append(f"Hero image: found={hero_result['found']} method={hero_result['method']}")
+        if hero_result['src']:
+            lines.append(f"  src preview: {hero_result['src'][:100]}")
+
+    except Exception as e:
+        lines.append(f"Error during test scrape: {e}")
+    finally:
+        await page.close()
+
+    return "\n".join(lines)
 
 
 # ── Developer website search ───────────────────────────────────────────────────

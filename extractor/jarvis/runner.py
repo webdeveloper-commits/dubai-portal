@@ -14,7 +14,7 @@ from .tools.storage import (
     get_unindexed_projects, mark_google_indexed, log_error,
     upsert_developer, upsert_area,
 )
-from .tools.enricher import run_enrichment
+from .tools.enricher import run_enrichment, test_area_scrape
 
 logger = logging.getLogger(__name__)
 
@@ -251,3 +251,13 @@ async def run_enrichment_only():
     except asyncio.CancelledError:
         await notify("Enrichment stopped by user.")
         raise
+
+
+async def run_test_area(area_name: str):
+    """Debug: scrape one area from Bayut and report what was found."""
+    await notify(f"Testing Bayut scrape for: {area_name}...")
+    try:
+        report = await test_area_scrape(area_name)
+        await notify(report)
+    except Exception as e:
+        await notify(f"TEST AREA error: {e}")

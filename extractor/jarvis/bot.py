@@ -98,6 +98,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             asyncio.create_task(runner.run_enrichment_only())
             return
 
+        if upper.startswith("TEST AREA"):
+            area_name = user_text[9:].strip()
+            if not area_name:
+                await update.message.reply_text("Usage: TEST AREA [name]\nExample: TEST AREA Jumeirah Village Circle")
+                return
+            asyncio.create_task(runner.run_test_area(area_name))
+            await update.message.reply_text(f"Testing Bayut scrape for '{area_name}'...")
+            return
+
         # ── Everything else → Claude brain ──
         reply = chat(chat_id, user_text)
         for chunk in _split(reply):
