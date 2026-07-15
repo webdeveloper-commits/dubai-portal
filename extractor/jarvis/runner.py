@@ -54,8 +54,8 @@ async def run_tuesday():
     await notify("JARVIS — Tuesday run started\nScanning opr.ae for new projects...")
 
     existing_slugs = get_existing_slugs()
-    # Scan 25 candidates — Claude will filter non-UAE, we publish up to 10 UAE projects
-    stubs = await scan_new_projects(existing_slugs, max_new=25)
+    # Scan 10 candidates — Claude will filter non-UAE, we publish up to 5 UAE projects
+    stubs = await scan_new_projects(existing_slugs, max_new=10)
 
     if not stubs:
         await notify("No new projects found on opr.ae. Nothing to publish.")
@@ -66,7 +66,7 @@ async def run_tuesday():
     published = []
     errors    = []
     skipped   = []
-    MAX_PUBLISH = 10  # stop after publishing this many UAE projects
+    MAX_PUBLISH = 5  # stop after publishing this many UAE projects
 
     for i, stub in enumerate(stubs):
         if len(published) >= MAX_PUBLISH:
