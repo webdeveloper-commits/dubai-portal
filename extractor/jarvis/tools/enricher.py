@@ -58,153 +58,176 @@ async def geocode(name: str, emirate: str = "Dubai") -> tuple[float | None, floa
     return None, None
 
 
-# Bayut's index page has this title — any URL landing here is NOT a specific area guide
+# Bayut's index/404 page always has this substring in its title
 _BAYUT_INDEX_TITLE = "area guides for dubai, abu dhabi"
 
-# Emirate-level paths to exclude from link matching (they are section pages, not area guides)
-_EMIRATE_PATHS = [
-    "/area-guides/dubai", "/area-guides/abu-dhabi", "/area-guides/sharjah",
-    "/area-guides/ajman", "/area-guides/ras-al-khaimah", "/area-guides/fujairah",
-    "/area-guides/umm-al-quwain",
-]
+# Single-segment slugs that are emirate section pages, not area guides
+_EMIRATE_SLUGS = {
+    "dubai", "abu-dhabi", "sharjah", "ajman",
+    "ras-al-khaimah", "fujairah", "umm-al-quwain",
+}
+
+# Generic words stripped before word-overlap matching
+_STOP_WORDS = {
+    "the", "by", "al", "ibn", "um", "abu", "bur", "ras",
+    "new", "old", "area", "and", "in", "at", "of",
+}
 
 
 def _bayut_is_index_page(title: str) -> bool:
-    return _BAYUT_INDEX_TITLE in title.lower() or not title.strip()
+    t = title.lower()
+    return _BAYUT_INDEX_TITLE in t or not t.strip()
+
+
+def _sig_words(name: str) -> set:
+    return {w for w in re.split(r"[\s\-]+", name.lower()) if len(w) > 2 and w not in _STOP_WORDS}
 
 
 # ── Bayut area guide — find URL ────────────────────────────────────────────────
 
 async def find_bayut_area_guide_url(area_name: str) -> str | None:
     """
-    Find the specific Bayut area guide URL for an area.
+    Find the actual Bayut area guide URL by scraping the index page.
 
-    Strategy (in order):
-      1. Try 3 direct slug-based URL patterns — validate each by page title.
-         Bayut always redirects unknown routes to the index page which has a
-         known title; any other title = valid area guide.
-      2. Fall back to scraping the area guide index, clicking all 'View All'
-         buttons to reveal full lists, then score-matching anchor text.
-         Emirate-level links (/area-guides/dubai/ etc.) are excluded.
-         Result is title-validated before returning.
+    URL slugs cannot be guessed — Bayut uses their own naming, e.g.:
+      'The Acres Dubailand' → /area-guides/the-acres-by-meraas/
+    The only reliable method: expand all area lists on bayut.com/area-guides/
+    by clicking every 'View All' button, then score-match by link text.
+
+    Matching:
+      exact text match       → 100
+      one starts with other  → 85
+      sig-word overlap ≥60 % → 70
+      sig-word overlap ≥50 % → 50  (minimum accepted)
+    Also checks slug words, not just link text.
+    Result is title-validated: if the page we land on is the index, reject it.
     """
-    slug = re.sub(r"[^a-z0-9]+", "-", area_name.lower().strip()).strip("-")
-    direct_patterns = [
-        f"https://www.bayut.com/area-guides/{slug}-area-guide/",
-        f"https://www.bayut.com/area-guides/{slug}/",
-        f"https://www.bayut.com/area-guides/{slug}-community-overview/",
-    ]
-
     browser = await get_browser()
     page = await _new_stealth_page(browser)
 
-    async def _valid_area_page(url: str) -> bool:
-        """Visit URL, return True if it's a specific area guide (not the index)."""
-        try:
-            await page.goto(url, wait_until="load", timeout=35_000)
-            await asyncio.sleep(3)
-            title = await page.title()
-            if _bayut_is_index_page(title):
-                logger.info(f"  → index page (not found): {url}")
-                return False
-            logger.info(f"  → valid area page '{title}': {url}")
-            return True
-        except Exception as e:
-            logger.warning(f"  → error checking {url}: {e}")
-            return False
-
     try:
-        # ── Step 1: direct slug patterns ──────────────────────────────────
-        logger.info(f"Searching Bayut area guide for '{area_name}' (slug: {slug})...")
-        for url in direct_patterns:
-            if await _valid_area_page(url):
-                return url
-            await asyncio.sleep(1)
-
-        # ── Step 2: index page link search ────────────────────────────────
-        logger.info(f"Direct patterns failed — searching bayut.com/area-guides/ index...")
+        logger.info(f"Loading Bayut area guides index for '{area_name}'...")
         try:
-            await page.goto(BAYUT_AREA_GUIDES, wait_until="load", timeout=45_000)
+            await page.goto(BAYUT_AREA_GUIDES, wait_until="load", timeout=60_000)
         except Exception:
             pass
-        await asyncio.sleep(5)
+        await asyncio.sleep(6)
 
-        # Click ALL "View All" / "View More" buttons repeatedly until none remain
-        # These expand each emirate's area list in both Ready and Off-plan sections
-        for attempt in range(20):
-            try:
-                btns = page.locator(
-                    "button:has-text('View All'), a:has-text('View All'), "
-                    "button:has-text('View More'), a:has-text('View More'), "
-                    "button:has-text('VIEW ALL'), a:has-text('VIEW ALL')"
-                )
-                count = await btns.count()
-                if count == 0:
-                    break
-                # Click the first visible one and wait for React to re-render
-                for i in range(count):
-                    try:
-                        btn = btns.nth(i)
-                        if await btn.is_visible():
-                            await btn.click()
-                            await asyncio.sleep(2)
-                            break
-                    except Exception:
-                        continue
-                else:
-                    break  # no visible button found
-            except Exception:
+        # Click every "View All / View More" button repeatedly until no new links appear.
+        # Bayut has one expand button per emirate × category (Ready / Off-plan) ≈ 14 total.
+        prev_count = 0
+        for attempt in range(30):
+            clicked = await page.evaluate("""() => {
+                const kw = ['view all', 'view more', 'show all', 'show more', 'see all'];
+                let n = 0;
+                document.querySelectorAll('button, a').forEach(el => {
+                    const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+                    if (kw.some(k => t === k || t.startsWith(k))) {
+                        try { el.click(); n++; } catch(e) {}
+                    }
+                });
+                return n;
+            }""")
+            await asyncio.sleep(2.5)
+
+            cur_count = await page.evaluate(
+                "() => document.querySelectorAll('a[href*=\"/area-guides/\"]').length"
+            )
+            logger.info(f"  expand pass {attempt+1}: clicked={clicked}, links={cur_count}")
+            if clicked == 0 or cur_count == prev_count:
                 break
+            prev_count = cur_count
 
         await asyncio.sleep(2)
 
-        area_lower = area_name.lower().strip()
-        area_words = [w for w in area_lower.split() if len(w) > 3]
+        target_lower = area_name.lower().strip()
+        target_sig   = list(_sig_words(area_name))
 
-        found_url: str | None = await page.evaluate("""(args) => {
-            const target = args.target;
-            const words  = args.words;
-            const skipPaths = args.skipPaths;
+        candidates: list = await page.evaluate("""(args) => {
+            const target     = args.target;
+            const targetSig  = new Set(args.targetSig);
+            const stopWords  = new Set(args.stopWords);
+            const emirSlug   = new Set(args.emirateSlugs);
 
-            // Only look at links that go to a specific area guide
-            const links = Array.from(document.querySelectorAll('a[href*="/area-guides/"]'));
-            let best = null, bestScore = 0;
+            function sigW(str) {
+                return str.toLowerCase().split(/[\\s\\-]+/)
+                    .filter(w => w.length > 2 && !stopWords.has(w));
+            }
+            function overlap(setA, arrB) {
+                let m = 0;
+                for (const w of setA) {
+                    if (arrB.some(b => b === w || b.startsWith(w) || w.startsWith(b))) m++;
+                }
+                return setA.size > 0 ? m / setA.size : 0;
+            }
 
-            for (const a of links) {
-                const href = a.href || '';
-                // Skip the index page itself
-                if (href.replace(/\\/+$/, '').endsWith('/area-guides')) continue;
-                // Skip emirate-level section pages
-                const path = href.replace('https://www.bayut.com', '').replace(/\\/+$/, '');
-                if (skipPaths.some(p => path === p || path === p + '-area-guide')) continue;
+            const seen = new Set();
+            const results = [];
+
+            document.querySelectorAll('a[href*="/area-guides/"]').forEach(a => {
+                const href = (a.href || '').split('?')[0].replace(/\\/+$/, '');
+                if (seen.has(href)) return;
+                seen.add(href);
+
+                const parts = href.replace('https://www.bayut.com', '').split('/').filter(Boolean);
+                if (parts.length < 2) return;
+                const slug = parts[parts.length - 1];
+                if (emirSlug.has(slug) || !slug) return;
 
                 const text = (a.innerText || a.textContent || '').trim().toLowerCase();
-                if (!text || text.length < 3) continue;
+                if (!text || text.length < 3) return;
+
+                const textSig = sigW(text);
+                const slugSig = sigW(slug);
 
                 let score = 0;
-                if (text === target) score = 100;
-                else if (text.startsWith(target) && text.length <= target.length + 6) score = 85;
-                else if (target === text) score = 100;
-                // Word overlap: all significant words must match
-                else if (words.length > 0) {
-                    const tWords = text.split(/\\s+/);
-                    const matched = words.filter(w => tWords.some(t => t === w || t.startsWith(w))).length;
-                    if (matched === words.length) score = 75;
-                    else if (matched >= Math.ceil(words.length * 0.8)) score = 55;
+                if (text === target) {
+                    score = 100;
+                } else if (text.startsWith(target) || target.startsWith(text)) {
+                    score = 85;
+                } else {
+                    const fwd     = overlap(targetSig, textSig);
+                    const bwd     = overlap(new Set(textSig), Array.from(targetSig));
+                    const slugFwd = overlap(targetSig, slugSig);
+                    const best    = Math.max(fwd, slugFwd);
+                    if (best >= 0.6 && bwd >= 0.5) score = 70;
+                    else if (best >= 0.5)           score = 50;
                 }
-                // Do NOT use target.startsWith(text) — that matched 'dubai' for 'dubai marina'
 
-                if (score > bestScore) { bestScore = score; best = href; }
-            }
-            return bestScore >= 55 ? best : null;
-        }""", {"target": area_lower, "words": area_words, "skipPaths": _EMIRATE_PATHS})
+                if (score >= 50) results.push({ href, text, score });
+            });
 
-        if found_url:
-            if await _valid_area_page(found_url):
-                return found_url
+            results.sort((a, b) => b.score - a.score);
+            return results.slice(0, 5);
+        }""", {
+            "target":       target_lower,
+            "targetSig":    target_sig,
+            "stopWords":    list(_STOP_WORDS),
+            "emirateSlugs": list(_EMIRATE_SLUGS),
+        })
 
-        logger.warning(f"No Bayut area guide found for '{area_name}'")
-        return None
+        if not candidates:
+            logger.warning(f"No matching links in Bayut index for '{area_name}'")
+            return None
+
+        logger.info(f"Candidates for '{area_name}':")
+        for c in candidates:
+            logger.info(f"  score={c['score']} text='{c['text']}' → {c['href']}")
+
+        best_url = candidates[0]["href"]
+        try:
+            await page.goto(best_url, wait_until="load", timeout=40_000)
+        except Exception:
+            pass
+        await asyncio.sleep(3)
+        title = await page.title()
+
+        if _bayut_is_index_page(title):
+            logger.warning(f"Candidate '{best_url}' → index/app page — no area guide for '{area_name}'")
+            return None
+
+        logger.info(f"Confirmed Bayut area guide for '{area_name}': {best_url} (title: {title})")
+        return best_url
 
     except Exception as e:
         logger.error(f"find_bayut_area_guide_url failed for '{area_name}': {e}")
