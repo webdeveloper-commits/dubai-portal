@@ -333,7 +333,7 @@ async def find_developer_website(dev_name: str) -> str | None:
 
 
 async def scrape_developer_website(url: str, dev_name: str) -> dict:
-    """Scrape developer's official website for logo URL and about text."""
+    """Scrape developer's official website for cover image, about text, contact, founding year."""
     browser = await get_browser()
     page = await _new_stealth_page(browser)
     result = {}
@@ -341,43 +341,63 @@ async def scrape_developer_website(url: str, dev_name: str) -> dict:
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
         await asyncio.sleep(3)
+        await page.evaluate("window.scrollTo(0, 600)")
+        await asyncio.sleep(1)
+        await page.evaluate("window.scrollTo(0, 0)")
 
         extracted = await page.evaluate("""() => {
             const r = {};
 
-            // Logo — header/nav SVG or img
-            const logoSels = [
-                'header img[src]', 'nav img[src]',
-                '[class*="logo"] img[src]', '[id*="logo"] img[src]',
-                'a[class*="logo"] img[src]', '[class*="brand"] img[src]'
+            // Cover / hero image (not logo — a large banner image)
+            function getImgSrc(el) {
+                if (!el) return null;
+                return el.getAttribute('src') || el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || null;
+            }
+            const coverSels = [
+                '[class*="hero"] img', '[class*="banner"] img',
+                '[class*="cover"] img', '[class*="header"] img',
+                'section img', 'main img'
             ];
-            for (const sel of logoSels) {
+            for (const sel of coverSels) {
                 const el = document.querySelector(sel);
-                if (el && el.src && el.src.startsWith('http') && !el.src.includes('placeholder')) {
-                    r.logo_url = el.src;
+                const src = getImgSrc(el);
+                if (src && src.startsWith('http') && !src.includes('logo') && !src.includes('icon') && !src.includes('placeholder')) {
+                    r.cover_image_url = src;
                     break;
                 }
             }
 
-            // About / company text
+            // About / company description — longer version
             const aboutSels = [
                 '[class*="about"] p', '[id*="about"] p',
                 '[class*="company"] p', '[class*="who-we"] p',
-                '[class*="overview"] p', 'main p', 'section p'
+                '[class*="story"] p', '[class*="overview"] p',
+                'main p', 'section p'
             ];
             const parts = [];
             const seen = new Set();
             for (const sel of aboutSels) {
                 document.querySelectorAll(sel).forEach(p => {
                     const t = p.innerText.trim();
-                    if (t.length > 80 && !seen.has(t)) {
-                        seen.add(t);
-                        parts.push(t);
-                    }
+                    if (t.length > 80 && !seen.has(t)) { seen.add(t); parts.push(t); }
                 });
-                if (parts.length >= 3) break;
+                if (parts.length >= 4) break;
             }
-            r.intro_short = parts.slice(0, 2).join(' ').slice(0, 500);
+            r.about     = parts.slice(0, 4).join('\\n\\n').slice(0, 1000);
+            r.intro_long = r.about;
+
+            // Founded / established year
+            const bodyText = document.body.innerText;
+            const yearM = bodyText.match(/(?:founded|established|since|est\\.?)\\s*(in\\s*)?(1[89]\\d{2}|20[0-2]\\d)/i);
+            r.founded_year = yearM ? parseInt(yearM[2]) : null;
+
+            // Phone number
+            const phoneM = bodyText.match(/(?:\\+971|00971|\\(971\\)|0)\\s*[\\d\\s\\-]{7,14}/);
+            r.phone = phoneM ? phoneM[0].trim() : null;
+
+            // Email
+            const emailM = bodyText.match(/[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/);
+            r.email = emailM ? emailM[0] : null;
 
             return r;
         }""")
@@ -385,8 +405,9 @@ async def scrape_developer_website(url: str, dev_name: str) -> dict:
         result = extracted
         logger.info(
             f"Developer site scraped '{dev_name}' — "
-            f"logo={'yes' if result.get('logo_url') else 'no'}, "
-            f"about={len(result.get('intro_short',''))} chars"
+            f"cover={'yes' if result.get('cover_image_url') else 'no'}, "
+            f"about={len(result.get('about',''))} chars, "
+            f"year={result.get('founded_year')}"
         )
 
     except Exception as e:
@@ -399,8 +420,8 @@ async def scrape_developer_website(url: str, dev_name: str) -> dict:
 
 # ── Enrichment runners ─────────────────────────────────────────────────────────
 
-async def enrich_areas() -> list[str]:
-    """Geocode + Bayut-enrich all unenriched areas. Returns names enriched."""
+async def enrich_areas() -> list[dict]:
+    """Geocode + Bayut-enrich all unenriched areas. Returns list of {name, slug}."""
     try:
         res = (
             db().table("areas")
@@ -418,12 +439,13 @@ async def enrich_areas() -> list[str]:
         return []
 
     logger.info(f"Enriching {len(areas)} areas...")
-    enriched_names = []
+    enriched_records = []
 
     for area in areas:
         try:
             area_id   = area["id"]
             area_name = area["name"]
+            area_slug = area.get("slug", "")
             emirate   = area.get("emirate", "Dubai")
             updates   = {}
 
@@ -463,7 +485,7 @@ async def enrich_areas() -> list[str]:
             updates["enriched"] = True
             db().table("areas").update(updates).eq("id", area_id).execute()
             logger.info(f"Area '{area_name}' enriched — lat={lat}, bayut={'yes' if guide_url else 'no'}")
-            enriched_names.append(area_name)
+            enriched_records.append({"name": area_name, "slug": area_slug})
 
         except Exception as e:
             logger.error(f"enrich_areas error for '{area.get('name')}': {e}")
@@ -474,15 +496,15 @@ async def enrich_areas() -> list[str]:
 
         await asyncio.sleep(random.uniform(5, 9))
 
-    return enriched_names
+    return enriched_records
 
 
-async def enrich_developers() -> list[str]:
-    """Search official website + scrape to enrich unenriched developers."""
+async def enrich_developers() -> list[dict]:
+    """Search official website + scrape to enrich unenriched developers. Returns list of {name, slug}."""
     try:
         res = (
             db().table("developers")
-            .select("id, name, slug, logo_url, intro_short")
+            .select("id, name, slug, logo_url, intro_short, website_url")
             .eq("enriched", False)
             .execute()
         )
@@ -496,30 +518,48 @@ async def enrich_developers() -> list[str]:
         return []
 
     logger.info(f"Enriching {len(developers)} developers...")
-    enriched_names = []
+    enriched_records = []
 
     for dev in developers:
         try:
             dev_id   = dev["id"]
             dev_name = dev["name"]
+            dev_slug = dev.get("slug", "")
             updates  = {}
 
-            # Search DuckDuckGo for official website
-            website_url = await find_developer_website(dev_name)
+            # Search DuckDuckGo for official website (only if not already known)
+            website_url = dev.get("website_url") or await find_developer_website(dev_name)
             if website_url:
                 updates["website_url"] = website_url
+                # Store domain-only in website column too
+                import re as _re
+                domain = _re.sub(r'^https?://(www\.)?', '', website_url).split('/')[0]
+                updates["website"] = domain
+
                 await asyncio.sleep(random.uniform(2, 4))
                 site_data = await scrape_developer_website(website_url, dev_name)
-                if site_data.get("logo_url") and not dev.get("logo_url"):
-                    updates["logo_url"]       = site_data["logo_url"]
-                    updates["logo_color_url"] = site_data["logo_url"]
-                if site_data.get("intro_short") and not dev.get("intro_short"):
-                    updates["intro_short"] = site_data["intro_short"]
+
+                # Never overwrite logo_url if already set from opr.ae scrape
+                if site_data.get("cover_image_url"):
+                    updates["cover_image_url"] = site_data["cover_image_url"]
+                if site_data.get("about") and not dev.get("intro_short"):
+                    updates["about"]      = site_data["about"]
+                    updates["intro_long"] = site_data["intro_long"]
+                elif site_data.get("about"):
+                    updates["about"]      = site_data["about"]
+                    updates["intro_long"] = site_data["intro_long"]
+                if site_data.get("founded_year"):
+                    updates["founded_year"]      = site_data["founded_year"]
+                    updates["established_year"]  = site_data["founded_year"]
+                if site_data.get("phone"):
+                    updates["phone"] = site_data["phone"]
+                if site_data.get("email"):
+                    updates["email"] = site_data["email"]
 
             updates["enriched"] = True
             db().table("developers").update(updates).eq("id", dev_id).execute()
             logger.info(f"Developer '{dev_name}' enriched — site={'yes' if website_url else 'no'}")
-            enriched_names.append(dev_name)
+            enriched_records.append({"name": dev_name, "slug": dev_slug})
 
         except Exception as e:
             logger.error(f"enrich_developers error for '{dev.get('name')}': {e}")
@@ -530,20 +570,26 @@ async def enrich_developers() -> list[str]:
 
         await asyncio.sleep(random.uniform(6, 10))
 
-    return enriched_names
+    return enriched_records
 
 
 async def run_enrichment() -> str:
-    """Full enrichment pass: areas + developers. Returns summary string."""
+    """Full enrichment pass: areas + developers. Returns summary string with site URLs."""
     logger.info("Enrichment pass starting...")
-    area_names = await enrich_areas()
-    dev_names  = await enrich_developers()
+    area_records = await enrich_areas()
+    dev_records  = await enrich_developers()
 
     parts = []
-    if area_names:
-        parts.append(f"Areas enriched ({len(area_names)}): {', '.join(area_names)}")
-    if dev_names:
-        parts.append(f"Developers enriched ({len(dev_names)}): {', '.join(dev_names)}")
+    if area_records:
+        parts.append(f"Areas enriched ({len(area_records)}):")
+        for r in area_records:
+            parts.append(f"  • {r['name']}")
+            parts.append(f"    dubai-portal.vercel.app/area-guides/{r['slug']}")
+    if dev_records:
+        parts.append(f"Developers enriched ({len(dev_records)}):")
+        for r in dev_records:
+            parts.append(f"  • {r['name']}")
+            parts.append(f"    dubai-portal.vercel.app/developers/{r['slug']}")
     if not parts:
         parts.append("No areas or developers pending enrichment.")
 
