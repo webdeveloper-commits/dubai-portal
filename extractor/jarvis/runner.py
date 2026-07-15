@@ -14,6 +14,7 @@ from .tools.storage import (
     get_unindexed_projects, mark_google_indexed, log_error,
     upsert_developer, upsert_area,
 )
+from .tools.enricher import run_enrichment
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,11 @@ async def run_tuesday():
     # ── Send summary + approval request ──
     await notify(_build_project_summary(published, errors, skipped))
 
+    # ── Enrich any new areas/developers created during this run ──
+    await notify("Running enrichment for new areas and developers...")
+    enrich_summary = await run_enrichment()
+    await notify(f"Enrichment complete:\n{enrich_summary}")
+
 
 def _build_project_summary(published: list, errors: list, skipped: list) -> str:
     lines = ["JARVIS Tuesday Run Complete\n"]
@@ -232,3 +238,16 @@ async def _ping_google(projects: list[dict]) -> bool:
     for p in projects:
         logger.info(f"[GOOGLE INDEX] Would ping: dubai-portal.vercel.app/projects/{p['slug']}")
     return True  # Return True so indexing flag is set
+
+
+async def run_enrichment_only():
+    """Standalone enrichment run — triggered by RUN ENRICHMENT command."""
+    global _active_task
+    _active_task = asyncio.current_task()
+    await notify("JARVIS — enrichment pass started...")
+    try:
+        summary = await run_enrichment()
+        await notify(f"Enrichment complete:\n{summary}")
+    except asyncio.CancelledError:
+        await notify("Enrichment stopped by user.")
+        raise

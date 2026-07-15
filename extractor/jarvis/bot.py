@@ -90,6 +90,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             asyncio.create_task(runner.run_tuesday())
             return
 
+        if upper in ("RUN ENRICHMENT", "ENRICH"):
+            if runner.is_running():
+                await update.message.reply_text("A run is already in progress. Send STOP to cancel it first.")
+                return
+            await update.message.reply_text("Starting enrichment pass (areas + developers)...")
+            asyncio.create_task(runner.run_enrichment_only())
+            return
+
         # ── Everything else → Claude brain ──
         reply = chat(chat_id, user_text)
         for chunk in _split(reply):
