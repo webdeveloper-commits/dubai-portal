@@ -58,75 +58,153 @@ async def geocode(name: str, emirate: str = "Dubai") -> tuple[float | None, floa
     return None, None
 
 
+# Bayut's index page has this title — any URL landing here is NOT a specific area guide
+_BAYUT_INDEX_TITLE = "area guides for dubai, abu dhabi"
+
+# Emirate-level paths to exclude from link matching (they are section pages, not area guides)
+_EMIRATE_PATHS = [
+    "/area-guides/dubai", "/area-guides/abu-dhabi", "/area-guides/sharjah",
+    "/area-guides/ajman", "/area-guides/ras-al-khaimah", "/area-guides/fujairah",
+    "/area-guides/umm-al-quwain",
+]
+
+
+def _bayut_is_index_page(title: str) -> bool:
+    return _BAYUT_INDEX_TITLE in title.lower() or not title.strip()
+
+
 # ── Bayut area guide — find URL ────────────────────────────────────────────────
 
 async def find_bayut_area_guide_url(area_name: str) -> str | None:
     """
-    Visit bayut.com/area-guides/, click 'View All' for each emirate,
-    then find the link whose text best matches our area name.
+    Find the specific Bayut area guide URL for an area.
+
+    Strategy (in order):
+      1. Try 3 direct slug-based URL patterns — validate each by page title.
+         Bayut always redirects unknown routes to the index page which has a
+         known title; any other title = valid area guide.
+      2. Fall back to scraping the area guide index, clicking all 'View All'
+         buttons to reveal full lists, then score-matching anchor text.
+         Emirate-level links (/area-guides/dubai/ etc.) are excluded.
+         Result is title-validated before returning.
     """
+    slug = re.sub(r"[^a-z0-9]+", "-", area_name.lower().strip()).strip("-")
+    direct_patterns = [
+        f"https://www.bayut.com/area-guides/{slug}-area-guide/",
+        f"https://www.bayut.com/area-guides/{slug}/",
+        f"https://www.bayut.com/area-guides/{slug}-community-overview/",
+    ]
+
     browser = await get_browser()
     page = await _new_stealth_page(browser)
+
+    async def _valid_area_page(url: str) -> bool:
+        """Visit URL, return True if it's a specific area guide (not the index)."""
+        try:
+            await page.goto(url, wait_until="load", timeout=35_000)
+            await asyncio.sleep(3)
+            title = await page.title()
+            if _bayut_is_index_page(title):
+                logger.info(f"  → index page (not found): {url}")
+                return False
+            logger.info(f"  → valid area page '{title}': {url}")
+            return True
+        except Exception as e:
+            logger.warning(f"  → error checking {url}: {e}")
+            return False
+
     try:
-        logger.info(f"Searching Bayut area guides for '{area_name}'...")
-        await page.goto(BAYUT_AREA_GUIDES, wait_until="domcontentloaded", timeout=40_000)
-        await asyncio.sleep(4)
+        # ── Step 1: direct slug patterns ──────────────────────────────────
+        logger.info(f"Searching Bayut area guide for '{area_name}' (slug: {slug})...")
+        for url in direct_patterns:
+            if await _valid_area_page(url):
+                return url
+            await asyncio.sleep(1)
 
-        # Click all "View All" / "VIEW ALL READY/OFF-PLAN" links to expose full lists
-        for _ in range(8):
+        # ── Step 2: index page link search ────────────────────────────────
+        logger.info(f"Direct patterns failed — searching bayut.com/area-guides/ index...")
+        try:
+            await page.goto(BAYUT_AREA_GUIDES, wait_until="load", timeout=45_000)
+        except Exception:
+            pass
+        await asyncio.sleep(5)
+
+        # Click ALL "View All" / "View More" buttons repeatedly until none remain
+        # These expand each emirate's area list in both Ready and Off-plan sections
+        for attempt in range(20):
             try:
-                btn = page.locator("a:has-text('VIEW ALL'), a:has-text('View all'), a:has-text('View More')").first
-                if await btn.count() == 0:
+                btns = page.locator(
+                    "button:has-text('View All'), a:has-text('View All'), "
+                    "button:has-text('View More'), a:has-text('View More'), "
+                    "button:has-text('VIEW ALL'), a:has-text('VIEW ALL')"
+                )
+                count = await btns.count()
+                if count == 0:
                     break
-                await btn.click()
-                await asyncio.sleep(2)
-            except Exception:
-                break
-
-        area_lower = area_name.lower().strip()
-
-        # Search all anchor tags for one whose visible text closely matches our area name.
-        # Pass area_lower as an argument to avoid f-string brace escaping inside JS.
-        found_url: str | None = await page.evaluate("""(target) => {
-            const links = Array.from(document.querySelectorAll('a[href]'));
-            let best = null, bestScore = 0;
-            for (const a of links) {
-                const text = a.innerText.trim().toLowerCase();
-                if (!text) continue;
-                let score = 0;
-                if (text === target)                             score = 100;
-                else if (text.startsWith(target))               score = 80;
-                else if (target.startsWith(text) && text.length > 4) score = 60;
-                else if (text.includes(target) && target.length > 6) score = 40;
-                if (text.length < 5) score = 0;
-                if (score > bestScore) { bestScore = score; best = a; }
-            }
-            return bestScore >= 40 ? (best ? best.href : null) : null;
-        }""", area_lower)
-
-        if found_url:
-            logger.info(f"Bayut area guide URL for '{area_name}': {found_url}")
-        else:
-            # Fallback: try direct URL pattern
-            slug = area_name.lower().replace(" ", "-")
-            candidates = [
-                f"https://www.bayut.com/area-guides/{slug}-area-guide/",
-                f"https://www.bayut.com/area-guides/{slug}-community-overview/",
-                f"https://www.bayut.com/area-guides/{slug}/",
-            ]
-            async with httpx.AsyncClient(timeout=10) as client:
-                for url in candidates:
+                # Click the first visible one and wait for React to re-render
+                for i in range(count):
                     try:
-                        r = await client.head(url, follow_redirects=True,
-                                              headers={"User-Agent": "Mozilla/5.0"})
-                        if r.status_code == 200:
-                            found_url = url
-                            logger.info(f"Bayut area guide fallback URL: {url}")
+                        btn = btns.nth(i)
+                        if await btn.is_visible():
+                            await btn.click()
+                            await asyncio.sleep(2)
                             break
                     except Exception:
                         continue
+                else:
+                    break  # no visible button found
+            except Exception:
+                break
 
-        return found_url
+        await asyncio.sleep(2)
+
+        area_lower = area_name.lower().strip()
+        area_words = [w for w in area_lower.split() if len(w) > 3]
+
+        found_url: str | None = await page.evaluate("""(args) => {
+            const target = args.target;
+            const words  = args.words;
+            const skipPaths = args.skipPaths;
+
+            // Only look at links that go to a specific area guide
+            const links = Array.from(document.querySelectorAll('a[href*="/area-guides/"]'));
+            let best = null, bestScore = 0;
+
+            for (const a of links) {
+                const href = a.href || '';
+                // Skip the index page itself
+                if (href.replace(/\\/+$/, '').endsWith('/area-guides')) continue;
+                // Skip emirate-level section pages
+                const path = href.replace('https://www.bayut.com', '').replace(/\\/+$/, '');
+                if (skipPaths.some(p => path === p || path === p + '-area-guide')) continue;
+
+                const text = (a.innerText || a.textContent || '').trim().toLowerCase();
+                if (!text || text.length < 3) continue;
+
+                let score = 0;
+                if (text === target) score = 100;
+                else if (text.startsWith(target) && text.length <= target.length + 6) score = 85;
+                else if (target === text) score = 100;
+                // Word overlap: all significant words must match
+                else if (words.length > 0) {
+                    const tWords = text.split(/\\s+/);
+                    const matched = words.filter(w => tWords.some(t => t === w || t.startsWith(w))).length;
+                    if (matched === words.length) score = 75;
+                    else if (matched >= Math.ceil(words.length * 0.8)) score = 55;
+                }
+                // Do NOT use target.startsWith(text) — that matched 'dubai' for 'dubai marina'
+
+                if (score > bestScore) { bestScore = score; best = href; }
+            }
+            return bestScore >= 55 ? best : null;
+        }""", {"target": area_lower, "words": area_words, "skipPaths": _EMIRATE_PATHS})
+
+        if found_url:
+            if await _valid_area_page(found_url):
+                return found_url
+
+        logger.warning(f"No Bayut area guide found for '{area_name}'")
+        return None
 
     except Exception as e:
         logger.error(f"find_bayut_area_guide_url failed for '{area_name}': {e}")
