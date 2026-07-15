@@ -106,19 +106,26 @@ def _search_next_data_for_area(nd: dict, area_name: str) -> str | None:
                 name_sig = _sig_words(name)
                 if name_sig:
                     shared = len(target_sig & name_sig)
-                    ratio  = shared / max(len(target_sig), len(name_sig))
-                    if ratio >= 0.5:
+                    # Both directions must be ≥60 % — prevents "Dubai" matching "Dubai Marina"
+                    fwd = shared / len(target_sig)
+                    bwd = shared / len(name_sig)
+                    if fwd >= 0.6 and bwd >= 0.6:
                         slug = (
                             obj.get("slug") or obj.get("communitySlug") or
                             obj.get("url") or obj.get("href") or ""
                         )
                         if slug:
-                            if slug.startswith("http"):
-                                return slug
-                            slug = slug.strip("/")
-                            if "area-guides" not in slug:
-                                slug = f"area-guides/{slug}"
-                            return f"https://www.bayut.com/{slug}/"
+                            slug_clean = slug.strip("/").split("/")[-1]
+                            # Skip emirate-level slugs
+                            if slug_clean in _EMIRATE_SLUGS:
+                                pass  # fall through to recurse
+                            else:
+                                if slug.startswith("http"):
+                                    return slug
+                                slug = slug.strip("/")
+                                if "area-guides" not in slug:
+                                    slug = f"area-guides/{slug}"
+                                return f"https://www.bayut.com/{slug}/"
             for val in obj.values():
                 r = _search(val, depth + 1)
                 if r:
@@ -271,6 +278,8 @@ async def find_bayut_area_guide_url(area_name: str) -> str | None:
                 if (parts.length < 2) return;
                 const slug = parts[parts.length - 1];
                 if (emirSlug.has(slug) || !slug) return;
+                // Skip numeric pagination slugs like /area-guides/2/ /area-guides/13/
+                if (/^\d+$/.test(slug)) return;
                 const text = (a.innerText || a.textContent || '').trim().toLowerCase();
                 results.push({ href, text, slug, slugWords: sigW(slug) });
             });
@@ -289,10 +298,15 @@ async def find_bayut_area_guide_url(area_name: str) -> str | None:
             text     = lnk["text"]
             slug_sig = set(lnk["slugWords"])
 
+            # Skip links with no meaningful text — empty string would falsely match
+            # via target_lower.startswith("") == True
+            if not text or len(text) < 3:
+                continue
+
             score = 0
             if text == target_lower:
                 score = 100
-            elif text.startswith(target_lower) or target_lower.startswith(text):
+            elif len(text) >= 3 and (text.startswith(target_lower) or target_lower.startswith(text)):
                 score = 85
             else:
                 text_sig  = _sig_words(text)
