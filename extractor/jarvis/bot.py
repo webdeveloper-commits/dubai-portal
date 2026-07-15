@@ -131,6 +131,17 @@ async def _scheduled_tuesday():
     asyncio.create_task(runner.run_tuesday())
 
 
+async def _post_init(app: Application) -> None:
+    """Start the scheduler after the event loop is running."""
+    scheduler = AsyncIOScheduler(timezone="UTC")
+    scheduler.add_job(
+        _scheduled_tuesday,
+        CronTrigger(day_of_week="tue,fri", hour=RUN_HOUR_UTC, minute=0),
+    )
+    scheduler.start()
+    logger.info(f"Scheduler started — Tuesday and Friday at {RUN_HOUR_UTC}:00 UTC (9am UAE)")
+
+
 def run() -> None:
     global _app
 
@@ -139,19 +150,10 @@ def run() -> None:
         level=logging.INFO,
     )
 
-    _app = Application.builder().token(TELEGRAM_TOKEN).build()
+    _app = Application.builder().token(TELEGRAM_TOKEN).post_init(_post_init).build()
 
     # Wire notify function into runner so it can send Telegram messages
     runner.set_notify(notify)
-
-    # ── Automated schedule: Tuesday + Friday at 9am UAE (5am UTC) ─────────────
-    scheduler = AsyncIOScheduler(timezone="UTC")
-    scheduler.add_job(
-        _scheduled_tuesday,
-        CronTrigger(day_of_week="tue,fri", hour=RUN_HOUR_UTC, minute=0),
-    )
-    scheduler.start()
-    logger.info(f"Scheduler started — runs every Tuesday and Friday at {RUN_HOUR_UTC}:00 UTC (9am UAE)")
 
     _app.add_handler(CommandHandler("start", cmd_start))
     _app.add_handler(CommandHandler("reset", cmd_reset))
