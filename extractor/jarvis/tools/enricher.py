@@ -85,29 +85,24 @@ async def find_bayut_area_guide_url(area_name: str) -> str | None:
 
         area_lower = area_name.lower().strip()
 
-        # Search all anchor tags for one whose visible text closely matches our area name
-        found_url: str | None = await page.evaluate(f"""() => {{
-            const target = {repr(area_lower)};
+        # Search all anchor tags for one whose visible text closely matches our area name.
+        # Pass area_lower as an argument to avoid f-string brace escaping inside JS.
+        found_url: str | None = await page.evaluate("""(target) => {
             const links = Array.from(document.querySelectorAll('a[href]'));
-
-            // Score each link by how well its text matches the target
-            // Prefer exact/starts-with over loose contains to avoid false positives
             let best = null, bestScore = 0;
             for (const a of links) {
                 const text = a.innerText.trim().toLowerCase();
                 if (!text) continue;
                 let score = 0;
-                if (text === target)                score = 100;
-                else if (text.startsWith(target))   score = 80;
+                if (text === target)                             score = 100;
+                else if (text.startsWith(target))               score = 80;
                 else if (target.startsWith(text) && text.length > 4) score = 60;
                 else if (text.includes(target) && target.length > 6) score = 40;
-                // Penalise short link text (likely a card thumbnail label, not a guide link)
                 if (text.length < 5) score = 0;
                 if (score > bestScore) { bestScore = score; best = a; }
             }
-            // Only return if score is strong enough to trust
             return bestScore >= 40 ? (best ? best.href : null) : null;
-        }}""")
+        }""", area_lower)
 
         if found_url:
             logger.info(f"Bayut area guide URL for '{area_name}': {found_url}")
