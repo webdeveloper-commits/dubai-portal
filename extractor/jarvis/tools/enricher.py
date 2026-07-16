@@ -153,15 +153,57 @@ async def _detect_emirate(area_name: str) -> str:
 
 # ── Bayut area guide — find URL ────────────────────────────────────────────────
 
+async def _validate_bayut_url(url: str) -> bool:
+    """
+    Confirm a Bayut URL is a real area guide page (not a ghost URL that
+    server-redirects to property listings). Uses httpx — no browser needed.
+    Returns True if the final URL after redirects is still under /area-guides/.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            r = await client.get(
+                url,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/131.0.0.0 Safari/537.36"
+                    ),
+                    "Referer": "https://www.bayut.com/area-guides/",
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+            )
+        final = str(r.url)
+        valid = "/area-guides/" in final and r.status_code == 200
+        logger.info(f"  Validate {url} → {final} [{r.status_code}] {'✓' if valid else '✗'}")
+        return valid
+    except Exception as e:
+        logger.warning(f"  Validate failed for {url}: {e}")
+        return False
+
+
+async def _slug_find_bayut_url(area_name: str) -> str | None:
+    """
+    Construct the most likely Bayut slug from the area name and validate it.
+    Works for ~90% of areas: 'Jumeirah Village Circle' → jumeirah-village-circle.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "-", area_name.lower().strip()).strip("-")
+    url  = f"https://www.bayut.com/area-guides/{slug}/"
+    logger.info(f"Trying direct slug: {url}")
+    if await _validate_bayut_url(url):
+        return url
+    return None
+
+
 async def _ddg_find_bayut_url(area_name: str) -> str | None:
     """
     Search DuckDuckGo for '[area name] area guide bayut' and return the first
-    bayut.com/area-guides/ URL. More accurate than slug-guessing — DDG already
-    knows the correct Bayut page for every area.
+    bayut.com/area-guides/ URL. Used for areas where the slug can't be guessed
+    (e.g. 'The Acres Dubailand' → /area-guides/the-acres-by-meraas/).
+    Note: DigitalOcean server IPs may be rate-limited by DDG.
     """
     from urllib.parse import unquote
 
-    # No site: operator — DDG handles it poorly. Just filter results ourselves.
     query = f"{area_name} area guide bayut"
     logger.info(f"DDG search: {query}")
     try:
@@ -178,31 +220,26 @@ async def _ddg_find_bayut_url(area_name: str) -> str | None:
                     "Accept-Language": "en-US,en;q=0.9",
                 },
             )
-
         logger.info(f"DDG response: {r.status_code}, {len(r.text)} chars")
         soup = BeautifulSoup(r.text, "html.parser")
 
         for result in soup.select(".result__a"):
             href = result.get("href", "")
-            # DDG wraps links as /l/?uddg=<percent-encoded real URL>&rut=...
-            # Simple string extraction — more reliable than urlparse on relative URLs
             if "uddg=" in href:
                 start = href.find("uddg=") + 5
                 end   = href.find("&", start)
                 raw   = href[start:end] if end > 0 else href[start:]
                 href  = unquote(raw)
-
             if "bayut.com/area-guides/" in href:
-                url  = href.split("?")[0].rstrip("/")
+                url  = href.split("?")[0].rstrip("/") + "/"
                 slug = url.split("/area-guides/")[-1].strip("/")
                 if slug and slug not in _LISTING_SEGMENTS and slug not in _EMIRATE_SLUGS:
-                    logger.info(f"DDG found: {url}/")
-                    return url + "/"
+                    logger.info(f"DDG found: {url}")
+                    return url
 
-        # Log first few raw results to help debug if nothing matched
-        for i, r_el in enumerate(soup.select(".result__a")[:5], 1):
-            logger.info(f"  DDG result {i}: {r_el.get('href','')[:120]}")
-        logger.info(f"DDG: no /area-guides/ result for '{area_name}'")
+        for i, el in enumerate(soup.select(".result__a")[:5], 1):
+            logger.info(f"  DDG result {i}: {el.get('href','')[:120]}")
+        logger.info(f"DDG: no result for '{area_name}'")
 
     except Exception as e:
         logger.warning(f"DDG search failed for '{area_name}': {e}")
@@ -213,21 +250,28 @@ async def find_bayut_area_guide_url(area_name: str, emirate: str = "") -> str | 
     """
     Find the Bayut area guide URL for an area.
 
-    Strategy:
-      1. DuckDuckGo search — most accurate, handles tricky slugs like
-         'The Acres Dubailand' → /area-guides/the-acres-by-meraas/
-      2. Fallback: paginate emirate listing pages if DDG returns nothing
+    Strategy (fastest first):
+      1. Direct slug construction + httpx validation — works for ~90% of areas,
+         no browser needed: 'Jumeirah Village Circle' → /area-guides/jumeirah-village-circle/
+      2. DuckDuckGo search — handles non-obvious slugs like 'The Acres Dubailand'
+         NOTE: may be rate-limited from server IPs
+      3. Emirate listing page pagination via Playwright — last resort
     """
-    # ── Step 1: DuckDuckGo search (primary) ───────────────────────────────
+    # ── Step 1: Direct slug (fast, no browser) ────────────────────────────
+    url = await _slug_find_bayut_url(area_name)
+    if url:
+        return url
+
+    # ── Step 2: DuckDuckGo search ─────────────────────────────────────────
     url = await _ddg_find_bayut_url(area_name)
     if url:
         return url
 
-    # ── Step 2: Emirate listing page fallback ──────────────────────────────
+    # ── Step 3: Emirate listing page fallback ─────────────────────────────
     emirate_key = emirate.lower().strip() if emirate else ""
     if not emirate_key or emirate_key not in _EMIRATE_LISTING_URLS:
         emirate_key = await _detect_emirate(area_name)
-    logger.info(f"DDG failed — falling back to listing pages for '{area_name}' [{emirate_key}]")
+    logger.info(f"Slug+DDG failed — using listing pages for '{area_name}' [{emirate_key}]")
 
     target_lower = area_name.lower().strip()
     target_sig   = _sig_words(area_name)
