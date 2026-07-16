@@ -153,39 +153,84 @@ async def _detect_emirate(area_name: str) -> str:
 
 # ── Bayut area guide — find URL ────────────────────────────────────────────────
 
+async def _ddg_find_bayut_url(area_name: str) -> str | None:
+    """
+    Search DuckDuckGo for '[area name] site:bayut.com/area-guides/' and return
+    the first matching Bayut area guide URL. Much more accurate than scraping
+    Bayut's own listing pages — Google/DDG already knows the correct slug.
+    """
+    query = f'"{area_name}" site:bayut.com/area-guides/'
+    logger.info(f"DDG search: {query}")
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            r = await client.get(
+                "https://html.duckduckgo.com/html/",
+                params={"q": query},
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/131.0.0.0 Safari/537.36"
+                    ),
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+            )
+        soup = BeautifulSoup(r.text, "html.parser")
+        for result in soup.select(".result__a"):
+            href = result.get("href", "")
+            # DDG wraps URLs — extract the real URL from the redirect param
+            if "bayut.com/area-guides/" not in href:
+                from urllib.parse import urlparse, parse_qs, unquote
+                parsed = urlparse(href)
+                uddg = parse_qs(parsed.query).get("uddg", [None])[0]
+                if uddg:
+                    href = unquote(uddg)
+            if "bayut.com/area-guides/" in href:
+                # Strip tracking params, normalise trailing slash
+                url = href.split("?")[0].rstrip("/")
+                slug = url.split("/area-guides/")[-1].strip("/")
+                # Skip generic listing segments
+                if slug and slug not in _LISTING_SEGMENTS and slug not in _EMIRATE_SLUGS:
+                    logger.info(f"DDG found: {url}")
+                    return url + "/"
+        logger.info(f"DDG: no Bayut area guide found for '{area_name}'")
+    except Exception as e:
+        logger.warning(f"DDG search failed: {e}")
+    return None
+
+
 async def find_bayut_area_guide_url(area_name: str, emirate: str = "") -> str | None:
     """
-    Find the Bayut area guide URL for an area using direct emirate listing pages.
+    Find the Bayut area guide URL for an area.
 
     Strategy:
-      1. Determine emirate (from DB field → Claude fallback)
-      2. For Dubai: slug-match against 4 hardcoded ready URLs first, then
-         search paginated off-plan listing (/off-plan/dubai/page/N/)
-      3. For all other emirates: search ready then off-plan listing pages
-      4. On each listing page: extract all area links, score by text + slug
-         word-overlap, title-validate the best match before returning
+      1. DuckDuckGo search — most accurate, handles tricky slugs like
+         'The Acres Dubailand' → /area-guides/the-acres-by-meraas/
+      2. Fallback: paginate emirate listing pages if DDG returns nothing
     """
-    # Normalise emirate
+    # ── Step 1: DuckDuckGo search (primary) ───────────────────────────────
+    url = await _ddg_find_bayut_url(area_name)
+    if url:
+        return url
+
+    # ── Step 2: Emirate listing page fallback ──────────────────────────────
     emirate_key = emirate.lower().strip() if emirate else ""
     if not emirate_key or emirate_key not in _EMIRATE_LISTING_URLS:
         emirate_key = await _detect_emirate(area_name)
-    logger.info(f"Bayut search for '{area_name}' in emirate '{emirate_key}'")
+    logger.info(f"DDG failed — falling back to listing pages for '{area_name}' [{emirate_key}]")
 
-    target_lower  = area_name.lower().strip()
-    target_sig    = _sig_words(area_name)
+    target_lower = area_name.lower().strip()
+    target_sig   = _sig_words(area_name)
 
     def _score_link(text: str, slug: str) -> int:
-        """Return match score 0–100 between area_name and a Bayut link."""
         if not text and not slug:
             return 0
         t = text.strip().lower()
         slug_words = {w for w in re.split(r"[\s\-]+", slug.lower()) if len(w) > 2 and w not in _STOP_WORDS}
-
         if t == target_lower:
             return 100
         if len(t) >= 3 and (t.startswith(target_lower) or target_lower.startswith(t)):
             return 85
-
         text_sig = _sig_words(t) if t else set()
         if text_sig and target_sig:
             shared = len(target_sig & text_sig)
@@ -193,52 +238,35 @@ async def find_bayut_area_guide_url(area_name: str, emirate: str = "") -> str | 
             bwd = shared / len(text_sig)
         else:
             fwd = bwd = 0.0
-
         slug_shared = len(target_sig & slug_words) if slug_words else 0
         slug_fwd = slug_shared / len(target_sig) if target_sig else 0.0
-
         best = max(fwd, slug_fwd)
-        if best >= 0.6 and bwd >= 0.4:
+        if best >= 0.6 and bwd >= 0.6:
             return 70
-        if best >= 0.5:
-            return 50
         return 0
 
     browser = await get_browser()
     page = await _new_stealth_page(browser)
 
     try:
-        # ── Dubai Ready: check 4 known hardcoded URLs by slug ─────────────
-        if emirate_key == "dubai":
-            for url in _DUBAI_READY_URLS:
-                slug = url.rstrip("/").split("/")[-1]
-                if _score_link("", slug) >= 50:
-                    logger.info(f"Matched Dubai ready URL by slug: {url}")
-                    return url
-
-        # ── Paginated listing pages ────────────────────────────────────────
         base_urls = _EMIRATE_LISTING_URLS.get(emirate_key, _EMIRATE_LISTING_URLS["dubai"])
 
         for base_url in base_urls:
-            for page_num in range(1, 10):  # up to 9 pages per listing
+            for page_num in range(1, 10):
                 listing_url = base_url if page_num == 1 else f"{base_url}page/{page_num}/"
                 logger.info(f"  Checking: {listing_url}")
-
                 try:
                     await page.goto(listing_url, wait_until="load", timeout=45_000)
                 except Exception:
                     pass
                 await asyncio.sleep(3)
 
-                # If Bayut returned the generic index page, this listing URL doesn't exist
                 pg_title = await page.title()
                 if _bayut_is_index_page(pg_title):
-                    logger.info(f"  → Hit index page, no more pages for {base_url}")
+                    logger.info(f"  → Hit index/captcha, stopping pagination for {base_url}")
                     break
 
-                # Extract all area-guide links from this listing page
                 links: list = await page.evaluate("""(args) => {
-                    const stop = new Set(args.stop);
                     const emir = new Set(args.emir);
                     const listingSegs = new Set(args.listingSegs);
                     const seen = new Set();
@@ -251,39 +279,29 @@ async def find_bayut_area_guide_url(area_name: str, emirate: str = "") -> str | 
                                          .split('/').filter(Boolean);
                         if (segs.length < 2) return;
                         const slug = segs[segs.length - 1];
-                        // Skip emirate slugs, numeric pagination, listing segments
                         if (emir.has(slug) || !slug || /^\\d+$/.test(slug)) return;
                         if (listingSegs.has(slug)) return;
                         const text = (a.innerText||a.textContent||'').trim();
                         out.push({ href, text, slug });
                     });
                     return out;
-                }""", {
-                    "stop": list(_STOP_WORDS),
-                    "emir": list(_EMIRATE_SLUGS),
-                    "listingSegs": list(_LISTING_SEGMENTS),
-                })
+                }""", {"emir": list(_EMIRATE_SLUGS), "listingSegs": list(_LISTING_SEGMENTS)})
 
                 logger.info(f"  Found {len(links)} area links on page {page_num}")
                 if not links:
-                    break  # no area cards on this page → done paginating
+                    break
 
-                # Log all links for debugging
                 for lnk in links:
                     logger.info(f"    slug='{lnk['slug']}' text='{lnk['text'][:60]}'")
 
-                # Score and pick best
-                best_score = 0
-                best_url: str | None = None
+                best_score, best_url = 0, None
                 for lnk in links:
                     s = _score_link(lnk["text"], lnk["slug"])
                     if s > best_score:
-                        best_score = s
-                        best_url = lnk["href"]
+                        best_score, best_url = s, lnk["href"]
 
-                if best_url and best_score >= 50:
+                if best_url and best_score >= 70:
                     logger.info(f"  Match score={best_score}: {best_url}")
-                    # Validate: navigate and check we landed on an actual area guide
                     try:
                         await page.goto(best_url, wait_until="load", timeout=40_000)
                     except Exception:
@@ -291,17 +309,16 @@ async def find_bayut_area_guide_url(area_name: str, emirate: str = "") -> str | 
                     await asyncio.sleep(3)
                     final_url = page.url.split("?")[0].rstrip("/")
                     confirmed_title = await page.title()
-                    # Reject if redirected away from /area-guides/ (ghost URL → property listings)
                     if "/area-guides/" not in final_url:
-                        logger.warning(f"  Redirected to non-guide page: {final_url} — skipping")
+                        logger.warning(f"  Redirected away from area-guides: {final_url}")
                         continue
                     if _bayut_is_index_page(confirmed_title):
-                        logger.warning(f"  URL leads to index/captcha — skipping")
+                        logger.warning(f"  Captcha/index on detail page — skipping")
                         continue
-                    logger.info(f"  Confirmed area guide: {confirmed_title} → {final_url}")
-                    return final_url
+                    logger.info(f"  Confirmed: {confirmed_title}")
+                    return final_url + "/"
 
-        logger.warning(f"No Bayut area guide found for '{area_name}' [{emirate_key}]")
+        logger.warning(f"No Bayut area guide found for '{area_name}'")
         return None
 
     except Exception as e:
