@@ -283,17 +283,23 @@ async def find_bayut_area_guide_url(area_name: str, emirate: str = "") -> str | 
 
                 if best_url and best_score >= 50:
                     logger.info(f"  Match score={best_score}: {best_url}")
-                    # Title validate
+                    # Validate: navigate and check we landed on an actual area guide
                     try:
                         await page.goto(best_url, wait_until="load", timeout=40_000)
                     except Exception:
                         pass
                     await asyncio.sleep(3)
+                    final_url = page.url.split("?")[0].rstrip("/")
                     confirmed_title = await page.title()
-                    if not _bayut_is_index_page(confirmed_title):
-                        logger.info(f"  Confirmed: {confirmed_title}")
-                        return best_url
-                    logger.warning(f"  URL leads to index — skipping")
+                    # Reject if redirected away from /area-guides/ (ghost URL → property listings)
+                    if "/area-guides/" not in final_url:
+                        logger.warning(f"  Redirected to non-guide page: {final_url} — skipping")
+                        continue
+                    if _bayut_is_index_page(confirmed_title):
+                        logger.warning(f"  URL leads to index/captcha — skipping")
+                        continue
+                    logger.info(f"  Confirmed area guide: {confirmed_title} → {final_url}")
+                    return final_url
 
         logger.warning(f"No Bayut area guide found for '{area_name}' [{emirate_key}]")
         return None
