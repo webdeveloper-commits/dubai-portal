@@ -617,14 +617,32 @@ async def _scrape_bayut_area_guide_inner(url: str, area_name: str) -> dict:
                 }
             }
 
+            // ── Description: collect first 4 substantial paragraphs (>60 chars) ──
+            // Heading-bucket approach misidentifies the h1 area name as a section,
+            // so we go direct: find real content paragraphs in <main>.
+            const BAD_DESC = ['keyboard_arrow', 'Apartments for sale in Dubai',
+                              'Building Guides', 'Dubai Transactions', 'for sale in Abu Dhabi',
+                              'for rent in Dubai', 'New Projects', 'TrueEstimate'];
+            const descParas = [];
+            for (const p of scope.querySelectorAll('p')) {
+                if (isInExcludedArea(p)) continue;
+                const t = p.innerText.trim();
+                if (t.length < 60) continue;
+                if (isSkip(t)) continue;
+                if (BAD_DESC.some(b => t.includes(b))) continue;
+                descParas.push(t);
+                if (descParas.join(' ').length > 700) break;
+            }
+            if (descParas.length > 0) {
+                r.description = descParas.slice(0, 4).join('\\n\\n').slice(0, 800);
+            }
+
+            // ── Schools / hospitals / lifestyle via heading buckets ──
             for (const [heading, texts] of Object.entries(sections)) {
                 const h = heading.toLowerCase();
                 const content = texts.join('\\n').trim();
                 if (!content) continue;
-                if (h === '__intro__' || h.includes('about') || h.includes('nutshell') ||
-                    h.includes('highlights') || h.includes('overview') || h.includes('community')) {
-                    if (!r.description) r.description = content.slice(0, 800);
-                } else if (h.includes('school') || h.includes('education') || h.includes('university')) {
+                if (h.includes('school') || h.includes('education') || h.includes('university')) {
                     r.schools = texts.filter(t => t.length > 5 && !isSkip(t)).slice(0, 10);
                 } else if (h.includes('hospital') || h.includes('healthcare') || h.includes('clinic')) {
                     r.hospitals = texts.filter(t => t.length > 5 && !isSkip(t)).slice(0, 10);
@@ -636,25 +654,8 @@ async def _scrape_bayut_area_guide_inner(url: str, area_name: str) -> dict:
                 }
             }
 
-            // Tagline: first short <p> right after the h1
-            const h1 = scope.querySelector('h1');
-            if (h1) {
-                let sib = h1.nextElementSibling;
-                for (let i = 0; i < 4 && sib; i++, sib = sib.nextElementSibling) {
-                    const t = sib.innerText.trim();
-                    if (t.length > 10 && t.length < 200 && !isSkip(t)) { r.tagline = t; break; }
-                }
-            }
-
             r.attractions = [...new Set(r.attractions)].slice(0, 10);
             r.lifestyle = r.lifestyle.trim().slice(0, 600);
-
-            // Final safety: discard description if it still contains nav/breadcrumb markers
-            const BAD_DESC = ['keyboard_arrow', 'Apartments for sale in Dubai', 'Building Guides',
-                              'Dubai Transactions', 'keyboard_arrow_right'];
-            if (r.description && BAD_DESC.some(b => r.description.includes(b))) {
-                r.description = '';
-            }
             return r;
         }""")
 
