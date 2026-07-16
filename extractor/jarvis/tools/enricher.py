@@ -195,21 +195,19 @@ async def _slug_find_bayut_url(area_name: str) -> str | None:
     return None
 
 
-async def _ddg_find_bayut_url(area_name: str) -> str | None:
+async def _search_find_bayut_url(area_name: str) -> str | None:
     """
-    Search DuckDuckGo for '[area name] area guide bayut' and return the first
-    bayut.com/area-guides/ URL. Used for areas where the slug can't be guessed
-    (e.g. 'The Acres Dubailand' → /area-guides/the-acres-by-meraas/).
-    Note: DigitalOcean server IPs may be rate-limited by DDG.
+    Search Bing for '[area name] area guide site:bayut.com' and return the
+    first bayut.com/area-guides/ result. Bing is accessible from server IPs
+    and returns direct hrefs (no redirect wrapping like DDG).
+    Handles non-obvious slugs: 'The Acres Dubai' → /area-guides/the-acres-by-meraas/
     """
-    from urllib.parse import unquote
-
-    query = f"{area_name} area guide bayut"
-    logger.info(f"DDG search: {query}")
+    query = f'"{area_name}" area guide site:bayut.com'
+    logger.info(f"Bing search: {query}")
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             r = await client.get(
-                "https://html.duckduckgo.com/html/",
+                "https://www.bing.com/search",
                 params={"q": query},
                 headers={
                     "User-Agent": (
@@ -220,29 +218,26 @@ async def _ddg_find_bayut_url(area_name: str) -> str | None:
                     "Accept-Language": "en-US,en;q=0.9",
                 },
             )
-        logger.info(f"DDG response: {r.status_code}, {len(r.text)} chars")
+        logger.info(f"Bing response: {r.status_code}, {len(r.text)} chars")
         soup = BeautifulSoup(r.text, "html.parser")
 
-        for result in soup.select(".result__a"):
-            href = result.get("href", "")
-            if "uddg=" in href:
-                start = href.find("uddg=") + 5
-                end   = href.find("&", start)
-                raw   = href[start:end] if end > 0 else href[start:]
-                href  = unquote(raw)
+        # Bing: result links are in <h2><a href="https://..."> — direct URLs
+        for a in soup.select("h2 a"):
+            href = a.get("href", "")
             if "bayut.com/area-guides/" in href:
                 url  = href.split("?")[0].rstrip("/") + "/"
                 slug = url.split("/area-guides/")[-1].strip("/")
                 if slug and slug not in _LISTING_SEGMENTS and slug not in _EMIRATE_SLUGS:
-                    logger.info(f"DDG found: {url}")
+                    logger.info(f"Bing found: {url}")
                     return url
 
-        for i, el in enumerate(soup.select(".result__a")[:5], 1):
-            logger.info(f"  DDG result {i}: {el.get('href','')[:120]}")
-        logger.info(f"DDG: no result for '{area_name}'")
+        # Log what Bing returned for debugging
+        for i, a in enumerate(soup.select("h2 a")[:5], 1):
+            logger.info(f"  Bing result {i}: {a.get('href','')[:120]}")
+        logger.info(f"Bing: no /area-guides/ result for '{area_name}'")
 
     except Exception as e:
-        logger.warning(f"DDG search failed for '{area_name}': {e}")
+        logger.warning(f"Bing search failed for '{area_name}': {e}")
     return None
 
 
@@ -262,8 +257,8 @@ async def find_bayut_area_guide_url(area_name: str, emirate: str = "") -> str | 
     if url:
         return url
 
-    # ── Step 2: DuckDuckGo search ─────────────────────────────────────────
-    url = await _ddg_find_bayut_url(area_name)
+    # ── Step 2: Bing search (handles non-obvious slugs) ──────────────────
+    url = await _search_find_bayut_url(area_name)
     if url:
         return url
 
@@ -271,7 +266,7 @@ async def find_bayut_area_guide_url(area_name: str, emirate: str = "") -> str | 
     emirate_key = emirate.lower().strip() if emirate else ""
     if not emirate_key or emirate_key not in _EMIRATE_LISTING_URLS:
         emirate_key = await _detect_emirate(area_name)
-    logger.info(f"Slug+DDG failed — using listing pages for '{area_name}' [{emirate_key}]")
+    logger.info(f"Slug+Bing failed — using listing pages for '{area_name}' [{emirate_key}]")
 
     target_lower = area_name.lower().strip()
     target_sig   = _sig_words(area_name)
