@@ -155,11 +155,14 @@ async def _detect_emirate(area_name: str) -> str:
 
 async def _ddg_find_bayut_url(area_name: str) -> str | None:
     """
-    Search DuckDuckGo for '[area name] site:bayut.com/area-guides/' and return
-    the first matching Bayut area guide URL. Much more accurate than scraping
-    Bayut's own listing pages — Google/DDG already knows the correct slug.
+    Search DuckDuckGo for '[area name] area guide bayut' and return the first
+    bayut.com/area-guides/ URL. More accurate than slug-guessing — DDG already
+    knows the correct Bayut page for every area.
     """
-    query = f'"{area_name}" area guide site:bayut.com'
+    from urllib.parse import unquote
+
+    # No site: operator — DDG handles it poorly. Just filter results ourselves.
+    query = f"{area_name} area guide bayut"
     logger.info(f"DDG search: {query}")
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
@@ -175,27 +178,34 @@ async def _ddg_find_bayut_url(area_name: str) -> str | None:
                     "Accept-Language": "en-US,en;q=0.9",
                 },
             )
+
+        logger.info(f"DDG response: {r.status_code}, {len(r.text)} chars")
         soup = BeautifulSoup(r.text, "html.parser")
+
         for result in soup.select(".result__a"):
             href = result.get("href", "")
-            # DDG wraps URLs — extract the real URL from the redirect param
-            if "bayut.com/area-guides/" not in href:
-                from urllib.parse import urlparse, parse_qs, unquote
-                parsed = urlparse(href)
-                uddg = parse_qs(parsed.query).get("uddg", [None])[0]
-                if uddg:
-                    href = unquote(uddg)
+            # DDG wraps links as /l/?uddg=<percent-encoded real URL>&rut=...
+            # Simple string extraction — more reliable than urlparse on relative URLs
+            if "uddg=" in href:
+                start = href.find("uddg=") + 5
+                end   = href.find("&", start)
+                raw   = href[start:end] if end > 0 else href[start:]
+                href  = unquote(raw)
+
             if "bayut.com/area-guides/" in href:
-                # Strip tracking params, normalise trailing slash
-                url = href.split("?")[0].rstrip("/")
+                url  = href.split("?")[0].rstrip("/")
                 slug = url.split("/area-guides/")[-1].strip("/")
-                # Skip generic listing segments
                 if slug and slug not in _LISTING_SEGMENTS and slug not in _EMIRATE_SLUGS:
-                    logger.info(f"DDG found: {url}")
+                    logger.info(f"DDG found: {url}/")
                     return url + "/"
-        logger.info(f"DDG: no Bayut area guide found for '{area_name}'")
+
+        # Log first few raw results to help debug if nothing matched
+        for i, r_el in enumerate(soup.select(".result__a")[:5], 1):
+            logger.info(f"  DDG result {i}: {r_el.get('href','')[:120]}")
+        logger.info(f"DDG: no /area-guides/ result for '{area_name}'")
+
     except Exception as e:
-        logger.warning(f"DDG search failed: {e}")
+        logger.warning(f"DDG search failed for '{area_name}': {e}")
     return None
 
 
@@ -851,6 +861,8 @@ async def enrich_areas() -> list[dict]:
                 updates["longitude"] = lng
 
             # 2. Find Bayut area guide and scrape it
+            # Small delay before each DDG search to avoid rate-limiting across areas
+            await asyncio.sleep(random.uniform(3, 6))
             guide_url = await find_bayut_area_guide_url(area_name, emirate=emirate)
             if guide_url:
                 await asyncio.sleep(random.uniform(2, 4))
