@@ -83,276 +83,220 @@ def _sig_words(name: str) -> set:
     return {w for w in re.split(r"[\s\-]+", name.lower()) if len(w) > 2 and w not in _STOP_WORDS}
 
 
+# ── Bayut area guide — direct emirate listing pages ───────────────────────────
+#
+# Dubai Ready has only 4 areas — we know their direct URLs.
+# All other areas are found by scraping the emirate-specific listing page.
+# Pagination pattern: {base_url}page/{n}/
+
+_DUBAI_READY_URLS: list[str] = [
+    "https://www.bayut.com/area-guides/elie-saab/",
+    "https://www.bayut.com/area-guides/downtown-dubai/",
+    "https://www.bayut.com/area-guides/business-bay/",
+    "https://www.bayut.com/area-guides/jumeirah-village-circle/",
+]
+
+# Maps normalised emirate name → [ready listing URL, offplan listing URL]
+_EMIRATE_LISTING_URLS: dict[str, list[str]] = {
+    "dubai":          ["https://www.bayut.com/area-guides/off-plan/dubai/"],
+    "abu dhabi":      ["https://www.bayut.com/area-guides/ready/abu-dhabi/",
+                       "https://www.bayut.com/area-guides/off-plan/abu-dhabi/"],
+    "sharjah":        ["https://www.bayut.com/area-guides/ready/sharjah/",
+                       "https://www.bayut.com/area-guides/off-plan/sharjah/"],
+    "ajman":          ["https://www.bayut.com/area-guides/ready/ajman/",
+                       "https://www.bayut.com/area-guides/off-plan/ajman/"],
+    "ras al khaimah": ["https://www.bayut.com/area-guides/ready/ras-al-khaimah/",
+                       "https://www.bayut.com/area-guides/off-plan/ras-al-khaimah/"],
+    "al ain":         ["https://www.bayut.com/area-guides/ready/al-ain/"],
+    "umm al quwain":  ["https://www.bayut.com/area-guides/ready/umm-al-quwain/",
+                       "https://www.bayut.com/area-guides/off-plan/umm-al-quwain/"],
+    "fujairah":       ["https://www.bayut.com/area-guides/ready/fujairah/",
+                       "https://www.bayut.com/area-guides/off-plan/fujairah/"],
+}
+
+# URL path segments that are listing-level (not individual area guides)
+_LISTING_SEGMENTS = {"ready", "off-plan", "area-guides", "page"}
+
+
+async def _detect_emirate(area_name: str) -> str:
+    """
+    Use Claude (Haiku) to determine which UAE emirate an area belongs to.
+    Returns a normalised lowercase key matching _EMIRATE_LISTING_URLS.
+    """
+    import anthropic as _anthropic
+    from ..config import ANTHROPIC_KEY
+    client = _anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+    try:
+        resp = await asyncio.to_thread(
+            lambda: client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=20,
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        f"Which UAE emirate does '{area_name}' belong to? "
+                        "Reply with ONLY one of: Dubai, Abu Dhabi, Sharjah, Ajman, "
+                        "Ras Al Khaimah, Fujairah, Umm Al Quwain, Al Ain"
+                    ),
+                }],
+            )
+        )
+        raw = resp.content[0].text.strip().lower()
+        for key in _EMIRATE_LISTING_URLS:
+            if key in raw:
+                logger.info(f"Claude detected emirate for '{area_name}': {key}")
+                return key
+    except Exception as e:
+        logger.warning(f"_detect_emirate failed: {e}")
+    return "dubai"
+
+
 # ── Bayut area guide — find URL ────────────────────────────────────────────────
 
-def _search_next_data_for_area(nd: dict, area_name: str) -> str | None:
+async def find_bayut_area_guide_url(area_name: str, emirate: str = "") -> str | None:
     """
-    Recursively search __NEXT_DATA__ JSON for an entry whose name matches area_name.
-    Returns a full Bayut URL if found, else None.
-    """
-    target_sig = _sig_words(area_name)
-    if not target_sig:
-        return None
-
-    def _search(obj, depth=0) -> str | None:
-        if depth > 12:
-            return None
-        if isinstance(obj, dict):
-            name = str(
-                obj.get("name") or obj.get("title") or obj.get("communityName") or
-                obj.get("displayName") or obj.get("areaName") or ""
-            )
-            if name:
-                name_sig = _sig_words(name)
-                if name_sig:
-                    shared = len(target_sig & name_sig)
-                    # Both directions must be ≥60 % — prevents "Dubai" matching "Dubai Marina"
-                    fwd = shared / len(target_sig)
-                    bwd = shared / len(name_sig)
-                    if fwd >= 0.6 and bwd >= 0.6:
-                        slug = (
-                            obj.get("slug") or obj.get("communitySlug") or
-                            obj.get("url") or obj.get("href") or ""
-                        )
-                        if slug:
-                            slug_clean = slug.strip("/").split("/")[-1]
-                            # Skip emirate-level slugs
-                            if slug_clean in _EMIRATE_SLUGS:
-                                pass  # fall through to recurse
-                            else:
-                                if slug.startswith("http"):
-                                    return slug
-                                slug = slug.strip("/")
-                                if "area-guides" not in slug:
-                                    slug = f"area-guides/{slug}"
-                                return f"https://www.bayut.com/{slug}/"
-            for val in obj.values():
-                r = _search(val, depth + 1)
-                if r:
-                    return r
-        elif isinstance(obj, list):
-            for item in obj:
-                r = _search(item, depth + 1)
-                if r:
-                    return r
-        return None
-
-    try:
-        return _search(nd)
-    except Exception as e:
-        logger.warning(f"_search_next_data_for_area failed: {e}")
-        return None
-
-
-async def find_bayut_area_guide_url(area_name: str) -> str | None:
-    """
-    Find the actual Bayut area guide URL by scraping the index page.
-
-    URL slugs cannot be guessed — Bayut uses their own naming, e.g.:
-      'The Acres Dubailand' → /area-guides/the-acres-by-meraas/
+    Find the Bayut area guide URL for an area using direct emirate listing pages.
 
     Strategy:
-      1. Load bayut.com/area-guides/ with networkidle, scroll to trigger lazy-load
-      2. Extract window.__NEXT_DATA__ from the index page — Bayut stores all areas
-         as JSON inside the Next.js data blob. Parse and match there first.
-      3. Fall back: click all 'View All' buttons via proper Playwright clicks
-         (not raw JS el.click() — React ignores those), scroll between clicks,
-         then match by link text/slug using word-overlap scoring.
-      4. Title-validate the found URL before returning.
+      1. Determine emirate (from DB field → Claude fallback)
+      2. For Dubai: slug-match against 4 hardcoded ready URLs first, then
+         search paginated off-plan listing (/off-plan/dubai/page/N/)
+      3. For all other emirates: search ready then off-plan listing pages
+      4. On each listing page: extract all area links, score by text + slug
+         word-overlap, title-validate the best match before returning
     """
+    # Normalise emirate
+    emirate_key = emirate.lower().strip() if emirate else ""
+    if not emirate_key or emirate_key not in _EMIRATE_LISTING_URLS:
+        emirate_key = await _detect_emirate(area_name)
+    logger.info(f"Bayut search for '{area_name}' in emirate '{emirate_key}'")
+
+    target_lower  = area_name.lower().strip()
+    target_sig    = _sig_words(area_name)
+
+    def _score_link(text: str, slug: str) -> int:
+        """Return match score 0–100 between area_name and a Bayut link."""
+        if not text and not slug:
+            return 0
+        t = text.strip().lower()
+        slug_words = {w for w in re.split(r"[\s\-]+", slug.lower()) if len(w) > 2 and w not in _STOP_WORDS}
+
+        if t == target_lower:
+            return 100
+        if len(t) >= 3 and (t.startswith(target_lower) or target_lower.startswith(t)):
+            return 85
+
+        text_sig = _sig_words(t) if t else set()
+        if text_sig and target_sig:
+            shared = len(target_sig & text_sig)
+            fwd = shared / len(target_sig)
+            bwd = shared / len(text_sig)
+        else:
+            fwd = bwd = 0.0
+
+        slug_shared = len(target_sig & slug_words) if slug_words else 0
+        slug_fwd = slug_shared / len(target_sig) if target_sig else 0.0
+
+        best = max(fwd, slug_fwd)
+        if best >= 0.6 and bwd >= 0.4:
+            return 70
+        if best >= 0.5:
+            return 50
+        return 0
+
     browser = await get_browser()
     page = await _new_stealth_page(browser)
 
     try:
-        logger.info(f"Loading Bayut area guides index for '{area_name}'...")
-        try:
-            await page.goto(BAYUT_AREA_GUIDES, wait_until="networkidle", timeout=60_000)
-        except Exception:
-            pass
-        await asyncio.sleep(5)
+        # ── Dubai Ready: check 4 known hardcoded URLs by slug ─────────────
+        if emirate_key == "dubai":
+            for url in _DUBAI_READY_URLS:
+                slug = url.rstrip("/").split("/")[-1]
+                if _score_link("", slug) >= 50:
+                    logger.info(f"Matched Dubai ready URL by slug: {url}")
+                    return url
 
-        # Slow scroll to trigger lazy-loading of area cards throughout the page
-        scroll_height = await page.evaluate("() => document.body.scrollHeight")
-        for y in range(0, min(scroll_height, 8000), 600):
-            await page.evaluate(f"window.scrollTo(0, {y})")
-            await asyncio.sleep(0.3)
-        await page.evaluate("window.scrollTo(0, 0)")
-        await asyncio.sleep(2)
+        # ── Paginated listing pages ────────────────────────────────────────
+        base_urls = _EMIRATE_LISTING_URLS.get(emirate_key, _EMIRATE_LISTING_URLS["dubai"])
 
-        # ── Step 1: __NEXT_DATA__ search ──────────────────────────────────
-        nd = await page.evaluate(
-            "() => { try { return window.__NEXT_DATA__ || null; } catch(e) { return null; } }"
-        )
-        if nd:
-            import json as _json
-            try:
-                with open("/tmp/bayut_index_debug.json", "w") as f:
-                    _json.dump(nd, f)
-                logger.info("Saved index __NEXT_DATA__ to /tmp/bayut_index_debug.json")
-            except Exception:
-                pass
-            url = _search_next_data_for_area(nd, area_name)
-            if url:
-                logger.info(f"Found via __NEXT_DATA__: {url}")
-                # Quick title validation
+        for base_url in base_urls:
+            for page_num in range(1, 10):  # up to 9 pages per listing
+                listing_url = base_url if page_num == 1 else f"{base_url}page/{page_num}/"
+                logger.info(f"  Checking: {listing_url}")
+
                 try:
-                    await page.goto(url, wait_until="load", timeout=40_000)
-                    await asyncio.sleep(3)
-                    title = await page.title()
-                    if not _bayut_is_index_page(title):
-                        logger.info(f"  Confirmed: {title}")
-                        return url
-                    logger.warning(f"  __NEXT_DATA__ URL leads to index page — continuing")
+                    await page.goto(listing_url, wait_until="load", timeout=45_000)
                 except Exception:
                     pass
+                await asyncio.sleep(3)
 
-        # ── Step 2: Expand lists via proper Playwright clicks ──────────────
-        logger.info("Trying View All button expansion...")
-        try:
-            await page.goto(BAYUT_AREA_GUIDES, wait_until="networkidle", timeout=60_000)
-        except Exception:
-            pass
-        await asyncio.sleep(5)
+                # If Bayut returned the generic index page, this listing URL doesn't exist
+                pg_title = await page.title()
+                if _bayut_is_index_page(pg_title):
+                    logger.info(f"  → Hit index page, no more pages for {base_url}")
+                    break
 
-        prev_count = 0
-        for attempt in range(25):
-            # Scroll down incrementally so buttons enter viewport (Playwright won't
-            # click off-screen elements, and React won't trigger without real events)
-            cur_height = await page.evaluate("() => document.body.scrollHeight")
-            for y in range(0, min(cur_height, 10000), 800):
-                await page.evaluate(f"window.scrollTo(0, {y})")
-                await asyncio.sleep(0.2)
+                # Extract all area-guide links from this listing page
+                links: list = await page.evaluate("""(args) => {
+                    const stop = new Set(args.stop);
+                    const emir = new Set(args.emir);
+                    const listingSegs = new Set(args.listingSegs);
+                    const seen = new Set();
+                    const out = [];
+                    document.querySelectorAll('a[href*="/area-guides/"]').forEach(a => {
+                        const href = (a.href||'').split('?')[0].replace(/\\/+$/,'');
+                        if (seen.has(href)) return;
+                        seen.add(href);
+                        const segs = href.replace('https://www.bayut.com','')
+                                         .split('/').filter(Boolean);
+                        if (segs.length < 2) return;
+                        const slug = segs[segs.length - 1];
+                        // Skip emirate slugs, numeric pagination, listing segments
+                        if (emir.has(slug) || !slug || /^\\d+$/.test(slug)) return;
+                        if (listingSegs.has(slug)) return;
+                        const text = (a.innerText||a.textContent||'').trim();
+                        out.push({ href, text, slug });
+                    });
+                    return out;
+                }""", {
+                    "stop": list(_STOP_WORDS),
+                    "emir": list(_EMIRATE_SLUGS),
+                    "listingSegs": list(_LISTING_SEGMENTS),
+                })
 
-            # Find all expand buttons visible right now
-            btns = page.locator(
-                "button:has-text('View All'), a:has-text('View All'), "
-                "button:has-text('View More'), a:has-text('View More'), "
-                "button:has-text('VIEW ALL'), a:has-text('VIEW ALL'), "
-                "button:has-text('Show All'), a:has-text('Show All')"
-            )
-            count = await btns.count()
-            clicked_this_pass = 0
-            for i in range(count):
-                try:
-                    btn = btns.nth(i)
-                    if await btn.is_visible():
-                        await btn.scroll_into_view_if_needed()
-                        await asyncio.sleep(0.3)
-                        await btn.click()
-                        await asyncio.sleep(1.5)
-                        clicked_this_pass += 1
-                except Exception:
-                    continue
+                logger.info(f"  Found {len(links)} area links on page {page_num}")
+                if not links:
+                    break  # no area cards on this page → done paginating
 
-            await asyncio.sleep(2)
-            cur_count = await page.evaluate(
-                "() => document.querySelectorAll('a[href*=\"/area-guides/\"]').length"
-            )
-            logger.info(f"  expand pass {attempt+1}: clicked={clicked_this_pass}, links={cur_count}")
-            if clicked_this_pass == 0 or cur_count == prev_count:
-                break
-            prev_count = cur_count
+                # Log all links for debugging
+                for lnk in links:
+                    logger.info(f"    slug='{lnk['slug']}' text='{lnk['text'][:60]}'")
 
-        await asyncio.sleep(2)
+                # Score and pick best
+                best_score = 0
+                best_url: str | None = None
+                for lnk in links:
+                    s = _score_link(lnk["text"], lnk["slug"])
+                    if s > best_score:
+                        best_score = s
+                        best_url = lnk["href"]
 
-        # ── Step 3: Score-match all visible area-guide links ───────────────
-        target_lower = area_name.lower().strip()
-        target_sig   = list(_sig_words(area_name))
+                if best_url and best_score >= 50:
+                    logger.info(f"  Match score={best_score}: {best_url}")
+                    # Title validate
+                    try:
+                        await page.goto(best_url, wait_until="load", timeout=40_000)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(3)
+                    confirmed_title = await page.title()
+                    if not _bayut_is_index_page(confirmed_title):
+                        logger.info(f"  Confirmed: {confirmed_title}")
+                        return best_url
+                    logger.warning(f"  URL leads to index — skipping")
 
-        all_links: list = await page.evaluate("""(args) => {
-            const stopWords  = new Set(args.stopWords);
-            const emirSlug   = new Set(args.emirateSlugs);
-
-            function sigW(str) {
-                return str.toLowerCase().split(/[\\s\\-]+/)
-                    .filter(w => w.length > 2 && !stopWords.has(w));
-            }
-
-            const seen = new Set();
-            const results = [];
-            document.querySelectorAll('a[href*="/area-guides/"]').forEach(a => {
-                const href = (a.href || '').split('?')[0].replace(/\\/+$/, '');
-                if (seen.has(href)) return;
-                seen.add(href);
-                const parts = href.replace('https://www.bayut.com', '').split('/').filter(Boolean);
-                if (parts.length < 2) return;
-                const slug = parts[parts.length - 1];
-                if (emirSlug.has(slug) || !slug) return;
-                // Skip numeric pagination slugs like /area-guides/2/ /area-guides/13/
-                if (/^\d+$/.test(slug)) return;
-                const text = (a.innerText || a.textContent || '').trim().toLowerCase();
-                results.push({ href, text, slug, slugWords: sigW(slug) });
-            });
-            return results;
-        }""", {"stopWords": list(_STOP_WORDS), "emirateSlugs": list(_EMIRATE_SLUGS)})
-
-        logger.info(f"Total area-guide links after expansion: {len(all_links)}")
-        # Log first 30 so we can debug what's actually on the page
-        for lnk in all_links[:30]:
-            logger.info(f"  link text='{lnk['text'][:60]}' slug='{lnk['slug']}'")
-
-        # Score each link
-        best_url   = None
-        best_score = 0
-        for lnk in all_links:
-            text     = lnk["text"]
-            slug_sig = set(lnk["slugWords"])
-
-            # Skip links with no meaningful text — empty string would falsely match
-            # via target_lower.startswith("") == True
-            if not text or len(text) < 3:
-                continue
-
-            score = 0
-            if text == target_lower:
-                score = 100
-            elif len(text) >= 3 and (text.startswith(target_lower) or target_lower.startswith(text)):
-                score = 85
-            else:
-                text_sig  = _sig_words(text)
-                t_sig_set = set(target_sig)
-                if text_sig and t_sig_set:
-                    shared_t = len(t_sig_set & text_sig)
-                    fwd = shared_t / len(t_sig_set)
-                    bwd = shared_t / len(text_sig)
-                elif not text_sig:
-                    fwd = bwd = 0
-                else:
-                    fwd = bwd = 0
-
-                shared_s  = len(set(target_sig) & slug_sig)
-                slug_fwd  = shared_s / max(len(target_sig), 1) if target_sig else 0
-
-                best_overlap = max(fwd, slug_fwd)
-                if best_overlap >= 0.6 and bwd >= 0.4:
-                    score = 70
-                elif best_overlap >= 0.5:
-                    score = 50
-
-            logger.info(f"  scored {score}: text='{text[:50]}' slug='{lnk['slug']}'")
-            if score > best_score:
-                best_score = score
-                best_url   = lnk["href"]
-
-        if not best_url or best_score < 50:
-            logger.warning(f"No good match in Bayut index for '{area_name}' (best score: {best_score})")
-            return None
-
-        logger.info(f"Best match (score={best_score}): {best_url}")
-
-        # Title validate
-        try:
-            await page.goto(best_url, wait_until="load", timeout=40_000)
-        except Exception:
-            pass
-        await asyncio.sleep(3)
-        title = await page.title()
-        if _bayut_is_index_page(title):
-            logger.warning(f"Best match leads to index page — rejecting")
-            return None
-
-        logger.info(f"Confirmed Bayut area guide for '{area_name}': {best_url}")
-        return best_url
+        logger.warning(f"No Bayut area guide found for '{area_name}' [{emirate_key}]")
+        return None
 
     except Exception as e:
         logger.error(f"find_bayut_area_guide_url failed for '{area_name}': {e}")
@@ -637,82 +581,20 @@ async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
 
 async def test_area_scrape(area_name: str) -> str:
     """
-    Debug helper: loads Bayut index, shows link texts + scores, finds URL,
-    then scrapes that URL. All intermediate data saved to /tmp/ for inspection.
-    Called by TEST AREA [name] Telegram command.
+    Debug helper: detects emirate, finds Bayut URL via emirate listing pages,
+    then scrapes that URL. Called by TEST AREA [name] Telegram command.
     """
     import json as _json
     lines = [f"TEST AREA: {area_name}\n"]
 
-    # ── Phase 1: index page inspection ──────────────────────────────────
-    lines.append("Phase 1: Loading bayut.com/area-guides/ index...")
-    browser = await get_browser()
-    idx_page = await _new_stealth_page(browser)
-    try:
-        try:
-            await idx_page.goto(BAYUT_AREA_GUIDES, wait_until="networkidle", timeout=60_000)
-        except Exception:
-            pass
-        await asyncio.sleep(5)
+    # ── Phase 1: detect emirate ──────────────────────────────────────────
+    lines.append("Phase 1: Detecting emirate...")
+    emirate = await _detect_emirate(area_name)
+    lines.append(f"Emirate detected: {emirate}")
 
-        # scroll
-        h = await idx_page.evaluate("() => document.body.scrollHeight")
-        for y in range(0, min(h, 6000), 500):
-            await idx_page.evaluate(f"window.scrollTo(0, {y})")
-            await asyncio.sleep(0.2)
-        await idx_page.evaluate("window.scrollTo(0, 0)")
-
-        # __NEXT_DATA__ from index
-        nd = await idx_page.evaluate(
-            "() => { try { return window.__NEXT_DATA__ || null; } catch(e) { return null; } }"
-        )
-        if nd:
-            try:
-                with open("/tmp/bayut_index_debug.json", "w") as f:
-                    _json.dump(nd, f)
-                lines.append("Index __NEXT_DATA__: YES → /tmp/bayut_index_debug.json")
-                nd_url = _search_next_data_for_area(nd, area_name)
-                lines.append(f"  Area found in ND: {'YES → ' + nd_url if nd_url else 'NO'}")
-            except Exception as e:
-                lines.append(f"Index __NEXT_DATA__: YES but failed: {e}")
-        else:
-            lines.append("Index __NEXT_DATA__: NOT FOUND")
-
-        idx_title = await idx_page.title()
-        lines.append(f"Index page title: {idx_title}")
-
-        # Dump ALL area-guide link texts from the current DOM (before expansion)
-        raw_links = await idx_page.evaluate("""(args) => {
-            const stop = new Set(args.stop);
-            const emir = new Set(args.emir);
-            const seen = new Set();
-            const out = [];
-            document.querySelectorAll('a[href*="/area-guides/"]').forEach(a => {
-                const href = (a.href||'').split('?')[0].replace(/\\/+$/,'');
-                if (seen.has(href)) return;
-                seen.add(href);
-                const parts = href.replace('https://www.bayut.com','').split('/').filter(Boolean);
-                if (parts.length < 2) return;
-                const slug = parts[parts.length-1];
-                if (emir.has(slug)||!slug) return;
-                const text = (a.innerText||a.textContent||'').trim().slice(0,80);
-                out.push(slug + ' | ' + text);
-            });
-            return out;
-        }""", {"stop": list(_STOP_WORDS), "emir": list(_EMIRATE_SLUGS)})
-
-        lines.append(f"Area-guide links (before expansion): {len(raw_links)}")
-        for lnk in raw_links[:25]:
-            lines.append(f"  {lnk}")
-    except Exception as e:
-        lines.append(f"Index page error: {e}")
-    finally:
-        await idx_page.close()
-
-    # ── Phase 2: find URL (uses full expansion logic) ────────────────────
-    lines.append("\nPhase 2: Finding Bayut URL...")
-    await asyncio.sleep(3)  # brief pause to avoid rate-limiting
-    url = await find_bayut_area_guide_url(area_name)
+    # ── Phase 2: find URL via emirate listing pages ──────────────────────
+    lines.append("\nPhase 2: Finding Bayut URL via emirate listing pages...")
+    url = await find_bayut_area_guide_url(area_name, emirate=emirate)
     if not url:
         lines.append("Bayut URL: NOT FOUND")
         return "\n".join(lines)
@@ -720,8 +602,8 @@ async def test_area_scrape(area_name: str) -> str:
 
     # ── Phase 3: scrape the found URL ────────────────────────────────────
     lines.append("\nPhase 3: Scraping found URL...")
-    browser2 = await get_browser()
-    page = await _new_stealth_page(browser2)
+    browser = await get_browser()
+    page = await _new_stealth_page(browser)
     try:
         try:
             await page.goto(url, wait_until="load", timeout=60_000)
@@ -732,15 +614,15 @@ async def test_area_scrape(area_name: str) -> str:
             await page.evaluate(f"window.scrollTo(0, {y})")
             await asyncio.sleep(0.8)
 
-        nd2 = await page.evaluate(
+        nd = await page.evaluate(
             "() => { try { return window.__NEXT_DATA__ || null; } catch(e) { return null; } }"
         )
-        if nd2:
+        if nd:
             try:
                 with open("/tmp/bayut_debug.json", "w") as f:
-                    _json.dump(nd2, f, indent=2)
-                nd_result = _parse_next_data(nd2, area_name)
-                lines.append(f"Page __NEXT_DATA__: YES → /tmp/bayut_debug.json")
+                    _json.dump(nd, f, indent=2)
+                nd_result = _parse_next_data(nd, area_name)
+                lines.append("Page __NEXT_DATA__: YES → /tmp/bayut_debug.json")
                 lines.append(f"  desc={len(nd_result.get('description',''))} chars  hero={'yes' if nd_result.get('hero_image') else 'no'}")
             except Exception as e:
                 lines.append(f"Page __NEXT_DATA__: YES but failed: {e}")
@@ -940,7 +822,7 @@ async def enrich_areas() -> list[dict]:
                 updates["longitude"] = lng
 
             # 2. Find Bayut area guide and scrape it
-            guide_url = await find_bayut_area_guide_url(area_name)
+            guide_url = await find_bayut_area_guide_url(area_name, emirate=emirate)
             if guide_url:
                 await asyncio.sleep(random.uniform(2, 4))
                 bayut = await scrape_bayut_area_guide(guide_url, area_name)
