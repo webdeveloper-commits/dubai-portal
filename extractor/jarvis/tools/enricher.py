@@ -155,9 +155,9 @@ async def _detect_emirate(area_name: str) -> str:
 
 async def _validate_bayut_url(url: str) -> bool:
     """
-    Confirm a Bayut URL is a real area guide page (not a ghost URL that
-    server-redirects to property listings). Uses httpx — no browser needed.
-    Returns True if the final URL after redirects is still under /area-guides/.
+    Confirm a Bayut URL is a real area guide page.
+    Bayut returns HTTP 200 for invalid slugs but renders the main index page —
+    so we check both the redirect URL AND the <title> in the SSR HTML.
     """
     try:
         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
@@ -174,9 +174,19 @@ async def _validate_bayut_url(url: str) -> bool:
                 },
             )
         final = str(r.url)
-        valid = "/area-guides/" in final and r.status_code == 200
-        logger.info(f"  Validate {url} → {final} [{r.status_code}] {'✓' if valid else '✗'}")
-        return valid
+        if "/area-guides/" not in final or r.status_code != 200:
+            logger.info(f"  Validate {url} → redirected to {final} ✗")
+            return False
+        # Bayut returns 200 for unknown slugs but renders the index page.
+        # The <title> is in the SSR HTML — check it without a browser.
+        title_m = re.search(r"<title[^>]*>(.*?)</title>", r.text, re.IGNORECASE | re.DOTALL)
+        if title_m:
+            page_title = title_m.group(1).strip()
+            if _bayut_is_index_page(page_title):
+                logger.info(f"  Validate {url} → index/invalid content: '{page_title}' ✗")
+                return False
+        logger.info(f"  Validate {url} ✓")
+        return True
     except Exception as e:
         logger.warning(f"  Validate failed for {url}: {e}")
         return False
@@ -670,8 +680,8 @@ async def test_area_scrape(area_name: str) -> str:
     emirate = await _detect_emirate(area_name)
     lines.append(f"Emirate detected: {emirate}")
 
-    # ── Phase 2: find URL via emirate listing pages ──────────────────────
-    lines.append("\nPhase 2: Finding Bayut URL via emirate listing pages...")
+    # ── Phase 2: find URL (slug → Bing → listing pages) ─────────────────
+    lines.append("\nPhase 2: Finding Bayut URL...")
     url = await find_bayut_area_guide_url(area_name, emirate=emirate)
     if not url:
         lines.append("Bayut URL: NOT FOUND")
