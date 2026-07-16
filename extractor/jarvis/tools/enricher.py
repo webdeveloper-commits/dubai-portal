@@ -420,9 +420,13 @@ def _parse_next_data(nd: dict, area_name: str) -> dict:
 
         img = guide.get("heroImage") or guide.get("coverImage") or guide.get("image") or ""
         if isinstance(img, str) and img.startswith("http"):
-            result["hero_image"] = img
+            il = img.lower()
+            if "logo" not in il and ".svg" not in il and "icon" not in il:
+                result["hero_image"] = img
         elif isinstance(img, dict):
-            result["hero_image"] = img.get("url") or img.get("src") or ""
+            src = img.get("url") or img.get("src") or ""
+            if src and "logo" not in src.lower() and ".svg" not in src.lower():
+                result["hero_image"] = src
 
         for field, keys in [
             ("schools",   ["schools", "nearbySchools"]),
@@ -449,31 +453,32 @@ def _parse_next_data(nd: dict, area_name: str) -> dict:
 async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
     """
     Scrape a Bayut area guide detail page (fully client-side Next.js app).
-
-    Strategy:
-      1. Load with 'load' event + 5 s React render time
-      2. Scroll full page height to trigger lazy-loaded images
-      3. Try window.__NEXT_DATA__ for structured JSON (cleanest path)
-      4. DOM fallback: exclude nav/header/footer; skip navigation link text;
-         check CSS background-image for Bayut's hero
+    Hard 90 s timeout on the entire operation — prevents hanging on CAPTCHA.
     """
+    try:
+        return await asyncio.wait_for(_scrape_bayut_area_guide_inner(url, area_name), timeout=90)
+    except asyncio.TimeoutError:
+        logger.warning(f"scrape_bayut_area_guide timed out for '{area_name}' — skipping")
+        return {}
+
+
+async def _scrape_bayut_area_guide_inner(url: str, area_name: str) -> dict:
     browser = await get_browser()
     page = await _new_stealth_page(browser)
     result = {}
 
     try:
         logger.info(f"Scraping Bayut area guide: {url}")
-        # Navigate via Bayut root first so detail page receives an internal Referer
         try:
-            await page.goto(BAYUT_AREA_GUIDES, wait_until="load", timeout=30_000)
+            await page.goto(BAYUT_AREA_GUIDES, wait_until="load", timeout=25_000)
         except Exception:
             pass
         await asyncio.sleep(2)
         try:
-            await page.goto(url, wait_until="load", timeout=60_000)
+            await page.goto(url, wait_until="load", timeout=45_000)
         except Exception:
-            pass  # timeout OK — React may still finish rendering
-        await asyncio.sleep(5)  # let React hydrate
+            pass
+        await asyncio.sleep(4)
 
         # Scroll progressively to trigger all lazy-loaded images
         for y in [400, 1000, 2000, 3500, 0]:
@@ -518,6 +523,14 @@ async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
                        el.getAttribute('data-lazy-src') || el.getAttribute('data-original') || null;
             }
 
+            function isBadImg(src) {
+                if (!src || !src.startsWith('http')) return true;
+                const sl = src.toLowerCase();
+                return sl.includes('logo') || sl.includes('.svg') || sl.includes('icon') ||
+                       sl.includes('placeholder') || sl.includes('avatar') || sl.includes('spinner') ||
+                       sl.includes('bayutlogo') || sl.includes('default');
+            }
+
             // Hero: CSS background-image first (Bayut's hero is usually a bg-image div)
             const bgSels = [
                 '[class*="pageHeader"]', '[class*="_hero"]', '[class*="_banner"]',
@@ -529,20 +542,16 @@ async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
                 const bg = window.getComputedStyle(el).backgroundImage;
                 if (bg && bg !== 'none') {
                     const m = bg.match(/url\\(["']?([^"')]+)["']?\\)/);
-                    if (m && m[1].startsWith('http')) { r.hero_image = m[1]; break; }
+                    if (m && !isBadImg(m[1])) { r.hero_image = m[1]; break; }
                 }
             }
-            // picture source srcset
             if (!r.hero_image) {
                 for (const src of document.querySelectorAll('picture source')) {
                     const ss = src.getAttribute('srcset') || src.getAttribute('data-srcset') || '';
                     const firstUrl = ss.split(',')[0].trim().split(' ')[0];
-                    if (firstUrl.startsWith('http') && !firstUrl.includes('logo') && !firstUrl.includes('icon')) {
-                        r.hero_image = firstUrl; break;
-                    }
+                    if (!isBadImg(firstUrl)) { r.hero_image = firstUrl; break; }
                 }
             }
-            // img src/data-src not in excluded area
             if (!r.hero_image) {
                 const imgSels = [
                     '[class*="_hero"] img', '[class*="_banner"] img',
@@ -552,37 +561,33 @@ async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
                     const el = document.querySelector(sel);
                     if (!el || isInExcludedArea(el)) continue;
                     const src = getImgSrc(el);
-                    if (src && src.startsWith('http') && !src.includes('placeholder') &&
-                        !src.includes('logo') && !src.includes('icon') && !src.includes('spinner')) {
-                        r.hero_image = src; break;
-                    }
+                    if (!isBadImg(src)) { r.hero_image = src; break; }
                 }
             }
-            // Very first content img on page
             if (!r.hero_image) {
                 for (const img of document.querySelectorAll('img')) {
                     if (isInExcludedArea(img)) continue;
                     const src = getImgSrc(img);
-                    if (src && src.startsWith('http') && src.length > 40 &&
-                        !src.includes('placeholder') && !src.includes('logo') &&
-                        !src.includes('icon') && !src.includes('avatar') && !src.includes('spinner')) {
-                        r.hero_image = src; break;
-                    }
+                    if (!isBadImg(src) && src.length > 40) { r.hero_image = src; break; }
                 }
             }
 
-            // Skip patterns: listing prices, nav links, form labels
+            // Skip patterns: nav, breadcrumbs, listing prices, form labels
             const SKIP = [
+                /keyboard_arrow/i, /chevron_right/i, /arrow_forward/i,
+                /^building guides?$/i, /^school guides?$/i, /^area guides?$/i,
+                /^dubai transactions$/i, /^truestimate/i,
+                /^areas?$/i, /^ready$/i, /^off.?plan$/i, /^rent$/i, /^buy$/i, /^agents?$/i,
                 /aed\\s*[\\d,]+/i, /\\d+\\s*bed/i, /\\d+\\s*bath/i,
                 /per year/i, /per month/i, /call agent/i,
                 /whatsapp/i, /view details/i, /listed by/i,
                 /top broker/i, /top agent/i,
                 /apartments for sale/i, /villas for sale/i,
-                /for rent in/i, /floor plans/i, /truestimate/i,
-                /new projects/i, /send enquiry/i, /free consultation/i,
+                /for rent in/i, /floor plans/i, /new projects/i,
+                /send enquiry/i, /free consultation/i,
                 /no obligation/i, /reply within/i, /your name/i,
                 /email address/i, /phone.*whatsapp/i,
-                /^buy$/i, /^rent$/i, /^agents$/i,
+                /^view properties/i, /^view all/i, /^see all/i,
             ];
             function isSkip(t) { return SKIP.some(p => p.test(t)); }
 
@@ -643,6 +648,13 @@ async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
 
             r.attractions = [...new Set(r.attractions)].slice(0, 10);
             r.lifestyle = r.lifestyle.trim().slice(0, 600);
+
+            // Final safety: discard description if it still contains nav/breadcrumb markers
+            const BAD_DESC = ['keyboard_arrow', 'Apartments for sale in Dubai', 'Building Guides',
+                              'Dubai Transactions', 'keyboard_arrow_right'];
+            if (r.description && BAD_DESC.some(b => r.description.includes(b))) {
+                r.description = '';
+            }
             return r;
         }""")
 
