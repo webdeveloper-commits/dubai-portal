@@ -387,6 +387,12 @@ async def scrape_bayut_area_guide(url: str, area_name: str) -> dict:
 
     try:
         logger.info(f"Scraping Bayut area guide: {url}")
+        # Navigate via Bayut root first so detail page receives an internal Referer
+        try:
+            await page.goto(BAYUT_AREA_GUIDES, wait_until="load", timeout=30_000)
+        except Exception:
+            pass
+        await asyncio.sleep(2)
         try:
             await page.goto(url, wait_until="load", timeout=60_000)
         except Exception:
