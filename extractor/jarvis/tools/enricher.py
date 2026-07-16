@@ -159,7 +159,7 @@ async def _ddg_find_bayut_url(area_name: str) -> str | None:
     the first matching Bayut area guide URL. Much more accurate than scraping
     Bayut's own listing pages — Google/DDG already knows the correct slug.
     """
-    query = f'"{area_name}" site:bayut.com/area-guides/'
+    query = f'"{area_name}" area guide site:bayut.com'
     logger.info(f"DDG search: {query}")
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
