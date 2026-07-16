@@ -22,11 +22,60 @@ _pw: Playwright | None = None
 _browser: Browser | None = None
 
 
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+
 _STEALTH_JS = """
+// Remove webdriver flag at JS level (--disable-blink-features handles C++ level)
 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
-Object.defineProperty(navigator, 'languages', {get: () => ['en-US','en']});
-window.chrome = {runtime: {}};
+
+// Realistic plugin array
+Object.defineProperty(navigator, 'plugins', {get: () => {
+    const arr = [
+        {name:'Chrome PDF Plugin', filename:'internal-pdf-viewer', description:'Portable Document Format'},
+        {name:'Chrome PDF Viewer',  filename:'mhjfbmdgcfjbbpaeojofohoefgiehjai', description:''},
+        {name:'Native Client',      filename:'internal-nacl-plugin', description:''},
+    ];
+    Object.setPrototypeOf(arr, PluginArray.prototype);
+    return arr;
+}});
+
+Object.defineProperty(navigator, 'languages',           {get: () => ['en-US', 'en']});
+Object.defineProperty(navigator, 'platform',            {get: () => 'Win32'});
+Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8});
+Object.defineProperty(navigator, 'deviceMemory',        {get: () => 8});
+Object.defineProperty(navigator, 'maxTouchPoints',      {get: () => 0});
+
+// Full chrome object — headless omits these
+window.chrome = {
+    app: {isInstalled: false, InstallState: {DISABLED:'a',INSTALLED:'b',NOT_INSTALLED:'c'}, RunningState: {CANNOT_RUN:'a',READY_TO_RUN:'b',RUNNING:'c'}},
+    runtime: {id: undefined},
+    loadTimes: function(){return {requestTime:Date.now()/1000};},
+    csi: function(){return {startE:Date.now(),onloadT:Date.now(),pageT:1,tran:15};},
+};
+
+// Notifications permission — headless returns 'denied' which bots checkers test
+try {
+    const origQuery = window.navigator.permissions.query.bind(navigator.permissions);
+    window.navigator.permissions.query = (p) =>
+        p.name === 'notifications'
+            ? Promise.resolve({state: 'default', onchange: null})
+            : origQuery(p);
+} catch(e) {}
+
+// Prevent iframe contentWindow.navigator.webdriver check
+try {
+    Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+        get: function() {
+            const win = this.__contentWindow || Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow').get.call(this);
+            try { Object.defineProperty(win.navigator, 'webdriver', {get: () => undefined}); } catch(e) {}
+            return win;
+        }
+    });
+} catch(e) {}
 """.strip()
 
 
@@ -36,15 +85,28 @@ async def get_browser() -> Browser:
         _pw = await async_playwright().start()
         _browser = await _pw.chromium.launch(
             headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+                "--window-size=1920,1080",
+                "--disable-extensions",
+                "--no-first-run",
+                "--ignore-certificate-errors",
+            ],
         )
-        logger.info("Chromium launched")
+        logger.info("Chromium launched (stealth mode)")
     return _browser
 
 
 async def _new_stealth_page(browser: Browser) -> Page:
-    """Create a new page with stealth JS and headers applied."""
-    page = await browser.new_page()
+    """Create a new page with full stealth fingerprint applied."""
+    page = await browser.new_page(
+        viewport={"width": 1920, "height": 1080},
+        user_agent=_UA,
+    )
     await page.add_init_script(_STEALTH_JS)
     await page.set_extra_http_headers(_stealth_headers())
     return page
@@ -62,13 +124,15 @@ async def close_browser() -> None:
 
 def _stealth_headers() -> dict:
     return {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
+        "User-Agent":      _UA,
         "Accept-Language": "en-US,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Sec-Fetch-Dest":  "document",
+        "Sec-Fetch-Mode":  "navigate",
+        "Sec-Fetch-Site":  "none",
+        "Sec-Fetch-User":  "?1",
+        "Upgrade-Insecure-Requests": "1",
     }
 
 

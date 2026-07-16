@@ -76,7 +76,7 @@ _STOP_WORDS = {
 
 def _bayut_is_index_page(title: str) -> bool:
     t = title.lower()
-    return _BAYUT_INDEX_TITLE in t or not t.strip()
+    return _BAYUT_INDEX_TITLE in t or not t.strip() or "captcha" in t or "access denied" in t or "robot" in t
 
 
 def _sig_words(name: str) -> set:
