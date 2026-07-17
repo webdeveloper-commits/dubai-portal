@@ -1,12 +1,12 @@
 "use client";
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useRef, use } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import Footer from "@/app/components/Footer";
 import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import {
   MapPin, Bed, Calendar, ChevronLeft, ChevronRight,
-  Phone, Mail, CheckCircle2, ChevronDown, Building2, Layers,
+  Phone, CheckCircle2, ChevronDown, Building2, Layers,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -230,29 +230,128 @@ function FaqAccordion({ q, a }: { q: string; a: string }) {
   );
 }
 
+// ─── Country codes ────────────────────────────────────────────────────────────
+
+const CC_LIST = [
+  { code: "+971", flag: "🇦🇪" }, { code: "+966", flag: "🇸🇦" }, { code: "+974", flag: "🇶🇦" },
+  { code: "+965", flag: "🇰🇼" }, { code: "+973", flag: "🇧🇭" }, { code: "+968", flag: "🇴🇲" },
+  { code: "+91",  flag: "🇮🇳" }, { code: "+92",  flag: "🇵🇰" }, { code: "+44",  flag: "🇬🇧" },
+  { code: "+1",   flag: "🇺🇸" }, { code: "+49",  flag: "🇩🇪" }, { code: "+33",  flag: "🇫🇷" },
+  { code: "+7",   flag: "🇷🇺" }, { code: "+86",  flag: "🇨🇳" }, { code: "+61",  flag: "🇦🇺" },
+  { code: "+962", flag: "🇯🇴" }, { code: "+961", flag: "🇱🇧" }, { code: "+20",  flag: "🇪🇬" },
+];
+
+function CCDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+  const sel = CC_LIST.find(c => c.code === value) ?? CC_LIST[0];
+  return (
+    <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{ display: "flex", alignItems: "center", gap: 3, height: 42, padding: "0 8px 0 10px", background: "#f4f6f9", border: "1.5px solid #eaeaea", borderRadius: "10px 0 0 10px", cursor: "pointer", fontFamily: "Verdana", fontSize: 11, color: "#192537", whiteSpace: "nowrap", minWidth: 72 }}>
+        <span style={{ fontSize: 14 }}>{sel.flag}</span> {value}
+        <ChevronDown size={10} color="#7a8a9e" />
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, zIndex: 200, background: "white", border: "1.5px solid #eaeaea", borderRadius: 10, boxShadow: "0 10px 30px rgba(0,0,0,0.12)", minWidth: 160, maxHeight: 200, overflowY: "auto" }}>
+          {CC_LIST.map(c => (
+            <button key={c.code} type="button" onClick={() => { onChange(c.code); setOpen(false); }}
+              style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "8px 12px", textAlign: "left", fontFamily: "Verdana", fontSize: 11, border: "none", cursor: "pointer", background: c.code === value ? "#f0fbfb" : "white", borderBottom: "0.5px solid #f5f5f5" }}>
+              <span style={{ fontSize: 14 }}>{c.flag}</span> {c.code}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Lead Form ────────────────────────────────────────────────────────────────
 
-function LeadForm({ projectName }: { projectName: string }) {
-  const [form, setForm] = useState({ name: "", email: "", phone: "" });
-  const [sent, setSent] = useState(false);
+function LeadForm({ projectName, developerName, areaName }: { projectName: string; developerName?: string; areaName?: string }) {
+  const [name,    setName]    = useState("");
+  const [email,   setEmail]   = useState("");
+  const [cc,      setCc]      = useState("+971");
+  const [phone,   setPhone]   = useState("");
+  const [errors,  setErrors]  = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [sent,    setSent]    = useState(false);
+
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!name.trim())  e.name  = "Name is required.";
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = "Valid email required.";
+    if (!phone.trim() || phone.replace(/\D/g, "").length < 6)        e.phone = "Valid phone required.";
+    setErrors(e);
+    return !Object.keys(e).length;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/enquire", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(), email: email.trim(), countryCode: cc, phone: phone.trim(),
+          projectName, developerName: developerName || null, areaName: areaName || null,
+          sourceUrl: typeof window !== "undefined" ? window.location.href : null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) setErrors({ submit: json.error || "Something went wrong." });
+      else setSent(true);
+    } catch {
+      setErrors({ submit: "Connection error. Please try again." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (sent) return (
-    <div style={{ textAlign: "center", padding: "24px 0" }}>
-      <CheckCircle2 size={40} color="#7fe2e3" style={{ marginBottom: 12 }} />
-      <h4 style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 16, color: "#192537", marginBottom: 6 }}>Thank you!</h4>
+    <div style={{ textAlign: "center", padding: "20px 0" }}>
+      <CheckCircle2 size={40} color="#7fe2e3" style={{ marginBottom: 10 }} />
+      <h4 style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 15, color: "#192537", marginBottom: 6 }}>Thank you!</h4>
       <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#7a8a9e", lineHeight: 1.7, margin: 0 }}>
         We&apos;ve received your enquiry about <strong>{projectName}</strong>. An advisor will contact you within the hour.
       </p>
     </div>
   );
-  const inputSt: React.CSSProperties = { width: "100%", padding: "11px 13px", borderRadius: 10, border: "1.5px solid #eaeaea", fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#333", outline: "none", boxSizing: "border-box", background: "#fafafa" };
+
+  const inp: React.CSSProperties = { width: "100%", padding: "10px 12px", borderRadius: 10, border: "1.5px solid #eaeaea", fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#333", outline: "none", boxSizing: "border-box", background: "#fafafa" };
+  const errSt: React.CSSProperties = { fontFamily: "Verdana", fontSize: 10, color: "#e53e3e", marginTop: 3 };
+
   return (
-    <form onSubmit={e => { e.preventDefault(); setSent(true); }} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {([{ k: "name", ph: "Your Name", type: "text" }, { k: "email", ph: "Email Address", type: "email" }, { k: "phone", ph: "Phone / WhatsApp", type: "tel" }] as { k: "name" | "email" | "phone"; ph: string; type: string }[]).map(({ k, ph, type }) => (
-        <input key={k} type={type} placeholder={ph} required={k !== "phone"} value={form[k]}
-          onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} style={inputSt} />
-      ))}
-      <button type="submit" style={{ background: "linear-gradient(135deg,#7fe2e3,#4db8b9)", color: "#192537", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, padding: "13px", borderRadius: 12, border: "none", cursor: "pointer", marginTop: 2, letterSpacing: "0.02em" }}>
-        Request Information
+    <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div>
+        <input type="text" placeholder="Your Full Name *" value={name} onChange={e => setName(e.target.value)}
+          style={{ ...inp, borderColor: errors.name ? "#e53e3e" : "#eaeaea" }} />
+        {errors.name && <p style={errSt}>{errors.name}</p>}
+      </div>
+      <div>
+        <input type="email" placeholder="Email Address *" value={email} onChange={e => setEmail(e.target.value)}
+          style={{ ...inp, borderColor: errors.email ? "#e53e3e" : "#eaeaea" }} />
+        {errors.email && <p style={errSt}>{errors.email}</p>}
+      </div>
+      <div>
+        <div style={{ display: "flex" }}>
+          <CCDropdown value={cc} onChange={setCc} />
+          <input type="tel" placeholder="Phone Number *" value={phone} onChange={e => setPhone(e.target.value)}
+            style={{ ...inp, flex: 1, borderRadius: "0 10px 10px 0", borderLeft: "none", borderColor: errors.phone ? "#e53e3e" : "#eaeaea" }} />
+        </div>
+        {errors.phone && <p style={errSt}>{errors.phone}</p>}
+      </div>
+      {errors.submit && <p style={{ ...errSt, textAlign: "center" }}>{errors.submit}</p>}
+      <button type="submit" disabled={loading}
+        style={{ background: loading ? "#b2e8e8" : "linear-gradient(135deg,#7fe2e3,#4db8b9)", color: "#192537", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, padding: "13px", borderRadius: 12, border: "none", cursor: loading ? "default" : "pointer", marginTop: 2, letterSpacing: "0.02em" }}>
+        {loading ? "Sending…" : "Request Information"}
       </button>
       <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#bbb", textAlign: "center", margin: 0 }}>Free consultation · No obligation · Reply within 1 hour</p>
     </form>
@@ -580,18 +679,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
                 <a href="tel:+97140000000" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "13px", borderRadius: 12, background: "#192537", color: "white", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, textDecoration: "none", boxSizing: "border-box", letterSpacing: "0.02em" }}>
                   <Phone size={14} /> Call Now
                 </a>
-                <a href={`https://wa.me/97140000000?text=Hi, I'm interested in ${encodeURIComponent(project.name)}`} target="_blank" rel="noreferrer"
-                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "13px", borderRadius: 12, background: "#25D366", color: "white", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, textDecoration: "none", boxSizing: "border-box" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
-                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-                    <path d="M12 0C5.373 0 0 5.373 0 12c0 2.134.558 4.133 1.533 5.868L0 24l6.334-1.508A11.937 11.937 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-5.006-1.37l-.36-.213-3.732.888.936-3.617-.235-.372A9.818 9.818 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/>
-                  </svg>
-                  WhatsApp
-                </a>
-                <a href={`mailto:hello@elysian.ae?subject=Enquiry: ${project.name}`}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "12px", borderRadius: 12, background: "transparent", color: "#192537", border: "1.5px solid #e8e8e8", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, textDecoration: "none", boxSizing: "border-box" }}>
-                  <Mail size={14} /> Email Us
-                </a>
               </div>
             </div>
 
@@ -601,7 +688,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
                 <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#7fe2e3", letterSpacing: "0.22em", textTransform: "uppercase", margin: "0 0 6px" }}>Free Consultation</p>
                 <h3 style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 17, color: "#192537", margin: 0, lineHeight: 1.25 }}>Request More Information</h3>
               </div>
-              <LeadForm projectName={project.name} />
+              <LeadForm
+                projectName={project.name}
+                developerName={project.developer || undefined}
+                areaName={project.area || undefined}
+              />
             </div>
 
           </div>

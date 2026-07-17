@@ -6,6 +6,8 @@ Friday:  area guides + developer profiles (built in next phase)
 import asyncio
 import random
 import logging
+import os
+import httpx
 from .tools.scraper import scan_new_projects, scrape_project_detail
 from .tools.humanizer import parse_and_humanize
 from .tools.images import upload_project_images
@@ -21,6 +23,24 @@ logger = logging.getLogger(__name__)
 # Notify function is injected at startup to avoid circular imports
 _notify = None
 _active_task: asyncio.Task | None = None
+
+
+async def _revalidate_vercel() -> None:
+    """Flush Vercel's page cache so new content appears immediately."""
+    url    = os.getenv("VERCEL_SITE_URL", "").rstrip("/")
+    secret = os.getenv("REVALIDATE_SECRET", "")
+    if not url or not secret:
+        logger.warning("_revalidate_vercel: VERCEL_SITE_URL or REVALIDATE_SECRET not set — skipping")
+        return
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                f"{url}/api/revalidate",
+                headers={"x-revalidate-secret": secret},
+            )
+            logger.info(f"Vercel revalidate: {r.status_code}")
+    except Exception as e:
+        logger.warning(f"_revalidate_vercel failed (non-fatal): {e}")
 
 
 def set_notify(fn):
@@ -160,6 +180,9 @@ async def run_tuesday():
     enrich_summary = await run_enrichment()
     await notify(f"Enrichment complete:\n{enrich_summary}")
 
+    # ── Flush Vercel cache so new projects appear immediately ──
+    await _revalidate_vercel()
+
 
 def _build_project_summary(published: list, errors: list, skipped: list) -> str:
     lines = ["JARVIS Tuesday Run Complete\n"]
@@ -253,6 +276,34 @@ async def run_enrichment_only():
         raise
 
 
+async def run_set_featured(slug: str):
+    """
+    Mark one project as featured — shows in home page popup + carousel.
+    Clears any other featured project first.
+    Triggered by: SET FEATURED [slug]
+    """
+    try:
+        from .tools.storage import db
+        # Clear existing featured
+        db().table("projects").update({"is_featured": False}).neq("slug", "__never__").execute()
+        # Set new featured
+        res = db().table("projects").update({"is_featured": True}).eq("slug", slug).execute()
+        if res.data:
+            name = res.data[0].get("name", slug)
+            await _revalidate_vercel()
+            await notify(
+                f"Featured project updated!\n\n"
+                f"{name}\n"
+                f"dubai-portal.vercel.app/projects/{slug}\n\n"
+                f"This project will now appear in the home page popup and Featured carousel."
+            )
+        else:
+            await notify(f"Project '{slug}' not found in database. Check the slug and try again.")
+    except Exception as e:
+        logger.error(f"run_set_featured error: {e}")
+        await notify(f"Error setting featured project: {e}")
+
+
 async def run_test_area(area_name: str):
     """Debug: scrape one area from Bayut and report what was found."""
     await notify(f"Testing Bayut scrape for: {area_name}...")
@@ -261,3 +312,246 @@ async def run_test_area(area_name: str):
         await notify(report)
     except Exception as e:
         await notify(f"TEST AREA error: {e}")
+
+
+# ── Add a single specific project by URL ───────────────────────────────────────
+
+async def run_add_project(url: str):
+    """
+    Add one specific project by its opr.ae URL.
+    Use when a project launched mid-week or you want one specific listing.
+    Triggered by: ADD PROJECT [url]
+    """
+    global _active_task
+    _active_task = asyncio.current_task()
+
+    # Normalise URL
+    if not url.startswith("http"):
+        url = "https://opr.ae" + ("/" if not url.startswith("/") else "") + url
+
+    slug = url.rstrip("/").split("/")[-1]
+    await notify(f"Adding project: {slug}\nScraping {url}...")
+
+    try:
+        existing_slugs = get_existing_slugs()
+        if slug in existing_slugs:
+            await notify(f"Project '{slug}' already exists in our DB. Nothing to do.")
+            return
+
+        # Scrape detail page
+        raw = await scrape_project_detail(url)
+        if not raw:
+            await notify(f"Could not scrape {url}\nCheck the URL is a valid opr.ae project page.")
+            return
+
+        # Parse + humanize
+        parsed = await parse_and_humanize(raw)
+        if not parsed:
+            await notify(f"Could not parse project data from {url}")
+            return
+        if parsed.get("_skip"):
+            await notify(f"Project skipped — Claude determined it is not a UAE project.")
+            return
+
+        if parsed["slug"] in existing_slugs:
+            await notify(f"Project '{parsed['name']}' already exists in our DB.")
+            return
+
+        # Upsert developer + area
+        dev_data  = parsed.pop("_developer", {})
+        area_data = parsed.pop("_area", {})
+        dev_id  = upsert_developer(dev_data)
+        area_id = upsert_area(area_data)
+        if dev_id:
+            parsed["developer_id"] = dev_id
+        if area_id:
+            parsed["area_id"] = area_id
+
+        # Upload images
+        main_cloud, gallery_cloud = await upload_project_images(
+            slug=parsed["slug"],
+            main_url=raw.get("image_main"),
+            gallery_urls=raw.get("images_all", []),
+            max_gallery=10,
+        )
+        parsed["image_main"] = main_cloud
+        parsed["images_all"] = gallery_cloud
+
+        # Publish
+        row_id = publish_project(parsed)
+        if not row_id:
+            await notify(f"Failed to save project '{parsed['name']}' to database.")
+            return
+
+        price = f"AED {parsed['price_from']:,}" if parsed.get("price_from") else "Price on request"
+        await notify(
+            f"Project added successfully!\n\n"
+            f"{parsed['name']}\n"
+            f"{price}\n"
+            f"dubai-portal.vercel.app/projects/{parsed['slug']}\n\n"
+            f"Reply APPROVE ALL to submit to Google."
+        )
+
+        # Enrich any new area/developer
+        await notify("Running enrichment for new area/developer...")
+        enrich_summary = await run_enrichment()
+        if enrich_summary.strip():
+            await notify(f"Enrichment done:\n{enrich_summary}")
+
+        # Flush Vercel cache
+        await _revalidate_vercel()
+
+    except asyncio.CancelledError:
+        await notify("Add project stopped.")
+        raise
+    except Exception as e:
+        logger.error(f"run_add_project error: {e}")
+        await notify(f"Error adding project: {e}")
+
+
+# ── Backfill — catch all existing opr.ae projects not yet in DB ────────────────
+
+_BACKFILL_PER_RUN = 20   # projects scraped per BACKFILL run — keeps each run under ~12 min
+_BACKFILL_SCAN_DEPTH = 25  # Load More clicks during deep scan
+
+
+async def run_backfill():
+    """
+    Deep scan of opr.ae to backfill projects missed during initial scraping.
+    Each run scrapes up to 20 projects. Send BACKFILL PROJECTS again for the next batch.
+    Clicks Load More 25x (vs normal 5x) to reach older listings.
+    Triggered by: BACKFILL PROJECTS
+    """
+    global _active_task
+    _active_task = asyncio.current_task()
+
+    await notify(
+        f"JARVIS — Backfill started\n"
+        f"Deep-scanning opr.ae ({_BACKFILL_SCAN_DEPTH}× Load More) for projects not in our DB...\n"
+        f"Will process up to {_BACKFILL_PER_RUN} per run to avoid rate-limiting.\n"
+        f"Send BACKFILL PROJECTS again after this finishes for the next batch."
+    )
+
+    import jarvis.tools.scraper as _scraper
+    original_max = _scraper.MAX_LOAD_MORE
+    _scraper.MAX_LOAD_MORE = _BACKFILL_SCAN_DEPTH
+
+    try:
+        existing_slugs = get_existing_slugs()
+
+        # Scan deep — collect only _BACKFILL_PER_RUN stubs at a time
+        stubs = await scan_new_projects(existing_slugs, max_new=_BACKFILL_PER_RUN)
+
+        _scraper.MAX_LOAD_MORE = original_max  # restore right after scan
+
+        if not stubs:
+            await notify("Backfill complete — no missing projects found. DB is fully up to date.")
+            return
+
+        await notify(
+            f"Found {len(stubs)} missing projects this batch. Processing now...\n"
+            f"(There may be more — send BACKFILL PROJECTS again after this finishes.)"
+        )
+
+        published = []
+        errors    = []
+        skipped   = []
+
+        for i, stub in enumerate(stubs):
+            name = stub.get("name", stub["slug"])
+            try:
+                raw = await scrape_project_detail(stub["url"])
+                if not raw:
+                    errors.append(name)
+                    continue
+
+                parsed = await parse_and_humanize(raw)
+                if not parsed:
+                    errors.append(name)
+                    continue
+                if parsed.get("_skip"):
+                    skipped.append(name)
+                    continue
+
+                if parsed["slug"] in existing_slugs:
+                    skipped.append(parsed["name"])
+                    continue
+
+                dev_data  = parsed.pop("_developer", {})
+                area_data = parsed.pop("_area", {})
+                dev_id  = upsert_developer(dev_data)
+                area_id = upsert_area(area_data)
+                if dev_id:
+                    parsed["developer_id"] = dev_id
+                if area_id:
+                    parsed["area_id"] = area_id
+
+                main_cloud, gallery_cloud = await upload_project_images(
+                    slug=parsed["slug"],
+                    main_url=raw.get("image_main"),
+                    gallery_urls=raw.get("images_all", []),
+                    max_gallery=10,
+                )
+                parsed["image_main"] = main_cloud
+                parsed["images_all"] = gallery_cloud
+
+                row_id = publish_project(parsed)
+                if row_id:
+                    published.append({
+                        "id":    row_id,
+                        "name":  parsed["name"],
+                        "slug":  parsed["slug"],
+                        "price": parsed.get("price_from", 0),
+                    })
+                    existing_slugs.add(parsed["slug"])
+                else:
+                    errors.append(parsed["name"])
+
+                # Progress update every 5 items
+                if (i + 1) % 5 == 0:
+                    await notify(
+                        f"Backfill progress: {i + 1}/{len(stubs)} processed "
+                        f"({len(published)} published, {len(skipped)} skipped, {len(errors)} errors)"
+                    )
+
+                await asyncio.sleep(random.uniform(8, 14))
+
+            except asyncio.CancelledError:
+                await notify(
+                    f"Backfill stopped by user.\n"
+                    f"Published: {len(published)}, skipped: {len(skipped)}, failed: {len(errors)}"
+                )
+                raise
+            except Exception as e:
+                logger.error(f"Backfill error for '{name}': {e}")
+                errors.append(name)
+
+        # Final summary
+        lines = [f"Backfill batch done — {len(stubs)} projects processed this run\n"]
+        lines.append(f"Published: {len(published)}")
+        lines.append(f"Skipped (non-UAE / duplicate): {len(skipped)}")
+        lines.append(f"Failed: {len(errors)}")
+        if published:
+            lines.append("\nPublished this batch:")
+            for p in published:
+                price = f"AED {p['price']:,}" if p["price"] else "Price on request"
+                lines.append(f"  • {p['name']} — {price}")
+                lines.append(f"    dubai-portal.vercel.app/projects/{p['slug']}")
+        lines.append("\nSend BACKFILL PROJECTS again to process the next batch.")
+        if published:
+            lines.append("Send APPROVE ALL to submit these to Google.")
+        await notify("\n".join(lines))
+
+        # Enrich any new areas/developers created during backfill
+        if published:
+            await notify("Running enrichment for new areas and developers from backfill...")
+            enrich_summary = await run_enrichment()
+            await notify(f"Enrichment complete:\n{enrich_summary}")
+
+    except asyncio.CancelledError:
+        _scraper.MAX_LOAD_MORE = original_max
+        raise
+    except Exception as e:
+        _scraper.MAX_LOAD_MORE = original_max
+        logger.error(f"run_backfill error: {e}")
+        await notify(f"Backfill error: {e}")

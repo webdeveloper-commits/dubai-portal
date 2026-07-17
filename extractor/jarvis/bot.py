@@ -107,6 +107,46 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text(f"Testing Bayut scrape for '{area_name}'...")
             return
 
+        if upper.startswith("ADD PROJECT"):
+            project_url = user_text[11:].strip()
+            if not project_url:
+                await update.message.reply_text(
+                    "Usage: ADD PROJECT [opr.ae URL]\n"
+                    "Example: ADD PROJECT https://opr.ae/projects/sobha-orbis"
+                )
+                return
+            if runner.is_running():
+                await update.message.reply_text("A run is already in progress. Send STOP to cancel it first.")
+                return
+            await update.message.reply_text(f"Adding project from:\n{project_url}")
+            asyncio.create_task(runner.run_add_project(project_url))
+            return
+
+        if upper.startswith("SET FEATURED"):
+            slug = user_text[12:].strip()
+            if not slug:
+                await update.message.reply_text(
+                    "Usage: SET FEATURED [project-slug]\n"
+                    "Example: SET FEATURED sobha-orbis\n\n"
+                    "This sets one project as featured — it will appear in the home page popup and carousel."
+                )
+                return
+            asyncio.create_task(runner.run_set_featured(slug))
+            await update.message.reply_text(f"Setting '{slug}' as featured project...")
+            return
+
+        if upper in ("BACKFILL PROJECTS", "BACKFILL", "RUN BACKFILL"):
+            if runner.is_running():
+                await update.message.reply_text("A run is already in progress. Send STOP to cancel it first.")
+                return
+            await update.message.reply_text(
+                "Starting deep backfill scan...\n"
+                "This scans opr.ae 25× deeper than the weekly run to find all projects "
+                "not yet in our DB.\nWill take 10–30 minutes depending on how many are missing."
+            )
+            asyncio.create_task(runner.run_backfill())
+            return
+
         # ── Everything else → Claude brain ──
         reply = chat(chat_id, user_text)
         for chunk in _split(reply):

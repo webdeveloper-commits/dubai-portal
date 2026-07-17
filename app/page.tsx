@@ -1,5 +1,6 @@
 import HeroSection from "@/app/components/HeroSection";
-import FeaturedProjects from "@/app/components/FeaturedProjects";
+import FeaturedProjects, { FeaturedProject } from "@/app/components/FeaturedProjects";
+import FeaturedProjectPopup from "@/app/components/FeaturedProjectPopup";
 import PropertyTypes from "@/app/components/PropertyTypes";
 import LuxuryResidences from "@/app/components/LuxuryResidences";
 import PropertiesByArea from "@/app/components/PropertiesByArea";
@@ -33,20 +34,65 @@ function mapRow(r: Record<string, unknown>): Project {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapFeatured(r: any): FeaturedProject {
+  const q  = r.handover_quarter ?? "";
+  const yr = r.handover_year ?? "";
+  const imgs = (r.images_all as string[]) ?? [];
+  const status = r.status as string;
+  const tag = status === "new_launch" ? "New Launch" : status === "ready" ? "Ready" : "Off-Plan";
+  return {
+    id:          r.id,
+    name:        r.name ?? "Unnamed Project",
+    slug:        r.slug,
+    developer:   ((r.developer_slug ?? "") as string).replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
+    area:        r.geo_summary ?? "Dubai, UAE",
+    tag,
+    priceFrom:   r.price_from ?? 0,
+    handover:    [q, yr || ""].filter(Boolean).join(" "),
+    image:       r.image_main ?? imgs[0] ?? "",
+    paymentPlan: r.payment_plan_summary ?? undefined,
+  };
+}
+
 export const revalidate = 3600;
 
 export default async function Home() {
+  // All published projects for hero filter
   const { data: rows } = await supabase
     .from("projects")
     .select("id,name,slug,status,price_from,handover_quarter,handover_year,bedroom_min,bedroom_max,property_types,lifestyle_tags,image_main,images_all,geo_summary,developer_slug,is_published")
+    .eq("is_published", true)
     .order("created_at", { ascending: false });
 
   const projects: Project[] = (rows ?? []).map(mapRow);
 
+  // Featured projects for the carousel (is_featured first, then newest — up to 4)
+  const { data: featuredRows } = await supabase
+    .from("projects")
+    .select("id,name,slug,status,price_from,handover_quarter,handover_year,image_main,images_all,geo_summary,developer_slug,payment_plan_summary,is_featured,is_published")
+    .eq("is_published", true)
+    .order("is_featured", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(4);
+
+  const featuredProjects: FeaturedProject[] = (featuredRows ?? []).map(mapFeatured);
+
+  // Single popup project — the one explicitly marked is_featured
+  const popupProject = (featuredRows ?? []).find(r => r.is_featured) ?? null;
+  const popup = popupProject ? {
+    name:       popupProject.name   ?? "Project",
+    slug:       popupProject.slug   ?? "",
+    price_from: popupProject.price_from ?? null,
+    image_main: popupProject.image_main ?? null,
+    area:       popupProject.geo_summary ?? "Dubai, UAE",
+    developer:  ((popupProject.developer_slug ?? "") as string).replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
+  } : null;
+
   return (
     <main>
       <HeroSection projects={projects} />
-      <FeaturedProjects />
+      <FeaturedProjects projects={featuredProjects} />
       <PropertyTypes />
       <LuxuryResidences />
       <PropertiesByArea />
@@ -56,6 +102,7 @@ export default async function Home() {
       <Disclaimer />
       <CookieBanner />
       <FloatingContact />
+      <FeaturedProjectPopup project={popup} />
     </main>
   );
 }

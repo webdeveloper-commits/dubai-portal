@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ChevronDown, Menu, X } from "lucide-react";
+import EnquiryModal from "@/app/components/EnquiryModal";
 
 const navLinks = [
   { label: "Properties", href: "/projects" },
@@ -13,6 +14,7 @@ export default function Navbar({ developers = [] }: { developers?: { name: strin
   const [devOpen, setDevOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [enquiryOpen, setEnquiryOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -199,17 +201,16 @@ export default function Navbar({ developers = [] }: { developers?: { name: strin
               FAQ
             </Link>
 
-            <a
-              href="https://wa.me/971400000000"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={() => setEnquiryOpen(true)}
               style={{
                 fontFamily: "var(--font-montserrat), Montserrat, sans-serif",
                 fontWeight: 700,
                 fontSize: 12,
                 color: "#192537",
                 background: "#7fe2e3",
-                textDecoration: "none",
+                border: "none",
+                cursor: "pointer",
                 padding: "9px 20px",
                 borderRadius: 999,
                 marginLeft: 8,
@@ -220,8 +221,8 @@ export default function Navbar({ developers = [] }: { developers?: { name: strin
               onMouseEnter={e => (e.currentTarget.style.background = "white")}
               onMouseLeave={e => (e.currentTarget.style.background = "#7fe2e3")}
             >
-              Contact Us
-            </a>
+              Enquire Now
+            </button>
           </div>
 
           {/* Mobile hamburger */}
@@ -297,15 +298,12 @@ export default function Navbar({ developers = [] }: { developers?: { name: strin
             FAQ
           </Link>
 
-          <a
-            href="https://wa.me/971400000000"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => setMobileOpen(false)}
-            style={{ fontFamily: "var(--font-montserrat), Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#192537", background: "#7fe2e3", textDecoration: "none", padding: "14px 20px", borderRadius: 999, textAlign: "center", marginTop: 16 }}
+          <button
+            onClick={() => { setMobileOpen(false); setEnquiryOpen(true); }}
+            style={{ fontFamily: "var(--font-montserrat), Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#192537", background: "#7fe2e3", border: "none", cursor: "pointer", padding: "14px 20px", borderRadius: 999, textAlign: "center", marginTop: 16, width: "100%" }}
           >
-            Contact Us
-          </a>
+            Enquire Now
+          </button>
         </div>
       )}
 
@@ -319,6 +317,8 @@ export default function Navbar({ developers = [] }: { developers?: { name: strin
           .nav-mobile-toggle { display: flex !important; }
         }
       `}</style>
+
+      <EnquiryModal isOpen={enquiryOpen} onClose={() => setEnquiryOpen(false)} />
     </>
   );
 }

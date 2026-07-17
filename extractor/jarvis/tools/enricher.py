@@ -492,16 +492,38 @@ async def _scrape_bayut_area_guide_inner(url: str, area_name: str) -> dict:
         if nd:
             result = _parse_next_data(nd, area_name)
 
-        # ── Step 2: DOM extraction fills gaps ──────────────────────────────
+        # ── Step 2: Section-ID-based DOM extraction ────────────────────────
         dom_result = await page.evaluate("""() => {
             const r = {
-                hero_image: null, tagline: '',
-                description: '', community_overview: '',
-                schools: [], hospitals: [], attractions: [], lifestyle: ''
+                hero_image: null,
+                description: '',
+                nutshell: [],
+                community_overview: '',
+                transport: '',
+                schools: [],
+                hospitals: [],
+                nearby_areas: [],
+                lifestyle: '',
+                shopping: '',
+                faqs: [],
+                location: '',
+                malls: [],
             };
 
-            // Exclude navigation, sidebar, footer, enquiry form
-            function isInExcludedArea(el) {
+            // ── Helpers ──────────────────────────────────────────────────────
+            function getImgSrc(el) {
+                if (!el) return null;
+                return el.getAttribute('src') || el.getAttribute('data-src') ||
+                       el.getAttribute('data-lazy-src') || el.getAttribute('data-original') || null;
+            }
+            function isBadImg(src) {
+                if (!src || !src.startsWith('http')) return true;
+                const sl = src.toLowerCase();
+                return sl.includes('logo') || sl.includes('.svg') || sl.includes('icon') ||
+                       sl.includes('placeholder') || sl.includes('avatar') || sl.includes('spinner') ||
+                       sl.includes('bayutlogo') || sl.includes('default') || sl.includes('map');
+            }
+            function isExcluded(el) {
                 let p = el ? el.parentElement : null;
                 while (p && p !== document.body) {
                     const tag = p.tagName;
@@ -516,22 +538,21 @@ async def _scrape_bayut_area_guide_inner(url: str, area_name: str) -> dict:
                 }
                 return false;
             }
+            const NOISE = [
+                /keyboard_arrow/i, /chevron_right/i, /arrow_forward/i,
+                /^building guides?$/i, /^school guides?$/i, /^area guides?$/i,
+                /^dubai transactions$/i, /^truestimate/i,
+                /^areas?$/i, /^ready$/i, /^off.?plan$/i, /^rent$/i, /^buy$/i,
+                /aed\\s*[\\d,]+/i, /\\d+\\s*bed/i, /per year/i, /per month/i,
+                /call agent/i, /whatsapp/i, /view details/i, /listed by/i,
+                /apartments for sale/i, /villas for sale/i, /for rent in/i,
+                /send enquiry/i, /free consultation/i, /no obligation/i,
+                /^view properties/i, /^view all/i, /^see all/i,
+                /^floor plans$/i, /^new projects$/i, /^agents?$/i,
+            ];
+            function isNoise(t) { return !t || NOISE.some(p => p.test(t)); }
 
-            function getImgSrc(el) {
-                if (!el) return null;
-                return el.getAttribute('src') || el.getAttribute('data-src') ||
-                       el.getAttribute('data-lazy-src') || el.getAttribute('data-original') || null;
-            }
-
-            function isBadImg(src) {
-                if (!src || !src.startsWith('http')) return true;
-                const sl = src.toLowerCase();
-                return sl.includes('logo') || sl.includes('.svg') || sl.includes('icon') ||
-                       sl.includes('placeholder') || sl.includes('avatar') || sl.includes('spinner') ||
-                       sl.includes('bayutlogo') || sl.includes('default');
-            }
-
-            // Hero: CSS background-image first (Bayut's hero is usually a bg-image div)
+            // ── Hero image ────────────────────────────────────────────────────
             const bgSels = [
                 '[class*="pageHeader"]', '[class*="_hero"]', '[class*="_banner"]',
                 '[class*="_cover"]', '[class*="communityHeader"]', '[class*="headerImage"]'
@@ -548,114 +569,238 @@ async def _scrape_bayut_area_guide_inner(url: str, area_name: str) -> dict:
             if (!r.hero_image) {
                 for (const src of document.querySelectorAll('picture source')) {
                     const ss = src.getAttribute('srcset') || src.getAttribute('data-srcset') || '';
-                    const firstUrl = ss.split(',')[0].trim().split(' ')[0];
-                    if (!isBadImg(firstUrl)) { r.hero_image = firstUrl; break; }
+                    const u = ss.split(',')[0].trim().split(' ')[0];
+                    if (!isBadImg(u)) { r.hero_image = u; break; }
                 }
             }
             if (!r.hero_image) {
-                const imgSels = [
-                    '[class*="_hero"] img', '[class*="_banner"] img',
-                    '[class*="_cover"] img', 'picture img', 'main img'
-                ];
-                for (const sel of imgSels) {
+                for (const sel of ['[class*="_hero"] img','[class*="_banner"] img','picture img','main img']) {
                     const el = document.querySelector(sel);
-                    if (!el || isInExcludedArea(el)) continue;
+                    if (!el || isExcluded(el)) continue;
                     const src = getImgSrc(el);
                     if (!isBadImg(src)) { r.hero_image = src; break; }
                 }
             }
             if (!r.hero_image) {
                 for (const img of document.querySelectorAll('img')) {
-                    if (isInExcludedArea(img)) continue;
+                    if (isExcluded(img)) continue;
                     const src = getImgSrc(img);
-                    if (!isBadImg(src) && src.length > 40) { r.hero_image = src; break; }
+                    if (!isBadImg(src) && src && src.length > 40) { r.hero_image = src; break; }
                 }
             }
 
-            // Skip patterns: nav, breadcrumbs, listing prices, form labels
-            const SKIP = [
-                /keyboard_arrow/i, /chevron_right/i, /arrow_forward/i,
-                /^building guides?$/i, /^school guides?$/i, /^area guides?$/i,
-                /^dubai transactions$/i, /^truestimate/i,
-                /^areas?$/i, /^ready$/i, /^off.?plan$/i, /^rent$/i, /^buy$/i, /^agents?$/i,
-                /aed\\s*[\\d,]+/i, /\\d+\\s*bed/i, /\\d+\\s*bath/i,
-                /per year/i, /per month/i, /call agent/i,
-                /whatsapp/i, /view details/i, /listed by/i,
-                /top broker/i, /top agent/i,
-                /apartments for sale/i, /villas for sale/i,
-                /for rent in/i, /floor plans/i, /new projects/i,
-                /send enquiry/i, /free consultation/i,
-                /no obligation/i, /reply within/i, /your name/i,
-                /email address/i, /phone.*whatsapp/i,
-                /^view properties/i, /^view all/i, /^see all/i,
-            ];
-            function isSkip(t) { return SKIP.some(p => p.test(t)); }
+            // ── Section extractor using Bayut's id= anchors ───────────────────
+            // Returns all paragraph/list text between a section anchor and the next [id] element.
+            // Uses compareDocumentPosition for reliable DOM-order checks:
+            //   anchor.compareDocumentPosition(el) & 4 → el FOLLOWS anchor
+            //   boundary.compareDocumentPosition(el) & 2 → el PRECEDES boundary
+            function _sectionBounds(sectionId) {
+                const anchor = document.getElementById(sectionId);
+                if (!anchor) return null;
+                // Use document-level query so anchor is always found even if outside <main>
+                const allTagged = Array.from(document.querySelectorAll('[id]'));
+                const anchorIdx = allTagged.indexOf(anchor);
+                const boundary = anchorIdx >= 0 ? allTagged[anchorIdx + 1] : null;
+                const scope = document.querySelector('main') || document.body;
+                return { anchor, boundary, scope };
+            }
 
-            // Walk content scoped to <main> or <article>
-            const scope = document.querySelector('main') || document.querySelector('article') || document.body;
-            const els = Array.from(scope.querySelectorAll('h1,h2,h3,h4,p,li'));
-            const sections = {};
-            let current = '__intro__';
-            sections[current] = [];
-
-            for (const el of els) {
-                if (isInExcludedArea(el)) continue;
-                const text = el.innerText.trim();
-                if (!text || text.length < 10) continue;
-                if (isSkip(text)) continue;
-                // Skip elements that are mostly anchor link text (navigation blobs)
-                const anchors = el.querySelectorAll('a');
-                if (anchors.length > 2) {
-                    const aLen = Array.from(anchors).reduce((s, a) => s + a.innerText.length, 0);
-                    if (aLen > text.length * 0.5) continue;
+            function extractSection(sectionId) {
+                const b = _sectionBounds(sectionId);
+                if (!b) return '';
+                const { anchor, boundary, scope } = b;
+                const allEls = Array.from(scope.querySelectorAll('p,li'));
+                const parts = [];
+                for (const el of allEls) {
+                    // Must come after anchor in DOM order
+                    if (!(anchor.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+                    // Stop when we reach or pass the boundary
+                    if (boundary && !(boundary.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) break;
+                    if (isExcluded(el)) continue;
+                    // Skip LI/P that have block children (avoid double-collecting)
+                    if (el.querySelector('ul,ol,div,p')) continue;
+                    const t = (el.innerText || '').trim();
+                    if (t.length < 15 || isNoise(t)) continue;
+                    const anchors = el.querySelectorAll('a');
+                    const aLen = Array.from(anchors).reduce((s,a) => s + a.innerText.length, 0);
+                    if (anchors.length > 2 && aLen > t.length * 0.6) continue;
+                    parts.push(t);
                 }
-                if (['H1','H2','H3','H4'].includes(el.tagName)) {
-                    current = text;
-                    if (!sections[current]) sections[current] = [];
-                } else {
-                    sections[current].push(text);
+                return parts.join('\\n\\n');
+            }
+
+            // Variant that collects items as an array (for bullet-list / named-list sections)
+            function extractSectionList(sectionId) {
+                const b = _sectionBounds(sectionId);
+                if (!b) return [];
+                const { anchor, boundary, scope } = b;
+                const allEls = Array.from(scope.querySelectorAll('li,p'));
+                const items = [];
+                for (const el of allEls) {
+                    if (!(anchor.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+                    if (boundary && !(boundary.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) break;
+                    if (isExcluded(el)) continue;
+                    if (el.querySelector('ul,ol,div,p')) continue;
+                    const t = (el.innerText || '').trim();
+                    if (t.length > 5 && !isNoise(t)) items.push(t);
+                }
+                return [...new Set(items)];
+            }
+
+            // ── FAQs: find any id that has "faq" in it ───────────────────────
+            function extractFaqs() {
+                const faqEl = document.querySelector('[id*="faq" i]') ||
+                              document.querySelector('[id*="question" i]');
+                if (!faqEl) return [];
+                const scope = document.querySelector('main') || document.body;
+                const allTagged = Array.from(scope.querySelectorAll('[id]'));
+                const anchorIdx = allTagged.indexOf(faqEl);
+                const boundary = anchorIdx >= 0 ? allTagged[anchorIdx + 1] : null;
+
+                const faqs = [];
+                // Collect all h3/h4 (questions) and p (answers) after the faq anchor
+                const allEls = Array.from(scope.querySelectorAll('h3,h4,p'));
+                let pendingQ = null;
+                for (const el of allEls) {
+                    if (!(faqEl.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+                    if (boundary && !(boundary.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) break;
+                    if (isExcluded(el)) continue;
+                    const tag = el.tagName;
+                    const t = (el.innerText || '').trim();
+                    if (!t || t.length < 10) continue;
+
+                    if (['H3','H4'].includes(tag)) {
+                        if (pendingQ) faqs.push({ question: pendingQ, answer: '' });
+                        pendingQ = t;
+                    } else if (tag === 'P' && pendingQ) {
+                        if (el.querySelector('p')) continue;
+                        if (t.length > 20 && !isNoise(t)) {
+                            faqs.push({ question: pendingQ, answer: t });
+                            pendingQ = null;
+                        }
+                    }
+                }
+                if (pendingQ) faqs.push({ question: pendingQ, answer: '' });
+                return faqs.slice(0, 15);
+            }
+
+            // ── Extract all known Bayut section IDs ──────────────────────────
+            // About section: id starts with "about-"
+            const aboutAnchor = document.querySelector('[id^="about-"]');
+            if (aboutAnchor) r.description = extractSection(aboutAnchor.id);
+
+            // In a nutshell bullets
+            const nutshellAnchor = document.getElementById('in-a-nutshell') ||
+                                   document.querySelector('[id*="nutshell" i]');
+            if (nutshellAnchor) r.nutshell = extractSectionList(nutshellAnchor.id);
+
+            // Neighbourhood overview (usually more detail than "about")
+            const neighbourhoodAnchor = document.getElementById('neighbourhood') ||
+                                        document.querySelector('[id*="neighbourhood" i]');
+            if (neighbourhoodAnchor) {
+                const t = extractSection(neighbourhoodAnchor.id);
+                if (t) r.description = r.description ? r.description + '\\n\\n' + t : t;
+            }
+
+            // Community overview
+            const communityAnchor = document.getElementById('community-overview') ||
+                                    document.querySelector('[id*="community-overview" i]');
+            if (communityAnchor) {
+                const t = extractSection(communityAnchor.id);
+                r.community_overview = t;
+                if (t) r.description = r.description ? r.description + '\\n\\n' + t : t;
+            }
+
+            // Transport / commute — try both transport and the longer public-transportation-in-* id
+            const transportAnchor = document.getElementById('transport') ||
+                                    document.querySelector('[id^="public-transportation" i]') ||
+                                    document.querySelector('[id*="transport" i]');
+            if (transportAnchor) r.transport = extractSection(transportAnchor.id);
+
+            // Amenities / schools / healthcare section (descriptive paragraphs)
+            const amenitiesAnchor = document.querySelector('[id*="amenities" i]') ||
+                                    document.querySelector('[id*="amenities,-schools" i]');
+            // Schools: id ending in "-schools" (e.g. "al-raha-beach-schools")
+            // Avoid "amenities,-schools-and-healthcare" which is just a section header
+            const schoolsAnchor = document.querySelector('[id$="-schools"]') ||
+                                  document.querySelector('[id$="schools"]') ||
+                                  document.querySelector('[id*="school" i]:not([id*="amenities" i])');
+            if (schoolsAnchor) {
+                r.schools = extractSectionList(schoolsAnchor.id);
+                if (!r.schools.length) {
+                    const txt = extractSection(schoolsAnchor.id);
+                    if (txt) r.schools = txt.split('\\n\\n').filter(t => t.length > 5);
+                }
+            }
+            // If still empty, use amenities section for schools
+            if (!r.schools.length && amenitiesAnchor) {
+                const txt = extractSection(amenitiesAnchor.id);
+                if (txt) r.schools = txt.split('\\n\\n').filter(t => t.length > 10 &&
+                    (t.toLowerCase().includes('school') || t.toLowerCase().includes('university') ||
+                     t.toLowerCase().includes('nursery') || t.toLowerCase().includes('education')));
+            }
+
+            // Hospitals / clinics
+            const hospAnchor = document.querySelector('[id*="hospital" i]') ||
+                               document.querySelector('[id*="clinic" i]') ||
+                               document.querySelector('[id*="healthcare" i]');
+            if (hospAnchor) {
+                r.hospitals = extractSectionList(hospAnchor.id);
+                if (!r.hospitals.length) {
+                    const txt = extractSection(hospAnchor.id);
+                    if (txt) r.hospitals = txt.split('\\n\\n').filter(t => t.length > 5);
                 }
             }
 
-            // ── Description: collect first 4 substantial paragraphs (>60 chars) ──
-            // Heading-bucket approach misidentifies the h1 area name as a section,
-            // so we go direct: find real content paragraphs in <main>.
-            const BAD_DESC = ['keyboard_arrow', 'Apartments for sale in Dubai',
-                              'Building Guides', 'Dubai Transactions', 'for sale in Abu Dhabi',
-                              'for rent in Dubai', 'New Projects', 'TrueEstimate'];
-            const descParas = [];
-            for (const p of scope.querySelectorAll('p')) {
-                if (isInExcludedArea(p)) continue;
-                const t = p.innerText.trim();
-                if (t.length < 60) continue;
-                if (isSkip(t)) continue;
-                if (BAD_DESC.some(b => t.includes(b))) continue;
-                descParas.push(t);
-                if (descParas.join(' ').length > 700) break;
-            }
-            if (descParas.length > 0) {
-                r.description = descParas.slice(0, 4).join('\\n\\n').slice(0, 800);
-            }
+            // Nearby areas
+            const nearbyAnchor = document.getElementById('nearby-areas') ||
+                                 document.querySelector('[id*="nearby-area" i]');
+            if (nearbyAnchor) r.nearby_areas = extractSectionList(nearbyAnchor.id);
 
-            // ── Schools / hospitals / lifestyle via heading buckets ──
-            for (const [heading, texts] of Object.entries(sections)) {
-                const h = heading.toLowerCase();
-                const content = texts.join('\\n').trim();
-                if (!content) continue;
-                if (h.includes('school') || h.includes('education') || h.includes('university')) {
-                    r.schools = texts.filter(t => t.length > 5 && !isSkip(t)).slice(0, 10);
-                } else if (h.includes('hospital') || h.includes('healthcare') || h.includes('clinic')) {
-                    r.hospitals = texts.filter(t => t.length > 5 && !isSkip(t)).slice(0, 10);
-                } else if (h.includes('shopping') || h.includes('dining') || h.includes('nightlife') ||
-                           h.includes('leisure') || h.includes('landmark') || h.includes('entertainment') ||
-                           h.includes('lifestyle') || h.includes('recreation') || h.includes('fitness')) {
-                    r.attractions = r.attractions.concat(texts.filter(t => t.length > 5).slice(0, 5));
-                    r.lifestyle += content.slice(0, 300) + '\\n';
+            // Shopping / dining / nightlife
+            const shoppingAnchor = document.querySelector('[id*="shopping,-dining" i]') ||
+                                   document.querySelector('[id*="shopping" i]') ||
+                                   document.querySelector('[id*="dining" i]');
+            if (shoppingAnchor) r.shopping = extractSection(shoppingAnchor.id);
+
+            // Malls
+            const mallsAnchor = document.querySelector('[id*="mall" i]');
+            if (mallsAnchor) r.malls = extractSectionList(mallsAnchor.id);
+
+            // Lifestyle: the 'lifestyle' id is just a nav header — real content is in sub-sections
+            // outdoor-activities,fitness,beauty is the main content section
+            const lifestyleAnchor = document.querySelector('[id*="outdoor-activities" i]') ||
+                                    document.querySelector('[id*="fitness" i]') ||
+                                    document.querySelector('[id*="recreation" i]') ||
+                                    document.getElementById('lifestyle');
+            if (lifestyleAnchor) r.lifestyle = extractSection(lifestyleAnchor.id);
+
+            // Location / distances
+            const locationAnchor = document.getElementById('location') ||
+                                   document.querySelector('[id*="location" i]');
+            if (locationAnchor) r.location = extractSection(locationAnchor.id);
+
+            // FAQs
+            r.faqs = extractFaqs();
+
+            // Fallback: if description still empty, collect first 6 <p> > 80 chars from main
+            if (!r.description) {
+                const BAD = ['keyboard_arrow','Apartments for sale','Building Guides',
+                             'Dubai Transactions','for rent in Dubai','New Projects','TrueEstimate',
+                             'bayut.com','propertyfinder'];
+                const scope = document.querySelector('main') || document.body;
+                const paras = [];
+                for (const p of scope.querySelectorAll('p')) {
+                    if (isExcluded(p)) continue;
+                    const t = p.innerText.trim();
+                    if (t.length < 80 || isNoise(t)) continue;
+                    if (BAD.some(b => t.includes(b))) continue;
+                    paras.push(t);
+                    if (paras.length >= 6) break;
                 }
+                r.description = paras.join('\\n\\n');
             }
 
-            r.attractions = [...new Set(r.attractions)].slice(0, 10);
-            r.lifestyle = r.lifestyle.trim().slice(0, 600);
             return r;
         }""")
 
@@ -668,8 +813,12 @@ async def _scrape_bayut_area_guide_inner(url: str, area_name: str) -> dict:
             f"Bayut guide '{area_name}' — "
             f"hero={'yes' if result.get('hero_image') else 'no'}, "
             f"desc={len(result.get('description',''))} chars, "
+            f"nutshell={len(result.get('nutshell',[]))}, "
             f"schools={len(result.get('schools',[]))}, "
-            f"hospitals={len(result.get('hospitals',[]))}"
+            f"hospitals={len(result.get('hospitals',[]))}, "
+            f"faqs={len(result.get('faqs',[]))}, "
+            f"transport={len(result.get('transport',''))} chars, "
+            f"lifestyle={len(result.get('lifestyle',''))} chars"
         )
 
     except Exception as e:
@@ -735,14 +884,31 @@ async def test_area_scrape(area_name: str) -> str:
 
         sample = await page.evaluate("""() => {
             const scope = document.querySelector('main') || document.body;
-            return Array.from(scope.querySelectorAll('p'))
+            // Collect all [id] anchors to understand section structure
+            const ids = Array.from(scope.querySelectorAll('[id]')).map(el => el.id).filter(Boolean);
+            const paras = Array.from(scope.querySelectorAll('p'))
                 .map(p => p.innerText.trim())
-                .filter(t => t.length > 30)
+                .filter(t => t.length > 40)
                 .slice(0, 5);
+            return { ids: ids.slice(0, 30), paras };
         }""")
-        lines.append(f"First <p> texts in <main>: {len(sample)} found")
-        for i, t in enumerate(sample, 1):
+        lines.append(f"Section IDs found: {sample.get('ids', [])}")
+        paras = sample.get('paras', [])
+        lines.append(f"First <p> texts in <main>: {len(paras)} found")
+        for i, t in enumerate(paras, 1):
             lines.append(f"  {i}. {t[:120]}")
+
+        # Also show what the full scraper extracts
+        lines.append("\nPhase 4: Full extraction preview...")
+        scraped = await scrape_bayut_area_guide(url, area_name)
+        lines.append(f"  description: {len(scraped.get('description',''))} chars — {scraped.get('description','')[:200]}")
+        lines.append(f"  nutshell: {scraped.get('nutshell', [])[:3]}")
+        lines.append(f"  transport: {scraped.get('transport','')[:150]}")
+        lines.append(f"  schools: {scraped.get('schools', [])[:3]}")
+        lines.append(f"  hospitals: {scraped.get('hospitals', [])[:3]}")
+        lines.append(f"  lifestyle: {scraped.get('lifestyle','')[:150]}")
+        lines.append(f"  faqs: {len(scraped.get('faqs', []))} found")
+        lines.append(f"  nearby_areas: {scraped.get('nearby_areas', [])[:5]}")
 
     except Exception as e:
         lines.append(f"Scrape error: {e}")
@@ -754,135 +920,381 @@ async def test_area_scrape(area_name: str) -> str:
 
 # ── Developer website search ───────────────────────────────────────────────────
 
-async def find_developer_website(dev_name: str) -> str | None:
-    """
-    DuckDuckGo search for the developer's official UAE website.
-    Searches: '[developer name] UAE real estate developer official website'
-    Returns the first non-portal result URL, or None.
-    """
+async def _ddg_find_developer_website(dev_name: str) -> str | None:
+    """DuckDuckGo search for developer's official website."""
     query = f'"{dev_name}" UAE real estate developer official website'
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
             r = await client.get(
                 "https://html.duckduckgo.com/html/",
                 params={"q": query},
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/124.0.0.0 Safari/537.36"
-                    ),
-                    "Accept-Language": "en-US,en;q=0.9",
-                },
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", "Accept-Language": "en-US,en;q=0.9"},
             )
         soup = BeautifulSoup(r.text, "html.parser")
-
-        for result in soup.select(".result__a"):
-            href = result.get("href", "")
-            # DuckDuckGo wraps result URLs in /l/?uddg= redirects
+        import urllib.parse as _ulp
+        for a in soup.select(".result__a"):
+            href = a.get("href", "")
             m = re.search(r'uddg=(https?[^&]+)', href)
             if m:
-                import urllib.parse
-                href = urllib.parse.unquote(m.group(1))
-
+                href = _ulp.unquote(m.group(1))
             if not href.startswith("http"):
                 continue
-
             domain = re.sub(r'^https?://(www\.)?', '', href).split('/')[0].lower()
-            if not any(skip in domain for skip in _PORTAL_DOMAINS):
-                logger.info(f"Developer website found for '{dev_name}': {href}")
+            if not any(s in domain for s in _PORTAL_DOMAINS):
+                logger.info(f"DDG found developer site for '{dev_name}': {href}")
                 return href
-
     except Exception as e:
-        logger.warning(f"find_developer_website failed for '{dev_name}': {e}")
-
+        logger.warning(f"DDG dev search failed for '{dev_name}': {e}")
     return None
 
 
+async def _bing_find_developer_website(dev_name: str) -> str | None:
+    """Bing search fallback for developer's official website."""
+    query = f'"{dev_name}" UAE real estate developer official site'
+    try:
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+            r = await client.get(
+                "https://www.bing.com/search",
+                params={"q": query},
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", "Accept-Language": "en-US,en;q=0.9"},
+            )
+        soup = BeautifulSoup(r.text, "html.parser")
+        for a in soup.select("h2 a"):
+            href = a.get("href", "")
+            if not href.startswith("http"):
+                continue
+            href = href.split("?")[0]
+            domain = re.sub(r'^https?://(www\.)?', '', href).split('/')[0].lower()
+            if not any(s in domain for s in _PORTAL_DOMAINS) and domain:
+                logger.info(f"Bing found developer site for '{dev_name}': {href}")
+                return href
+    except Exception as e:
+        logger.warning(f"Bing dev search failed for '{dev_name}': {e}")
+    return None
+
+
+async def find_developer_website(dev_name: str) -> str | None:
+    """DDG → Bing fallback. Returns first non-portal result URL."""
+    url = await _ddg_find_developer_website(dev_name)
+    if url:
+        return url
+    logger.info(f"DDG failed for '{dev_name}', trying Bing...")
+    return await _bing_find_developer_website(dev_name)
+
+
 async def scrape_developer_website(url: str, dev_name: str) -> dict:
-    """Scrape developer's official website for cover image, about text, contact, founding year."""
+    """
+    Scrape developer's official website for: logo, hero image, about text,
+    founding year, HQ, unit/employee stats, contact. Then supplement with
+    Claude-generated FAQs, strengths, key projects, intro_short.
+    """
+    # Always use the root homepage — sub-pages from search results miss hero/logo
+    from urllib.parse import urlparse as _urlparse
+    parsed = _urlparse(url)
+    root_url = f"{parsed.scheme}://{parsed.netloc}/"
+
     browser = await get_browser()
     page = await _new_stealth_page(browser)
-    result = {}
+    scraped = {}
 
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        await asyncio.sleep(3)
-        await page.evaluate("window.scrollTo(0, 600)")
-        await asyncio.sleep(1)
-        await page.evaluate("window.scrollTo(0, 0)")
+        # Load root homepage; try networkidle for JS-heavy SPAs, fall back on timeout
+        try:
+            await page.goto(root_url, wait_until="networkidle", timeout=35_000)
+        except Exception:
+            try:
+                await page.goto(root_url, wait_until="load", timeout=25_000)
+            except Exception:
+                pass
+        await asyncio.sleep(4)
+        # Scroll to trigger lazy-loads, then back to top
+        for y in [600, 1400, 2500, 0]:
+            await page.evaluate(f"window.scrollTo(0, {y})")
+            await asyncio.sleep(0.8)
 
-        extracted = await page.evaluate("""() => {
-            const r = {};
+        scraped = await page.evaluate("""() => {
+            const r = {
+                logo_url: null, cover_image_url: null,
+                tagline: '', about: '',
+                founded_year: null, total_units: null, employees: null,
+                years_active: null, headquarters: null,
+                phone: null, email: null, about_url: null,
+            };
 
-            // Cover / hero image (not logo — a large banner image)
-            function getImgSrc(el) {
+            function getSrc(el) {
                 if (!el) return null;
-                return el.getAttribute('src') || el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || null;
+                return el.getAttribute('src') || el.getAttribute('data-src') ||
+                       el.getAttribute('data-lazy-src') || el.getAttribute('data-original') || null;
             }
-            const coverSels = [
-                '[class*="hero"] img', '[class*="banner"] img',
-                '[class*="cover"] img', '[class*="header"] img',
-                'section img', 'main img'
+            function badSrc(src) {
+                if (!src || !src.startsWith('http')) return true;
+                const sl = src.toLowerCase();
+                return sl.includes('placeholder') || sl.includes('spinner') || sl.includes('blank');
+            }
+
+            // ── Logo (header / nav) ───────────────────────────────────────────
+            const logoSels = [
+                'header img[class*="logo" i]', 'header img[alt*="logo" i]',
+                'nav img[class*="logo" i]',   'nav img[alt*="logo" i]',
+                '[class*="navbar"] img',       '[class*="header"] img[class*="logo" i]',
+                '.logo img', '#logo img',      '[class*="brand"] img',
+                'header a > img',              'nav a > img',
+                'header img',                  'nav img',
             ];
-            for (const sel of coverSels) {
+            for (const sel of logoSels) {
                 const el = document.querySelector(sel);
-                const src = getImgSrc(el);
-                if (src && src.startsWith('http') && !src.includes('logo') && !src.includes('icon') && !src.includes('placeholder')) {
-                    r.cover_image_url = src;
-                    break;
+                const src = getSrc(el);
+                if (src && src.startsWith('http') && !badSrc(src)) {
+                    r.logo_url = src; break;
                 }
             }
 
-            // About / company description — longer version
+            // ── Cover / hero image (large banner, NOT logo) ───────────────────
+            // Try CSS background-image first (common pattern)
+            const bgSels = [
+                '[class*="hero"]', '[class*="banner"]', '[class*="slider"]',
+                '[class*="cover"]', '[class*="intro"]', 'section:first-of-type',
+            ];
+            for (const sel of bgSels) {
+                const el = document.querySelector(sel);
+                if (!el) continue;
+                const bg = window.getComputedStyle(el).backgroundImage;
+                if (bg && bg !== 'none') {
+                    const m = bg.match(/url\\(["']?([^"')]+)["']?\\)/);
+                    if (m && m[1].startsWith('http') && !m[1].includes('.svg') && !m[1].toLowerCase().includes('logo')) {
+                        r.cover_image_url = m[1]; break;
+                    }
+                }
+            }
+            if (!r.cover_image_url) {
+                // Try <picture> source srcset
+                for (const src of document.querySelectorAll('picture source')) {
+                    const ss = src.getAttribute('srcset') || src.getAttribute('data-srcset') || '';
+                    const u = ss.split(',')[0].trim().split(' ')[0];
+                    if (u && u.startsWith('http') && !u.includes('logo') && !u.includes('.svg')) {
+                        r.cover_image_url = u; break;
+                    }
+                }
+            }
+            if (!r.cover_image_url) {
+                // Try <video> poster as fallback cover
+                const vid = document.querySelector('video[poster]');
+                const poster = vid?.getAttribute('poster');
+                if (poster && poster.startsWith('http')) r.cover_image_url = poster;
+            }
+            if (!r.cover_image_url) {
+                const imgSels = [
+                    '[class*="hero"] img', '[class*="banner"] img', '[class*="slider"] img',
+                    '[class*="cover"] img', 'section img', 'main img',
+                ];
+                for (const sel of imgSels) {
+                    for (const el of document.querySelectorAll(sel)) {
+                        const src = getSrc(el);
+                        if (!src || badSrc(src)) continue;
+                        const sl = src.toLowerCase();
+                        if (sl.includes('logo') || sl.includes('icon') || sl.includes('.svg')) continue;
+                        r.cover_image_url = src; break;
+                    }
+                    if (r.cover_image_url) break;
+                }
+            }
+
+            // ── Tagline (hero subtitle) ────────────────────────────────────────
+            const taglineSels = [
+                '[class*="hero"] h1', '[class*="hero"] h2', '[class*="hero"] p',
+                '[class*="banner"] h1', '[class*="banner"] h2',
+                '[class*="tagline"]', '[class*="subtitle"]', '[class*="slogan"]',
+                'section:first-of-type h1', 'section:first-of-type h2',
+            ];
+            for (const sel of taglineSels) {
+                const el = document.querySelector(sel);
+                const t = (el?.innerText || '').trim();
+                if (t.length > 8 && t.length < 160) { r.tagline = t; break; }
+            }
+
+            // ── About text ────────────────────────────────────────────────────
             const aboutSels = [
-                '[class*="about"] p', '[id*="about"] p',
+                '[class*="about"] p',   '[id*="about"] p',
                 '[class*="company"] p', '[class*="who-we"] p',
-                '[class*="story"] p', '[class*="overview"] p',
-                'main p', 'section p'
+                '[class*="story"] p',   '[class*="overview"] p',
+                '[class*="mission"] p', '[class*="vision"] p',
+                '[class*="history"] p', '[class*="description"] p',
+                'main p',               'section p',
             ];
             const parts = [];
             const seen = new Set();
             for (const sel of aboutSels) {
-                document.querySelectorAll(sel).forEach(p => {
-                    const t = p.innerText.trim();
+                for (const p of document.querySelectorAll(sel)) {
+                    const t = (p.innerText || '').trim();
                     if (t.length > 80 && !seen.has(t)) { seen.add(t); parts.push(t); }
-                });
-                if (parts.length >= 4) break;
+                }
+                if (parts.length >= 6) break;
             }
-            r.about     = parts.slice(0, 4).join('\\n\\n').slice(0, 1000);
-            r.intro_long = r.about;
+            r.about = parts.slice(0, 6).join('\\n\\n');
 
-            // Founded / established year
-            const bodyText = document.body.innerText;
-            const yearM = bodyText.match(/(?:founded|established|since|est\\.?)\\s*(in\\s*)?(1[89]\\d{2}|20[0-2]\\d)/i);
-            r.founded_year = yearM ? parseInt(yearM[2]) : null;
+            // ── Stats from full page text ──────────────────────────────────────
+            const body = document.body.innerText;
 
-            // Phone number
-            const phoneM = bodyText.match(/(?:\\+971|00971|\\(971\\)|0)\\s*[\\d\\s\\-]{7,14}/);
-            r.phone = phoneM ? phoneM[0].trim() : null;
+            // Founded year
+            const yrM = body.match(/(?:founded|established|since|est\\.?|incorporated)\\s*(?:in\\s*)?(1[89]\\d{2}|20[0-2]\\d)/i)
+                      || body.match(/(1[89]\\d{2}|20[0-2]\\d)\\s*[-–]\\s*(?:present|today)/i);
+            r.founded_year = yrM ? parseInt(yrM[1] || yrM[2] || yrM[0].match(/\\d{4}/)?.[0]) : null;
+
+            // Units / homes delivered
+            const unitsM = body.match(/(\\d[\\d,]+\\+?)\\s*(?:\\+\\s*)?(?:homes?|units?|residences?|properties|apartments?)\\s*(?:delivered|completed|handed|built)/i)
+                         || body.match(/(?:delivered|completed|handed\\s*over)\\s+(\\d[\\d,]+\\+?)\\s*(?:homes?|units?)/i)
+                         || body.match(/(\\d[\\d,]+\\+?)\\s*(?:homes?|units?)/i);
+            r.total_units = unitsM ? (unitsM[1] || unitsM[2]) : null;
+
+            // Employees / team
+            const empM = body.match(/(\\d[\\d,]+\\+?)\\s*(?:employees?|team\\s*members?|staff|people|professionals?|workforce)/i);
+            r.employees = empM ? empM[1] : null;
+
+            // Years active / in UAE
+            const yearsM = body.match(/(\\d+)\\+?\\s*years?\\s*(?:of\\s*)?(?:experience|in\\s*UAE|in\\s*Dubai|active|in\\s*real\\s*estate)/i);
+            r.years_active = yearsM ? yearsM[1] : null;
+
+            // Headquarters
+            const hqM = body.match(/(?:headquarters?|head\\s*office|hq|offices?|based\\s*in|located\\s*in)[:\\s]+([A-Z][^\\n,\\.]{3,60}(?:Dubai|Abu Dhabi|UAE|Sharjah)[^\\n,\\.]{0,30})/i);
+            r.headquarters = hqM ? hqM[1].trim().replace(/\\s+/g, ' ') : null;
+
+            // Phone
+            const phM = body.match(/(?:\\+971|00971|04\\b|02\\b|06\\b)\\s*[\\d\\s\\-\\.]{6,14}/);
+            r.phone = phM ? phM[0].replace(/\\s+/g, ' ').trim() : null;
 
             // Email
-            const emailM = bodyText.match(/[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/);
-            r.email = emailM ? emailM[0] : null;
+            const emlM = body.match(/[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/);
+            r.email = emlM ? emlM[0] : null;
+
+            // About page link (for secondary scrape)
+            const aboutLinks = Array.from(document.querySelectorAll('a'))
+                .map(a => ({ href: a.href || '', text: (a.innerText || '').trim().toLowerCase() }))
+                .filter(a => a.href.startsWith('http') && !a.href.includes('#') &&
+                    (a.text.includes('about') || a.href.includes('/about')))
+                .map(a => a.href);
+            r.about_url = aboutLinks[0] || null;
 
             return r;
         }""")
 
-        result = extracted
         logger.info(
-            f"Developer site scraped '{dev_name}' — "
-            f"cover={'yes' if result.get('cover_image_url') else 'no'}, "
-            f"about={len(result.get('about',''))} chars, "
-            f"year={result.get('founded_year')}"
+            f"Developer homepage scraped '{dev_name}' — "
+            f"logo={'yes' if scraped.get('logo_url') else 'no'}, "
+            f"cover={'yes' if scraped.get('cover_image_url') else 'no'}, "
+            f"about={len(scraped.get('about',''))} chars, "
+            f"year={scraped.get('founded_year')}"
         )
+
+        # ── Secondary scrape: About page for richer text ──────────────────────
+        about_url = scraped.get("about_url")
+        if about_url and about_url != root_url and len(scraped.get("about", "")) < 400:
+            try:
+                page2 = await _new_stealth_page(browser)
+                await page2.goto(about_url, wait_until="domcontentloaded", timeout=25_000)
+                await asyncio.sleep(3)
+                extra = await page2.evaluate("""() => {
+                    const sels = ['[class*="about"] p','[id*="about"] p','main p','section p'];
+                    const parts = []; const seen = new Set();
+                    for (const sel of sels) {
+                        for (const p of document.querySelectorAll(sel)) {
+                            const t = (p.innerText||'').trim();
+                            if (t.length > 80 && !seen.has(t)) { seen.add(t); parts.push(t); }
+                        }
+                        if (parts.length >= 6) break;
+                    }
+                    return parts.slice(0,6).join('\\n\\n');
+                }""")
+                await page2.close()
+                if extra and len(extra) > len(scraped.get("about", "")):
+                    scraped["about"] = extra
+                    logger.info(f"About page gave richer text for '{dev_name}': {len(extra)} chars")
+            except Exception as e:
+                logger.warning(f"About page scrape failed for '{dev_name}': {e}")
 
     except Exception as e:
         logger.error(f"scrape_developer_website failed for '{dev_name}' ({url}): {e}")
     finally:
         await page.close()
 
-    return result
+    # ── Claude enrichment: generate FAQs, strengths, key projects, intro ─────
+    scraped.update(await _claude_generate_developer_profile(dev_name, scraped, url))
+    return scraped
+
+
+async def _claude_generate_developer_profile(dev_name: str, scraped: dict, website_url: str) -> dict:
+    """
+    Use Claude Sonnet to generate structured developer profile data:
+    intro_short, tagline (if missing), FAQs, investment strengths,
+    key projects, areas, property types, price range.
+    """
+    import anthropic as _anthropic
+    import json as _json
+    from ..config import ANTHROPIC_KEY
+
+    about_text = scraped.get("about", "") or ""
+    founded    = scraped.get("founded_year") or "unknown"
+    hq         = scraped.get("headquarters") or "UAE"
+    units      = scraped.get("total_units") or "not stated"
+    employees  = scraped.get("employees") or "not stated"
+    tagline    = scraped.get("tagline") or ""
+
+    prompt = f"""You are enriching a developer profile for a UAE real estate portal called Elysian.
+
+Developer: {dev_name}
+Website: {website_url}
+Founded: {founded}
+Headquarters: {hq}
+Total units delivered: {units}
+Team size: {employees}
+Current tagline from site: {tagline}
+
+About text scraped from their website:
+\"\"\"
+{about_text[:2000] if about_text else "Not available — use your knowledge of this developer."}
+\"\"\"
+
+Generate a JSON object with EXACTLY these fields. Use the scraped text first; fill gaps from your knowledge of this UAE real estate developer.
+
+{{
+  "intro_short": "2-3 sentence professional introduction for the portal listing",
+  "tagline": "Short memorable phrase under 12 words (use existing if good, else write new)",
+  "strengths": ["5 compelling investment reason bullet points (15-30 words each)"],
+  "faqs": [
+    {{"q": "question ending with ?", "a": "concise factual answer (2-3 sentences)"}},
+    ... 5 total FAQs covering: property types, locations, investment value, buying process, notable projects
+  ],
+  "key_projects": [
+    {{"name": "Project Name", "type": "Residential|Commercial|Mixed-Use|Hospitality", "status": "Completed|Ongoing|Upcoming", "location": "Area, Emirate"}},
+    ... up to 6 notable projects
+  ],
+  "areas": ["area names where this developer builds — max 6"],
+  "property_types": ["types they build e.g. Apartments, Villas, Townhouses, Commercial"],
+  "price_range": "AED X – AED Y (realistic range for their portfolio)"
+}}
+
+Return ONLY valid JSON. No markdown, no explanation."""
+
+    try:
+        client = _anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+        resp = await asyncio.to_thread(
+            lambda: client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=1500,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        )
+        raw = resp.content[0].text.strip()
+        # Strip any accidental markdown fences
+        raw = re.sub(r'^```(?:json)?\s*', '', raw)
+        raw = re.sub(r'\s*```$', '', raw.strip())
+        generated = _json.loads(raw)
+        logger.info(f"Claude generated developer profile for '{dev_name}': "
+                    f"faqs={len(generated.get('faqs',[]))}, "
+                    f"projects={len(generated.get('key_projects',[]))}")
+        return generated
+    except Exception as e:
+        logger.warning(f"_claude_generate_developer_profile failed for '{dev_name}': {e}")
+        return {}
 
 
 # ── Enrichment runners ─────────────────────────────────────────────────────────
@@ -934,22 +1346,58 @@ async def enrich_areas() -> list[dict]:
                     updates["hero_image"]      = bayut["hero_image"]
                     updates["image_url"]       = bayut["hero_image"]
                     updates["cover_image_url"] = bayut["hero_image"]
+
                 if bayut.get("description"):
                     updates["about"] = bayut["description"]
                     if not area.get("description_short"):
                         updates["description_short"] = bayut["description"][:500]
+
+                # community overview → description_long
                 if bayut.get("community_overview"):
                     updates["description_long"] = bayut["community_overview"]
+
+                # nutshell bullets → highlight_vibe (comma-separated) or keep as list
+                if bayut.get("nutshell"):
+                    updates["highlight_vibe"] = "\n".join(bayut["nutshell"])
+
+                # schools
                 if bayut.get("schools"):
                     updates["nearby_schools"] = bayut["schools"]
                     updates["schools"]         = bayut["schools"]
+
+                # hospitals
                 if bayut.get("hospitals"):
                     updates["nearby_hospitals"] = bayut["hospitals"]
                     updates["hospitals"]         = bayut["hospitals"]
-                if bayut.get("attractions"):
-                    updates["nearby_attractions"] = bayut["attractions"]
+
+                # transport / commute
+                if bayut.get("transport"):
+                    updates["public_transport"] = bayut["transport"]
+
+                # lifestyle (outdoor/fitness/beauty)
                 if bayut.get("lifestyle"):
-                    updates["lifestyle_dining_text"] = bayut["lifestyle"][:400]
+                    updates["lifestyle_dining_text"] = bayut["lifestyle"]
+
+                # shopping text
+                if bayut.get("shopping"):
+                    updates["lifestyle_shopping_text"] = bayut["shopping"]
+
+                # malls
+                if bayut.get("malls"):
+                    updates["malls"] = bayut["malls"]
+                    updates["nearby_shopping"] = bayut["malls"]
+
+                # nearby areas
+                if bayut.get("nearby_areas"):
+                    updates["nearby_areas"] = bayut["nearby_areas"]
+
+                # FAQs as JSON array
+                if bayut.get("faqs"):
+                    updates["faqs"] = bayut["faqs"]
+
+                # location text (distances to landmarks)
+                if bayut.get("location"):
+                    updates["geo_summary"] = bayut["location"]
 
             updates["enriched"] = True
             db().table("areas").update(updates).eq("id", area_id).execute()
@@ -996,34 +1444,76 @@ async def enrich_developers() -> list[dict]:
             dev_slug = dev.get("slug", "")
             updates  = {}
 
-            # Search DuckDuckGo for official website (only if not already known)
+            # Find official website: use existing URL or search DDG → Bing
             website_url = dev.get("website_url") or await find_developer_website(dev_name)
             if website_url:
+                domain = re.sub(r'^https?://(www\.)?', '', website_url).split('/')[0]
                 updates["website_url"] = website_url
-                # Store domain-only in website column too
-                import re as _re
-                domain = _re.sub(r'^https?://(www\.)?', '', website_url).split('/')[0]
-                updates["website"] = domain
+                updates["website"]     = domain
 
                 await asyncio.sleep(random.uniform(2, 4))
-                site_data = await scrape_developer_website(website_url, dev_name)
+                s = await scrape_developer_website(website_url, dev_name)
 
-                # Never overwrite logo_url if already set from opr.ae scrape
-                if site_data.get("cover_image_url"):
-                    updates["cover_image_url"] = site_data["cover_image_url"]
-                if site_data.get("about") and not dev.get("intro_short"):
-                    updates["about"]      = site_data["about"]
-                    updates["intro_long"] = site_data["intro_long"]
-                elif site_data.get("about"):
-                    updates["about"]      = site_data["about"]
-                    updates["intro_long"] = site_data["intro_long"]
-                if site_data.get("founded_year"):
-                    updates["founded_year"]      = site_data["founded_year"]
-                    updates["established_year"]  = site_data["founded_year"]
-                if site_data.get("phone"):
-                    updates["phone"] = site_data["phone"]
-                if site_data.get("email"):
-                    updates["email"] = site_data["email"]
+                # Logo: only set if not already a Cloudinary URL from opr.ae
+                existing_logo = dev.get("logo_url", "") or ""
+                if s.get("logo_url") and "cloudinary" not in existing_logo:
+                    updates["logo_url"]       = s["logo_url"]
+                    updates["logo_color_url"] = s["logo_url"]
+
+                # Cover / hero image
+                if s.get("cover_image_url"):
+                    updates["cover_image_url"] = s["cover_image_url"]
+
+                # Tagline
+                if s.get("tagline"):
+                    updates["tagline"] = s["tagline"]
+
+                # About text (intro_long) + intro_short
+                if s.get("about"):
+                    updates["about"]      = s["about"]
+                    updates["intro_long"] = s["about"]
+                if s.get("intro_short"):
+                    updates["intro_short"] = s["intro_short"]
+
+                # Founding year
+                if s.get("founded_year"):
+                    updates["founded_year"]     = s["founded_year"]
+                    updates["established_year"] = s["founded_year"]
+
+                # Headquarters
+                if s.get("headquarters"):
+                    updates["headquarters"]  = s["headquarters"]
+                    updates["office_address"] = s["headquarters"]
+
+                # Stats
+                if s.get("total_units"):
+                    updates["total_units"] = s["total_units"]
+                if s.get("employees"):
+                    updates["employees"] = s["employees"]
+                if s.get("years_active"):
+                    updates["years_in_uae"] = s["years_active"]
+
+                # Contact
+                if s.get("phone"):
+                    updates["phone"] = s["phone"]
+                if s.get("email"):
+                    updates["email"] = s["email"]
+
+                # Claude-generated structured data
+                if s.get("faqs"):
+                    updates["faqs"]     = s["faqs"]
+                    updates["aeo_faq"]  = s["faqs"]
+                if s.get("strengths"):
+                    updates["strengths"] = s["strengths"]
+                if s.get("key_projects"):
+                    updates["key_projects"]    = s["key_projects"]
+                    updates["notable_projects"] = s["key_projects"]
+                if s.get("areas"):
+                    updates["areas"] = s["areas"]
+                if s.get("property_types"):
+                    updates["property_types"] = s["property_types"]
+                if s.get("price_range"):
+                    updates["price_range"] = s["price_range"]
 
             updates["enriched"] = True
             db().table("developers").update(updates).eq("id", dev_id).execute()

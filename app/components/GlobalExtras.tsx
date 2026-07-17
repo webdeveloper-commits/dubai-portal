@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
-import { X, Phone, MessageCircle } from "lucide-react";
+import { X, Phone } from "lucide-react";
+import EnquiryModal from "@/app/components/EnquiryModal";
 
 /* ── Disclaimer bar ── */
 export function Disclaimer() {
@@ -168,147 +169,74 @@ export function CookieBanner() {
   );
 }
 
-/* ── WhatsApp + Call floating buttons ── */
+/* ── Floating contact buttons — Call + Enquire ── */
 export function FloatingContact() {
-  const [expanded, setExpanded] = useState(false);
+  const [enquiryOpen, setEnquiryOpen] = useState(false);
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        right: 24,
-        bottom: 88,
-        zIndex: 9998,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
-        gap: 12,
-      }}
-    >
-      {/* WhatsApp */}
+    <>
       <div
         style={{
+          position: "fixed",
+          right: 20,
+          bottom: 24,
+          zIndex: 9998,
           display: "flex",
-          alignItems: "center",
+          flexDirection: "column",
+          alignItems: "flex-end",
           gap: 10,
-          opacity: expanded ? 1 : 0,
-          transform: expanded ? "translateX(0)" : "translateX(20px)",
-          pointerEvents: expanded ? "auto" : "none",
-          transition: "opacity 0.25s ease, transform 0.25s ease",
         }}
       >
-        <span
-          style={{
-            fontFamily: "Verdana",
-            fontSize: 11,
-            background: "#192537",
-            color: "white",
-            padding: "6px 14px",
-            borderRadius: 999,
-            whiteSpace: "nowrap",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-          }}
-        >
-          Chat on WhatsApp
-        </span>
+        {/* Call */}
         <a
-          href="https://wa.me/971400000000"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="tel:+97140000000"
+          aria-label="Call us"
           style={{
-            width: 52,
-            height: 52,
-            borderRadius: "50%",
-            background: "#25D366",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 4px 20px rgba(37,211,102,0.4)",
-            textDecoration: "none",
-            transition: "transform 0.2s",
-          }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.transform = "scale(1.1)"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.transform = "scale(1)"; }}
-        >
-          <MessageCircle size={22} color="white" />
-        </a>
-      </div>
-
-      {/* Call */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          opacity: expanded ? 1 : 0,
-          transform: expanded ? "translateX(0)" : "translateX(20px)",
-          pointerEvents: expanded ? "auto" : "none",
-          transition: "opacity 0.25s ease 0.05s, transform 0.25s ease 0.05s",
-        }}
-      >
-        <span
-          style={{
-            fontFamily: "Verdana",
-            fontSize: 11,
-            background: "#192537",
-            color: "white",
-            padding: "6px 14px",
-            borderRadius: 999,
-            whiteSpace: "nowrap",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-          }}
-        >
-          Call Us Now
-        </span>
-        <a
-          href="tel:+971400000000"
-          style={{
-            width: 52,
-            height: 52,
+            width: 50,
+            height: 50,
             borderRadius: "50%",
             background: "#7fe2e3",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            boxShadow: "0 4px 20px rgba(127,226,227,0.35)",
+            boxShadow: "0 4px 20px rgba(127,226,227,0.4)",
             textDecoration: "none",
             transition: "transform 0.2s",
           }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.transform = "scale(1.1)"; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.transform = "scale(1)"; }}
         >
-          <Phone size={20} color="#192537" />
+          <Phone size={19} color="#192537" />
         </a>
+
+        {/* Enquire */}
+        <button
+          onClick={() => setEnquiryOpen(true)}
+          aria-label="Enquire now"
+          style={{
+            width: 50,
+            height: 50,
+            borderRadius: "50%",
+            background: "#192537",
+            border: "2px solid #7fe2e3",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 4px 24px rgba(25,37,55,0.4)",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#7fe2e3"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#192537"; }}
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 2a8 8 0 100 16A8 8 0 0010 2z" stroke="#7fe2e3" strokeWidth="1.5"/>
+            <path d="M7 8h6M7 11h4" stroke="#7fe2e3" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </button>
       </div>
 
-      {/* Toggle button */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        style={{
-          width: 56,
-          height: 56,
-          borderRadius: "50%",
-          background: "#192537",
-          border: "2px solid #7fe2e3",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          boxShadow: "0 4px 24px rgba(25,37,55,0.4)",
-          transition: "all 0.25s",
-          transform: expanded ? "rotate(45deg)" : "rotate(0deg)",
-        }}
-        aria-label="Contact options"
-        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#7fe2e3"; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#192537"; }}
-      >
-        {/* Custom contact icon */}
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-          <path d="M11 2C6.03 2 2 6.03 2 11c0 1.77.49 3.42 1.34 4.83L2 20l4.31-1.32C7.66 19.53 9.29 20 11 20c4.97 0 9-4.03 9-9s-4.03-9-9-9z" stroke="#7fe2e3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M7.5 9.5c.5 1 1.5 2.5 3 3.5" stroke="#7fe2e3" strokeWidth="1.5" strokeLinecap="round"/>
-          <path d="M10.5 13c.5.3 1.3.5 2 .3l1.5-.5" stroke="#7fe2e3" strokeWidth="1.5" strokeLinecap="round"/>
-        </svg>
-      </button>
-    </div>
+      <EnquiryModal isOpen={enquiryOpen} onClose={() => setEnquiryOpen(false)} />
+    </>
   );
 }

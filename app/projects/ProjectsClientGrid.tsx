@@ -1,6 +1,7 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import FilterBar, { FilterState } from "@/app/components/filter";
 import { MapPin, Bed, Calendar, ArrowUpRight, SlidersHorizontal, ChevronDown } from "lucide-react";
 
@@ -141,9 +142,57 @@ function SortDropdown({ value, onChange }: { value: SortKey; onChange: (v: SortK
   );
 }
 
+// Parse URL params into FilterState
+function filtersFromParams(params: URLSearchParams): FilterState | null {
+  const q    = params.get("q")    ?? "";
+  const pf   = parseInt(params.get("pf") ?? "0");
+  const pt   = parseInt(params.get("pt") ?? "100000000");
+  const type = params.get("type") ? params.get("type")!.split(",").filter(Boolean) : [];
+  const area = params.get("area") ? params.get("area")!.split(",").filter(Boolean) : [];
+  const dev  = params.get("dev")  ? params.get("dev")!.split(",").filter(Boolean)  : [];
+  const ho   = params.get("ho")   ? params.get("ho")!.split(",").filter(Boolean)   : [];
+  const life = params.get("life") ? params.get("life")!.split(",").filter(Boolean) : [];
+  const hasAny = q || pf > 0 || pt < 100_000_000 || type.length || area.length || dev.length || ho.length || life.length;
+  if (!hasAny) return null;
+  return { projectSearch: q, priceFrom: pf, priceTo: pt, propertyTypes: type, areas: area, developers: dev, handover: ho, lifestyle: life };
+}
+
+// Serialize FilterState to URL params
+function filtersToParams(f: FilterState): URLSearchParams {
+  const p = new URLSearchParams();
+  if (f.projectSearch)            p.set("q",    f.projectSearch);
+  if (f.priceFrom > 0)            p.set("pf",   String(f.priceFrom));
+  if (f.priceTo < 100_000_000)    p.set("pt",   String(f.priceTo));
+  if (f.propertyTypes.length)     p.set("type", f.propertyTypes.join(","));
+  if (f.areas.length)             p.set("area", f.areas.join(","));
+  if (f.developers.length)        p.set("dev",  f.developers.join(","));
+  if (f.handover.length)          p.set("ho",   f.handover.join(","));
+  if (f.lifestyle.length)         p.set("life", f.lifestyle.join(","));
+  return p;
+}
+
 export default function ProjectsClientGrid({ projects }: { projects: Project[] }) {
-  const [filters, setFilters] = useState<FilterState | null>(null);
-  const [sort, setSort]       = useState<SortKey>("default");
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+  const pathname     = usePathname();
+
+  const [filters, setFiltersState] = useState<FilterState | null>(() => filtersFromParams(searchParams));
+  const [sort, setSort]            = useState<SortKey>("default");
+
+  // Keep filter state in sync with URL (browser back/forward)
+  useEffect(() => {
+    setFiltersState(filtersFromParams(searchParams));
+  }, [searchParams]);
+
+  const setFilters = useCallback((f: FilterState | null) => {
+    setFiltersState(f);
+    if (!f) {
+      router.replace(pathname, { scroll: false });
+    } else {
+      const qs = filtersToParams(f).toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }
+  }, [router, pathname]);
 
   const displayed = useMemo(() => {
     const base = filters ? applyFilters(projects, filters) : projects;
