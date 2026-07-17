@@ -5,6 +5,7 @@ import { isValidPhoneNumber } from "libphonenumber-js";
 import dynamic from "next/dynamic";
 import EnquiryModal from "@/app/components/EnquiryModal";
 import PhoneField from "@/app/components/PhoneField";
+import { getLeadTrackingData } from "@/lib/tracking";
 
 export const PrimeLocationMap = dynamic(
   () => import("@/app/components/PrimeLocationMap"),
@@ -65,10 +66,7 @@ export function LeadForm({ areaName }: { areaName: string }) {
     if (!validate()) return;
     setLoading(true);
 
-    const params = typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search)
-      : new URLSearchParams();
-    const utmSource = params.get("utm_source");
+    const tracking = getLeadTrackingData();
 
     try {
       const res = await fetch("/api/enquire", {
@@ -80,8 +78,8 @@ export function LeadForm({ areaName }: { areaName: string }) {
           phone:     "+" + phone,
           message:   message.trim(),
           areaName,
-          utmSource: utmSource || null,
           sourceUrl: typeof window !== "undefined" ? window.location.href : null,
+          ...tracking,
         }),
       });
       const json = await res.json();

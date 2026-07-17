@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import FilterBar, { FilterState, DEFAULT_FILTERS } from "@/app/components/filter";
 import { MapPin, Bed, Calendar, ArrowUpRight, SlidersHorizontal, ChevronDown } from "lucide-react";
+import { saveSearchContext } from "@/lib/tracking";
 
 interface Project {
   id: string;
@@ -204,6 +205,17 @@ export default function ProjectsClientGrid({ projects }: { projects: Project[] }
     const newUrl = qs ? `${pathname}?${qs}` : pathname;
     selfNavRef.current = true;
     router.replace(newUrl, { scroll: false });
+    // Persist search context so the form on any detail page can read it
+    saveSearchContext({
+      areas:          f.areas.length          ? f.areas          : undefined,
+      developers:     f.developers.length     ? f.developers     : undefined,
+      property_types: f.propertyTypes.length  ? f.propertyTypes  : undefined,
+      lifestyle:      f.lifestyle.length      ? f.lifestyle      : undefined,
+      handover:       f.handover.length       ? f.handover       : undefined,
+      price_from:     f.priceFrom > 0         ? f.priceFrom      : undefined,
+      price_to:       f.priceTo < 100_000_000 ? f.priceTo        : undefined,
+      query:          f.projectSearch         || undefined,
+    });
   }, [router, pathname]);
 
   // ── Derive filter options from actual project data ─────────────────────────

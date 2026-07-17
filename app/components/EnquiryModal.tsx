@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { X, CheckCircle2, Phone } from "lucide-react";
 import { isValidPhoneNumber } from "libphonenumber-js";
 import PhoneField from "./PhoneField";
+import { getLeadTrackingData } from "@/lib/tracking";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -68,11 +69,7 @@ export default function EnquiryModal({ isOpen, onClose, context = {} }: Props) {
     if (!validate()) return;
     setLoading(true);
 
-    const params = typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search)
-      : new URLSearchParams();
-    const utmSource    = params.get("utm_source");
-    const filterDetails = Object.fromEntries(params.entries());
+    const tracking = getLeadTrackingData();
 
     try {
       const res = await fetch("/api/enquire", {
@@ -86,9 +83,8 @@ export default function EnquiryModal({ isOpen, onClose, context = {} }: Props) {
           projectName:   context.projectName   || null,
           developerName: context.developerName || null,
           areaName:      context.areaName      || null,
-          utmSource:     utmSource             || null,
-          filterDetails: Object.keys(filterDetails).length ? filterDetails : null,
           sourceUrl:     typeof window !== "undefined" ? window.location.href : null,
+          ...tracking,
         }),
       });
       const json = await res.json();

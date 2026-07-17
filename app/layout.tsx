@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Montserrat } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/app/components/Navbar";
+import TrackingInit from "@/app/components/TrackingInit";
 import { supabase } from "@/lib/supabase";
 
 const montserrat = Montserrat({
@@ -35,6 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" className={montserrat.variable}>
       <body style={{ fontFamily: "var(--font-montserrat), sans-serif", background: "#f9f9f9", color: "#192537" }}>
+        <TrackingInit />
         <Navbar developers={developers} />
         {children}
       </body>
