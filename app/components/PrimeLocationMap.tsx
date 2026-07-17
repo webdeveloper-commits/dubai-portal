@@ -53,12 +53,13 @@ export default function PrimeLocationMap({ areaName, latitude, longitude }: Prop
   useEffect(() => {
     if (!isLoaded || !areaName || (latitude && longitude)) return;
     const svc = new window.google.maps.places.PlacesService(document.createElement("div"));
-    svc.textSearch({ query: `${areaName}, Dubai`, fields: ["geometry", "name"] }, (results: google.maps.places.PlaceResult[] | null, status: google.maps.places.PlacesServiceStatus) => {
+    svc.textSearch({ query: `${areaName}, UAE`, fields: ["geometry", "name"] }, (results: google.maps.places.PlaceResult[] | null, status: google.maps.places.PlacesServiceStatus) => {
       if (status === window.google.maps.places.PlacesServiceStatus.OK && results?.length) {
         const loc = results[0]?.geometry?.location;
         if (loc) { setCenter({ lat: loc.lat(), lng: loc.lng() }); return; }
       }
-      setCenter({ lat: 25.2048, lng: 55.2708 });
+      // last-resort fallback: centre of UAE
+      setCenter({ lat: 24.4539, lng: 54.3773 });
     });
   }, [isLoaded, areaName, latitude, longitude]);
 

@@ -26,7 +26,7 @@ interface ProjectData {
   images: string[]; imagesExterior: string[]; imagesInterior: string[]; imagesAmenities: string[];
   paymentPlanSummary: string; paymentPlanDetail: Record<string, number> | null;
   floorPlans: FloorPlan[]; faqs: FaqItem[]; amenities: string[];
-  latitude: number; longitude: number; totalUnits: number | null;
+  latitude: number | null; longitude: number | null; totalUnits: number | null;
   developerSlug: string | null;
   areaSlug: string | null;
   // New fields
@@ -123,7 +123,7 @@ function mapRow(r: any): ProjectData {
       return raw as Record<string, number>;
     })(),
     floorPlans, faqs, amenities: r.amenities ?? [],
-    latitude: r.latitude ?? 25.2048, longitude: r.longitude ?? 55.2708,
+    latitude: r.latitude ?? null, longitude: r.longitude ?? null,
     totalUnits: r.total_units ?? null,
     developerSlug: r.developer_slug ?? null,
     areaSlug: r.area_slug ?? null,
@@ -912,7 +912,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
             {/* Map */}
             <div style={{ background: "white", borderRadius: 24, padding: "28px", boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
               <SH label="Where Is It" title="Location & Nearby" />
-              <PrimeLocationMap areaName={project.area} latitude={project.latitude} longitude={project.longitude} />
+              <PrimeLocationMap areaName={project.area} latitude={project.latitude ?? undefined} longitude={project.longitude ?? undefined} />
             </div>
 
             {/* FAQs */}
