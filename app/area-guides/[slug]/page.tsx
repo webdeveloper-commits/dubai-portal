@@ -68,11 +68,25 @@ export default async function AreaDetailPage({ params }: Props) {
 
   const area = data as AreaRow;
 
-  // Commute times: TEXT string (newline-separated) in areas table
-  const rawCommute = area.commute_times as string | null;
-  const commuteLines: string[] = rawCommute
-    ? rawCommute.split("\n").map(s => s.trim()).filter(Boolean)
-    : [];
+  // Commute times: array of {label, minutes} objects OR newline-separated string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawCommute = area.commute_times as any;
+  let commuteLines: string[] = [];
+  if (rawCommute) {
+    if (Array.isArray(rawCommute)) {
+      commuteLines = rawCommute
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((c: any) => {
+          if (typeof c === "string") return c;
+          const label = c.label ?? c.name ?? c.destination ?? "";
+          const mins  = c.minutes ?? c.time ?? c.duration ?? "";
+          return mins ? `${label} — ${mins} min` : label;
+        })
+        .filter(Boolean);
+    } else if (typeof rawCommute === "string") {
+      commuteLines = rawCommute.split("\n").map((s: string) => s.trim()).filter(Boolean);
+    }
+  }
 
   // Schools / hospitals / malls: may be arrays of strings OR {name, distance} objects
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

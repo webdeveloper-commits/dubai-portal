@@ -488,7 +488,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
   useEffect(() => {
     supabase
       .from("projects")
-      .select("*, commute_times, investment_potential, golden_visa_eligible, freehold_zone, mortgage_available, dld_waiver, roi_estimate, rental_demand_rating, total_units, size_sqft_min, size_sqft_max, lifestyle_tags, aeo_faq, faqs")
+      .select("*")
       .eq("slug", slug)
       .single()
       .then(({ data, error }) => {
