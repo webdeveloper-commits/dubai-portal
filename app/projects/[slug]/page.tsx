@@ -7,7 +7,7 @@ import Footer from "@/app/components/Footer";
 import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import {
   MapPin, Bed, Calendar, ChevronLeft, ChevronRight,
-  CheckCircle2, ChevronDown, Building2, Layers,
+  CheckCircle2, ChevronDown, Building2, Layers, Ruler,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -29,6 +29,18 @@ interface ProjectData {
   latitude: number; longitude: number; totalUnits: number | null;
   developerSlug: string | null;
   areaSlug: string | null;
+  // New fields
+  investmentPotential: string[];
+  commuteTimes: string[];
+  lifestyleTags: string[];
+  freeholdZone: boolean;
+  goldenVisaEligible: boolean;
+  mortgageAvailable: boolean;
+  dldWaiver: boolean;
+  roiEstimate: number | null;
+  rentalDemandRating: string | null;
+  sizeSqftMin: number | null;
+  sizeSqftMax: number | null;
 }
 
 // ─── Supabase mapper ──────────────────────────────────────────────────────────
@@ -44,31 +56,42 @@ function statusToTag(s: string): string | undefined {
 function mapRow(r: any): ProjectData {
   const q = r.handover_quarter ?? "";
   const yr = r.handover_year ?? "";
-  const rawFaqs = r.aeo_faq ?? [];
-  const faqs: FaqItem[] = rawFaqs
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((f: any) => ({ q: f.question ?? f.q ?? "", a: f.answer ?? f.a ?? "" }))
-    .filter((f: FaqItem) => f.q && f.a);
+
+  // FAQs: try aeo_faq first, then faqs
+  let faqs: FaqItem[] = [];
+  const rawAeo = r.aeo_faq ?? [];
+  const rawFaq = r.faqs ?? [];
+  if (Array.isArray(rawAeo) && rawAeo.length > 0) {
+    faqs = rawAeo
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((f: any) => ({ q: f.question ?? f.q ?? "", a: f.answer ?? f.a ?? "" }))
+      .filter((f: FaqItem) => f.q && f.a);
+  }
+  if (faqs.length === 0 && Array.isArray(rawFaq) && rawFaq.length > 0) {
+    faqs = rawFaq
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((f: any) => ({ q: f.q ?? f.question ?? "", a: f.a ?? f.answer ?? "" }))
+      .filter((f: FaqItem) => f.q && f.a);
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const floorPlans: FloorPlan[] = (r.floor_plans ?? []).map((f: any) => ({
     type: f.type ?? `${f.beds}BR`, beds: f.beds ?? 0,
     sqft_min: f.sqft_min ?? 0, sqft_max: f.sqft_max ?? 0, price_from: f.price_from,
   }));
   const allImgs = (r.images_all ?? []) as string[];
-  // Filter out small icon/checkmark images that opr.ae embeds alongside photos
   const isPhoto = (url: string) => {
     if (!url) return false;
     const l = url.toLowerCase();
-    // Skip images with icon-like keywords in the URL
     if (/icon|check|tick|badge|verified|logo|svg|amenity[-_]?icon/i.test(l)) return false;
     return true;
   };
   const filteredImgs = allImgs.filter(isPhoto);
-  const images  = filteredImgs.length > 0 ? filteredImgs : [r.image_main].filter(Boolean);
+  const images = filteredImgs.length > 0 ? filteredImgs : [r.image_main].filter(Boolean);
+
   return {
     id: r.id, name: r.name ?? "Project", tagline: r.tagline ?? "",
     developer: (() => {
-      // whatsapp_share_text = "Project Name by Developer Name\nLocation\nPrice\nURL"
       const wsLine = ((r.whatsapp_share_text as string) ?? "").split("\n")[0] ?? "";
       const byMatch = wsLine.match(/ by (.+)$/);
       return byMatch?.[1] ?? ((r.developer_slug as string ?? "").replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()));
@@ -101,6 +124,18 @@ function mapRow(r: any): ProjectData {
     totalUnits: r.total_units ?? null,
     developerSlug: r.developer_slug ?? null,
     areaSlug: r.area_slug ?? null,
+    // New fields
+    investmentPotential: Array.isArray(r.investment_potential) ? r.investment_potential : [],
+    commuteTimes: Array.isArray(r.commute_times) ? r.commute_times : [],
+    lifestyleTags: Array.isArray(r.lifestyle_tags) ? r.lifestyle_tags : [],
+    freeholdZone: r.freehold_zone === true,
+    goldenVisaEligible: r.golden_visa_eligible === true,
+    mortgageAvailable: r.mortgage_available === true,
+    dldWaiver: r.dld_waiver === true,
+    roiEstimate: r.roi_estimate ?? null,
+    rentalDemandRating: r.rental_demand_rating ?? null,
+    sizeSqftMin: r.size_sqft_min ?? null,
+    sizeSqftMax: r.size_sqft_max ?? null,
   };
 }
 
@@ -116,6 +151,22 @@ const TAG_COLORS: Record<string, { bg: string; color: string }> = {
   "Ready":      { bg: "#7fe2e3",             color: "#192537" },
   "New Launch": { bg: "#f97316",             color: "white"   },
 };
+
+// ─── Lifestyle tag emoji mapping ──────────────────────────────────────────────
+
+const LIFESTYLE_EMOJIS: Record<string, string> = {
+  golf: "⛳", family: "👨‍👩‍👧", luxury: "💎", beach: "🏖", marina: "⛵",
+  community: "🏘", investment: "📈", waterfront: "🌊", "pet-friendly": "🐾",
+  urban: "🏙", wellness: "🧘", sports: "🏃", quiet: "🌿", vibrant: "✨",
+};
+
+function lifestyleEmoji(tag: string): string {
+  const lower = tag.toLowerCase();
+  for (const [kw, em] of Object.entries(LIFESTYLE_EMOJIS)) {
+    if (lower.includes(kw)) return em;
+  }
+  return "🌟";
+}
 
 // ─── Amenity icon mapping ─────────────────────────────────────────────────────
 
@@ -416,7 +467,7 @@ function SH({ label, title }: { label?: string; title: string }) {
 function LoadingSkeleton() {
   return (
     <main style={{ background: "#f4f6f9" }}>
-      <div style={{ minHeight: "65vh", background: "linear-gradient(145deg,#0d1e2e,#192537)", display: "flex", alignItems: "flex-end", padding: "0 24px 56px" }}>
+      <div style={{ minHeight: "75vh", background: "linear-gradient(145deg,#0d1e2e,#192537)", display: "flex", alignItems: "flex-end", padding: "0 24px 56px" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%" }}>
           <div style={{ height: 12, width: 220, background: "rgba(255,255,255,0.08)", borderRadius: 6, marginBottom: 20 }} />
           <div style={{ height: 46, width: "52%", background: "rgba(255,255,255,0.07)", borderRadius: 8, marginBottom: 12 }} />
@@ -435,7 +486,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   useEffect(() => {
-    supabase.from("projects").select("*").eq("slug", slug).single()
+    supabase
+      .from("projects")
+      .select("*, commute_times, investment_potential, golden_visa_eligible, freehold_zone, mortgage_available, dld_waiver, roi_estimate, rental_demand_rating, total_units, size_sqft_min, size_sqft_max, lifestyle_tags, aeo_faq, faqs")
+      .eq("slug", slug)
+      .single()
       .then(({ data, error }) => {
         if (error || !data) setNotFound(true);
         else setProject(mapRow(data));
@@ -443,7 +498,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
       });
   }, [slug]);
 
-  // Derive links directly from stored DB slugs — no runtime lookup needed
   const devSlug  = project?.developerSlug ?? null;
   const areaSlug = project?.areaSlug ?? null;
 
@@ -458,12 +512,27 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
   const tag = project.tag ? TAG_COLORS[project.tag] : null;
   const heroImg = project.images[0] ?? null;
 
+  // Key badges
+  const badges = [
+    project.freeholdZone       ? { label: "Freehold",        icon: "✓" } : null,
+    project.goldenVisaEligible ? { label: "Golden Visa",     icon: "✓" } : null,
+    project.mortgageAvailable  ? { label: "Mortgage",        icon: "✓" } : null,
+    project.dldWaiver          ? { label: "DLD Waiver",      icon: "✓" } : null,
+  ].filter(Boolean) as { label: string; icon: string }[];
+
+  // sqft range string
+  const sqftRange = project.sizeSqftMin
+    ? project.sizeSqftMax && project.sizeSqftMax !== project.sizeSqftMin
+      ? `${project.sizeSqftMin.toLocaleString()}–${project.sizeSqftMax.toLocaleString()} sqft`
+      : `${project.sizeSqftMin.toLocaleString()} sqft`
+    : null;
+
   return (
     <main style={{ background: "#f4f6f9" }}>
       <Navbar />
 
       {/* ── HERO ─────────────────────────────────────────────────────────────── */}
-      <section style={{ position: "relative", minHeight: "72vh", display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
+      <section style={{ position: "relative", minHeight: "75vh", display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
         {heroImg
           ? <img src={heroImg} alt={project.name} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }} />
           : <div style={{ position: "absolute", inset: 0, background: "linear-gradient(145deg,#0d1e2e 0%,#192537 100%)" }} />
@@ -546,9 +615,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px" }}>
           <div className="facts-strip" style={{ display: "flex", overflowX: "auto" }}>
             {[
-              { icon: <Bed size={14} color="#7fe2e3" />,      label: "Bedrooms",    val: project.bedrooms },
-              { icon: <Calendar size={14} color="#7fe2e3" />, label: "Handover",    val: project.handover || "TBA" },
-              { icon: <MapPin size={14} color="#7fe2e3" />,   label: "Location",    val: project.area },
+              { icon: <Bed size={14} color="#7fe2e3" />,      label: "Bedrooms",     val: project.bedrooms },
+              { icon: <Calendar size={14} color="#7fe2e3" />, label: "Handover",     val: project.handover || "TBA" },
+              { icon: <MapPin size={14} color="#7fe2e3" />,   label: "Location",     val: project.area },
+              ...(sqftRange ? [{ icon: <Ruler size={14} color="#7fe2e3" />, label: "Size", val: sqftRange }] : []),
               ...(project.totalUnits ? [{ icon: <Building2 size={14} color="#7fe2e3" />, label: "Total Units", val: String(project.totalUnits) }] : []),
               ...(project.paymentPlanSummary ? [{ icon: <Layers size={14} color="#7fe2e3" />, label: "Payment Plan", val: project.paymentPlanSummary }] : []),
             ].map(({ icon, label, val }, i, arr) => (
@@ -579,14 +649,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
               </div>
             )}
 
-            {/* Description */}
+            {/* Description + Lifestyle Tags */}
             {(project.descriptionLong || project.descriptionShort) && (
               <div style={{ background: "white", borderRadius: 24, padding: "28px", boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
                 <SH label="Overview" title="About This Project" />
                 <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#7a8a9e", lineHeight: 1.95, margin: "0 0 20px" }}>
                   {project.descriptionLong || project.descriptionShort}
                 </p>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {/* Property type chips */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: project.lifestyleTags.length > 0 ? 16 : 0 }}>
                   {project.propertyTypes.map(t => (
                     <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(127,226,227,0.08)", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 999, padding: "6px 14px", fontFamily: "Verdana", fontSize: 11, color: "#0d5e5f" }}>
                       <Building2 size={10} color="#7fe2e3" />{t}
@@ -596,6 +667,60 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
                     <Bed size={10} color="#7fe2e3" />{project.bedrooms}
                   </span>
                 </div>
+                {/* Lifestyle tags */}
+                {project.lifestyleTags.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {project.lifestyleTags.map((tag: string) => (
+                      <span
+                        key={tag}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#f4f6f9", border: "1px solid rgba(25,37,55,0.08)", borderRadius: 999, padding: "6px 14px", fontFamily: "Verdana", fontSize: 11, color: "#192537" }}
+                      >
+                        <span style={{ fontSize: 13 }}>{lifestyleEmoji(tag)}</span>{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Investment Highlights */}
+            {project.investmentPotential.length > 0 && (
+              <div style={{ background: "white", borderRadius: 24, padding: "28px", boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
+                <SH label="Returns" title="Investment Highlights" />
+                <div className="investment-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 14 }}>
+                  {project.investmentPotential.map((item: string, i: number) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        padding: "16px 18px",
+                        background: "#f8fafc",
+                        borderRadius: 14,
+                        border: "1px solid rgba(127,226,227,0.12)",
+                      }}
+                    >
+                      <span style={{ color: "#7fe2e3", fontSize: 16, flexShrink: 0, marginTop: 1 }}>✦</span>
+                      <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#555", lineHeight: 1.7, margin: 0 }}>{item}</p>
+                    </div>
+                  ))}
+                </div>
+                {(project.roiEstimate != null || project.rentalDemandRating) && (
+                  <div style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
+                    {project.roiEstimate != null && (
+                      <div style={{ background: "rgba(127,226,227,0.1)", border: "1px solid rgba(127,226,227,0.25)", borderRadius: 12, padding: "10px 18px" }}>
+                        <div style={{ fontFamily: "Verdana", fontSize: 9, color: "#0d5e5f", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 3 }}>Est. ROI</div>
+                        <div style={{ fontFamily: "Montserrat", fontWeight: 700, fontSize: 18, color: "#0d5e5f" }}>{project.roiEstimate}%</div>
+                      </div>
+                    )}
+                    {project.rentalDemandRating && (
+                      <div style={{ background: "rgba(127,226,227,0.1)", border: "1px solid rgba(127,226,227,0.25)", borderRadius: 12, padding: "10px 18px" }}>
+                        <div style={{ fontFamily: "Verdana", fontSize: 9, color: "#0d5e5f", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 3 }}>Rental Demand</div>
+                        <div style={{ fontFamily: "Montserrat", fontWeight: 700, fontSize: 18, color: "#0d5e5f" }}>{project.rentalDemandRating}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -650,6 +775,35 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
               </div>
             )}
 
+            {/* Commute Times */}
+            {project.commuteTimes.length > 0 && (
+              <div style={{ background: "white", borderRadius: 24, padding: "28px", boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
+                <SH label="Connectivity" title="Commute Times" />
+                <div className="commute-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 }}>
+                  {project.commuteTimes.map((line: string, i: number) => {
+                    // Parse "Destination — X min" or "Destination - X min"
+                    const parts = line.split(/\s*[—–-]\s*/);
+                    const dest = parts[0]?.trim() ?? line;
+                    const time = parts.slice(1).join(" — ").trim() || null;
+                    return (
+                      <div
+                        key={i}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc", borderRadius: 12, padding: "14px 18px", border: "1px solid rgba(25,37,55,0.05)" }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <MapPin size={12} color="#7fe2e3" />
+                          <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#555" }}>{dest}</span>
+                        </div>
+                        {time && (
+                          <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, color: "#192537", whiteSpace: "nowrap", marginLeft: 12 }}>{time}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Map */}
             <div style={{ background: "white", borderRadius: 24, padding: "28px", boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
               <SH label="Where Is It" title="Location & Nearby" />
@@ -669,13 +823,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
           {/* ── RIGHT SIDEBAR ── */}
           <div className="detail-sidebar" style={{ position: "sticky", top: 100 }}>
 
-            {/* Price + contacts */}
+            {/* Price + key info */}
             <div style={{ background: "white", borderRadius: 24, padding: "24px", boxShadow: "0 4px 32px rgba(25,37,55,0.1)", marginBottom: 16, overflow: "hidden", position: "relative" }}>
               <div style={{ position: "absolute", top: -24, right: -24, width: 110, height: 110, borderRadius: "50%", background: "rgba(127,226,227,0.05)" }} />
               <div style={{ position: "absolute", bottom: 16, left: -20, width: 70, height: 70, borderRadius: "50%", background: "rgba(127,226,227,0.04)" }} />
 
               {project.priceFrom > 0 && (
-                <div style={{ marginBottom: 20, position: "relative" }}>
+                <div style={{ marginBottom: 16, position: "relative" }}>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#aaa", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>Price range</div>
                   <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: 24, color: "#192537", letterSpacing: "-0.03em" }}>
                     {fmt(project.priceFrom)}{project.priceTo > 0 ? ` – ${fmt(project.priceTo)}` : "+"}
@@ -684,8 +838,22 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
                 </div>
               )}
 
-              <div style={{ display: "flex", flexDirection: "column", borderTop: "1px solid #f4f4f4", paddingTop: 16, marginBottom: 20 }}>
-                {/* Location — links to area guide if exists */}
+              {/* Key badges */}
+              {badges.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid #f4f4f4" }}>
+                  {badges.map(b => (
+                    <span
+                      key={b.label}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(127,226,227,0.1)", border: "1px solid rgba(127,226,227,0.3)", borderRadius: 999, padding: "5px 12px", fontFamily: "Verdana", fontSize: 10, color: "#0d5e5f", fontWeight: 700 }}
+                    >
+                      <span style={{ color: "#7fe2e3", fontWeight: 900 }}>{b.icon}</span> {b.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: "flex", flexDirection: "column", borderTop: badges.length === 0 ? "1px solid #f4f4f4" : "none", paddingTop: badges.length === 0 ? 16 : 0, marginBottom: 20 }}>
+                {/* Location */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f8f8f8" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "Verdana", fontSize: 11, color: "#bbb" }}><MapPin size={12} color="#7fe2e3" />Location</div>
                   {areaSlug
@@ -693,7 +861,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
                     : <span style={{ fontFamily: "Verdana", fontSize: 11, fontWeight: 600, color: "#192537", textAlign: "right", maxWidth: 160 }}>{project.area}</span>
                   }
                 </div>
-                {/* Developer — links to developer page if exists */}
+                {/* Developer */}
                 {project.developer && (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f8f8f8" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "Verdana", fontSize: 11, color: "#bbb" }}><Building2 size={12} color="#7fe2e3" />Developer</div>
@@ -711,8 +879,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
                   <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "Verdana", fontSize: 11, color: "#bbb" }}><Calendar size={12} color="#7fe2e3" />Handover</div>
                   <span style={{ fontFamily: "Verdana", fontSize: 11, fontWeight: 600, color: "#192537" }}>{project.handover || "TBA"}</span>
                 </div>
+                {sqftRange && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f8f8f8" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "Verdana", fontSize: 11, color: "#bbb" }}><Ruler size={12} color="#7fe2e3" />Size</div>
+                    <span style={{ fontFamily: "Verdana", fontSize: 11, fontWeight: 600, color: "#192537" }}>{sqftRange}</span>
+                  </div>
+                )}
               </div>
-
             </div>
 
             {/* Lead form */}
@@ -757,15 +930,18 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
         .facts-strip { scrollbar-width: none; }
         .facts-strip::-webkit-scrollbar { display: none; }
         @media (max-width: 1024px) {
-          .detail-layout  { grid-template-columns: 1fr !important; }
-          .detail-sidebar { position: static !important; }
+          .detail-layout    { grid-template-columns: 1fr !important; }
+          .detail-sidebar   { position: static !important; }
+          .investment-grid  { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 768px) {
-          .amenities-grid { grid-template-columns: repeat(2,1fr) !important; }
-          .pp-grid        { grid-template-columns: repeat(2,1fr) !important; }
+          .amenities-grid   { grid-template-columns: repeat(2,1fr) !important; }
+          .commute-grid     { grid-template-columns: 1fr !important; }
+          .pp-grid          { grid-template-columns: repeat(2,1fr) !important; }
         }
         @media (max-width: 480px) {
-          .amenities-grid { grid-template-columns: 1fr !important; }
+          .amenities-grid   { grid-template-columns: 1fr !important; }
+          .investment-grid  { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </main>
