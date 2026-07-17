@@ -742,43 +742,94 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
             {project.floorPlans.length > 0 && (
               <div style={{ background: "white", borderRadius: 24, padding: "28px", boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
                 <SH label="Layouts" title="Floor Plans & Sizes" />
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(185px, 1fr))", gap: 16 }}>
-                  {project.floorPlans.map((fp, i) => {
-                    const bedNum = fp.beds ?? parseInt(fp.type.replace(/\D/g, "")) ?? 0;
-                    const ghost = fp.type === "Studio" ? "S" : String(bedNum || fp.type.charAt(0));
-                    return (
-                      <div key={i} style={{ borderRadius: 18, padding: "22px 20px", border: "1.5px solid rgba(127,226,227,0.18)", background: "linear-gradient(145deg, #f7fbfc 0%, white 100%)", position: "relative", overflow: "hidden" }}>
-                        {/* ghost number */}
-                        <div style={{ position: "absolute", right: -6, top: -2, fontFamily: "Montserrat, sans-serif", fontWeight: 900, fontSize: 84, color: "rgba(127,226,227,0.08)", lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>
-                          {ghost}
-                        </div>
-                        {/* unit type chip */}
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(127,226,227,0.12)", borderRadius: 999, padding: "5px 13px", marginBottom: 16, fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 11, color: "#0d5e5f" }}>
-                          <Bed size={10} color="#0d5e5f" /> {fp.type}
-                        </span>
-                        {fp.sqft_min > 0 && (
-                          <div style={{ marginBottom: 12 }}>
-                            <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#c0c8d4", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 5 }}>Area</div>
-                            <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: 20, color: "#192537", letterSpacing: "-0.02em", lineHeight: 1 }}>
-                              {fp.sqft_min.toLocaleString()}{fp.sqft_max && fp.sqft_max !== fp.sqft_min ? `–${fp.sqft_max.toLocaleString()}` : ""}
-                              <span style={{ fontFamily: "Verdana", fontSize: 10, fontWeight: 400, color: "#aab2be", marginLeft: 5 }}>sqft</span>
+                {(() => {
+                  const maxSqft = Math.max(...project.floorPlans.map(fp => fp.sqft_max || fp.sqft_min || 0));
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {project.floorPlans.map((fp, i) => {
+                        const bedNum = fp.beds ?? parseInt(fp.type.replace(/\D/g, "")) ?? 0;
+                        const sqftVal = fp.sqft_max || fp.sqft_min || 0;
+                        const barPct  = maxSqft > 0 ? Math.round((sqftVal / maxSqft) * 100) : 0;
+                        const bedLabel = fp.type === "Studio" ? "Studio" : bedNum === 1 ? "Bedroom" : "Bedrooms";
+                        return (
+                          <div
+                            key={i}
+                            className="fp-row"
+                            style={{
+                              display: "flex", alignItems: "stretch",
+                              borderRadius: 16, overflow: "hidden",
+                              border: "1.5px solid rgba(127,226,227,0.14)",
+                              background: "white",
+                              boxShadow: "0 2px 12px rgba(25,37,55,0.04)",
+                            }}
+                          >
+                            {/* left panel — dark, shows bed count */}
+                            <div style={{
+                              background: "linear-gradient(150deg, #192537 0%, #0d1929 100%)",
+                              minWidth: 88, display: "flex", flexDirection: "column",
+                              alignItems: "center", justifyContent: "center",
+                              padding: "20px 16px", gap: 2, flexShrink: 0,
+                            }}>
+                              <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 900, fontSize: 32, color: "#7fe2e3", lineHeight: 1, letterSpacing: "-0.03em" }}>
+                                {fp.type === "Studio" ? "S" : bedNum}
+                              </span>
+                              <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 8, color: "rgba(255,255,255,0.38)", letterSpacing: "0.1em", textTransform: "uppercase", textAlign: "center" }}>
+                                {bedLabel}
+                              </span>
+                            </div>
+
+                            {/* centre — type + sqft + bar */}
+                            <div style={{ flex: 1, padding: "16px 22px", display: "flex", flexDirection: "column", justifyContent: "center", minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "baseline", gap: 16, flexWrap: "wrap", marginBottom: 10 }}>
+                                {/* unit type */}
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(127,226,227,0.1)", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 999, padding: "4px 12px", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 11, color: "#0d5e5f" }}>
+                                    <Bed size={10} color="#0d5e5f" /> {fp.type}
+                                  </span>
+                                </div>
+                                {/* baths */}
+                                {fp.beds != null && (
+                                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                    <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#aab2be" }}>·</span>
+                                    <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#7a8a9e" }}>{fp.beds} Bed{fp.beds !== 1 ? "s" : ""}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {/* sqft */}
+                              {fp.sqft_min > 0 && (
+                                <div style={{ marginBottom: 10 }}>
+                                  <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: 22, color: "#192537", letterSpacing: "-0.03em" }}>
+                                    {fp.sqft_min.toLocaleString()}
+                                    {fp.sqft_max && fp.sqft_max !== fp.sqft_min ? `–${fp.sqft_max.toLocaleString()}` : ""}
+                                  </span>
+                                  <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#aab2be", marginLeft: 6 }}>sqft</span>
+                                </div>
+                              )}
+                              {/* relative size bar */}
+                              <div style={{ height: 4, background: "#f0f2f5", borderRadius: 999, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${barPct}%`, background: "linear-gradient(to right, #7fe2e3, #4db8b9)", borderRadius: 999, transition: "width 0.6s ease" }} />
+                              </div>
+                            </div>
+
+                            {/* right panel — price */}
+                            <div style={{ borderLeft: "1px solid #f0f2f4", padding: "16px 22px", display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center", flexShrink: 0, minWidth: 130 }}>
+                              {fp.price_from ? (
+                                <>
+                                  <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#c0c8d4", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 5 }}>From</div>
+                                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#7fe2e3" }}>{fmt(fp.price_from)}</div>
+                                </>
+                              ) : (
+                                <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#c8cdd5", fontStyle: "italic", textAlign: "right" }}>Price on<br />request</div>
+                              )}
                             </div>
                           </div>
-                        )}
-                        {fp.price_from && (
-                          <div>
-                            <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#c0c8d4", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 5 }}>Starting from</div>
-                            <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#7fe2e3" }}>{fmt(fp.price_from)}</div>
-                          </div>
-                        )}
-                        {/* teal accent bottom */}
-                        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, background: "linear-gradient(to right, #7fe2e3, rgba(127,226,227,0))" }} />
-                      </div>
-                    );
-                  })}
-                </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
                 {/* summary strip */}
-                <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 22, padding: "12px 16px", background: "#f4f7fb", borderRadius: 12, flexWrap: "wrap" }}>
+                <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 22, padding: "11px 16px", background: "#f4f7fb", borderRadius: 12, flexWrap: "wrap" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                     <Layers size={12} color="#7fe2e3" />
                     <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#7a8a9e" }}>{project.floorPlans.length} unit type{project.floorPlans.length !== 1 ? "s" : ""} available</span>
@@ -983,6 +1034,8 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
         @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
         .facts-strip { scrollbar-width: none; }
         .facts-strip::-webkit-scrollbar { display: none; }
+        .fp-row { transition: box-shadow 0.2s, transform 0.18s; }
+        .fp-row:hover { box-shadow: 0 6px 24px rgba(25,37,55,0.10) !important; transform: translateY(-1px); }
         @media (max-width: 1024px) {
           .detail-layout    { grid-template-columns: 1fr !important; }
           .detail-sidebar   { position: static !important; }
