@@ -216,7 +216,7 @@ export default function ProjectsSection({
       )}
 
       <Link
-        href={`/projects?developer=${encodeURIComponent(devName)}`}
+        href={`/projects?dev=${encodeURIComponent(devName.split(" ")[0])}`}
         style={{
           display: "inline-flex",
           alignItems: "center",

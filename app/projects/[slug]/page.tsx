@@ -67,7 +67,13 @@ function mapRow(r: any): ProjectData {
   const images  = filteredImgs.length > 0 ? filteredImgs : [r.image_main].filter(Boolean);
   return {
     id: r.id, name: r.name ?? "Project", tagline: r.tagline ?? "",
-    developer: r.whatsapp_share_text ?? "", area: r.geo_summary ?? "Dubai, UAE",
+    developer: (() => {
+      // whatsapp_share_text = "Project Name by Developer Name\nLocation\nPrice\nURL"
+      const wsLine = ((r.whatsapp_share_text as string) ?? "").split("\n")[0] ?? "";
+      const byMatch = wsLine.match(/ by (.+)$/);
+      return byMatch?.[1] ?? ((r.developer_slug as string ?? "").replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()));
+    })(),
+    area: r.geo_summary ?? "Dubai, UAE",
     status: r.status ?? "off_plan", tag: statusToTag(r.status),
     priceFrom: r.price_from ?? 0, priceTo: r.price_to ?? 0,
     handover: [q, yr].filter(Boolean).join(" "),

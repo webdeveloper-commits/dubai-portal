@@ -60,7 +60,20 @@ export default async function DeveloperPage({ params }: Props) {
   const faqs:         { q: string; a: string }[]                        = d.faqs         || [];
   const areas:        string[]                                           = d.areas        || [];
   const propTypes:    string[]                                           = d.property_types || [];
-  const aboutParas    = (d.about || "").split(/\n\n+/).filter(Boolean);
+
+  // Decode common HTML entities from scraped content
+  function decodeEntities(text: string): string {
+    return text
+      .replace(/&rsquo;/g, "'").replace(/&lsquo;/g, "'")
+      .replace(/&rdquo;/g, '"').replace(/&ldquo;/g, '"')
+      .replace(/&amp;/g, '&').replace(/&ndash;/g, '–').replace(/&mdash;/g, '—')
+      .replace(/&nbsp;/g, ' ').replace(/&#160;/g, ' ')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&hellip;/g, '…');
+  }
+
+  // Split into paragraphs, decode entities, filter out all-caps press release headers, limit to 4 paras
+  const allParas = (d.about || "").split(/\n\n+/).filter(Boolean).map(decodeEntities);
+  const aboutParas = allParas.slice(0, 4);
 
   // For each area the developer operates in, find its real area-guide slug.
   // We query only the relevant rows (one ilike per area) — nothing extra is shown.
@@ -84,12 +97,12 @@ export default async function DeveloperPage({ params }: Props) {
   const totalKP = keyProjects.length;
   const yearsActive = d.founded_year ? (2026 - Number(d.founded_year)) : null;
 
-  // Fetch linked projects from database
-  // Developer name is stored in whatsapp_share_text on the projects table
+  // Fetch linked projects using developer_slug (exact match, most reliable)
   const { data: rawLinkedProjects } = await supabase
     .from("projects")
     .select("name,slug,image_main,status,price_from")
-    .ilike("whatsapp_share_text", `%${d.name.split(" ")[0]}%`)
+    .eq("developer_slug", slug)
+    .eq("is_published", true)
     .limit(9);
 
   function statusLabel(s: string): string {
