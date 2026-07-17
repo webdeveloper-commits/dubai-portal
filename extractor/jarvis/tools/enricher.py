@@ -1297,6 +1297,98 @@ Return ONLY valid JSON. No markdown, no explanation."""
         return {}
 
 
+# ── Area content rewriter ──────────────────────────────────────────────────────
+
+_AREA_REWRITE_PROMPT = """You are a professional copywriter for Elysian, a Dubai property portal.
+Rewrite the scraped area guide content below for {area_name} into clean, human-written copy.
+
+Rules:
+- REMOVE all mentions of Bayut, bayut.com, PropertyFinder, Dubizzle, Zoopla, or any portal/brand name
+- REMOVE generic SEO filler ("nestled", "boasting", "seamlessly blends", "vibrant community")
+- KEEP all specific facts: prices, distances, school names, hospital names, transport lines, years
+- Write in second person or neutral third person — never "I" or "we"
+- Max 3 short paragraphs for `about` (200 words total)
+- `highlight_why_buy`: 1 punchy sentence, max 15 words
+- `highlight_who_lives`: 1 sentence describing the resident profile, max 15 words
+- `highlight_vibe`: 3-5 bullet lines separated by \\n (each under 12 words), capturing what the area feels like
+- `best_streets`: comma-separated list of notable streets/sub-communities (omit if unknown)
+- For schools/hospitals/malls — if they are long paragraph sentences, extract ONLY the actual institution names as a JSON array of plain strings. If no specific names are found, return []
+
+Return ONLY valid JSON with exactly these keys:
+{{
+  "about": "rewritten 3-paragraph description",
+  "highlight_why_buy": "...",
+  "highlight_who_lives": "...",
+  "highlight_vibe": "line1\\nline2\\nline3",
+  "best_streets": "Street A, District B",
+  "schools": ["School Name 1", "School Name 2"],
+  "hospitals": ["Hospital Name 1"],
+  "malls": ["Mall Name 1"],
+  "nearby_areas": ["Area Name 1", "Area Name 2"]
+}}
+
+RAW CONTENT TO REWRITE:
+About/description: {about}
+Nutshell bullets: {nutshell}
+Schools text: {schools}
+Hospitals text: {hospitals}
+Malls text: {malls}
+Nearby areas text: {nearby_areas}
+Lifestyle text: {lifestyle}
+Shopping text: {shopping}
+Transport text: {transport}"""
+
+
+async def _claude_rewrite_area_content(area_name: str, bayut: dict) -> dict:
+    """
+    Rewrites raw Bayut-scraped area content with Claude.
+    Returns a dict of cleaned fields ready to merge into the Supabase update.
+    Falls back gracefully — if Claude fails, returns empty dict (caller uses raw data).
+    """
+    import anthropic as _anthropic
+    import json as _json
+    from ..config import ANTHROPIC_KEY
+
+    def _fmt(val):
+        if isinstance(val, list):
+            return "; ".join(str(v) for v in val[:10]) if val else "N/A"
+        return str(val or "N/A")[:800]
+
+    prompt = _AREA_REWRITE_PROMPT.format(
+        area_name=area_name,
+        about=_fmt(bayut.get("description") or bayut.get("community_overview")),
+        nutshell=_fmt(bayut.get("nutshell")),
+        schools=_fmt(bayut.get("schools")),
+        hospitals=_fmt(bayut.get("hospitals")),
+        malls=_fmt(bayut.get("malls")),
+        nearby_areas=_fmt(bayut.get("nearby_areas")),
+        lifestyle=_fmt(bayut.get("lifestyle")),
+        shopping=_fmt(bayut.get("shopping")),
+        transport=_fmt(bayut.get("transport")),
+    )
+
+    for attempt in range(2):
+        try:
+            client = _anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+            resp = await asyncio.to_thread(
+                lambda: client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=2000,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+            )
+            raw = resp.content[0].text.strip()
+            raw = re.sub(r"^```(?:json)?\s*", "", raw)
+            raw = re.sub(r"\s*```$", "", raw.strip())
+            result = _json.loads(raw)
+            logger.info(f"Claude rewrote area content for '{area_name}'")
+            return result
+        except Exception as e:
+            logger.warning(f"_claude_rewrite_area_content attempt {attempt + 1} failed for '{area_name}': {e}")
+
+    return {}
+
+
 # ── Enrichment runners ─────────────────────────────────────────────────────────
 
 async def enrich_areas() -> list[dict]:
@@ -1342,62 +1434,73 @@ async def enrich_areas() -> list[dict]:
                 await asyncio.sleep(random.uniform(2, 4))
                 bayut = await scrape_bayut_area_guide(guide_url, area_name)
 
+                # Hero image (no rewrite needed)
                 if bayut.get("hero_image"):
                     updates["hero_image"]      = bayut["hero_image"]
                     updates["image_url"]       = bayut["hero_image"]
                     updates["cover_image_url"] = bayut["hero_image"]
 
-                if bayut.get("description"):
-                    updates["about"] = bayut["description"]
-                    if not area.get("description_short"):
-                        updates["description_short"] = bayut["description"][:500]
-
-                # community overview → description_long
-                if bayut.get("community_overview"):
-                    updates["description_long"] = bayut["community_overview"]
-
-                # nutshell bullets → highlight_vibe (comma-separated) or keep as list
-                if bayut.get("nutshell"):
-                    updates["highlight_vibe"] = "\n".join(bayut["nutshell"])
-
-                # schools
-                if bayut.get("schools"):
-                    updates["nearby_schools"] = bayut["schools"]
-                    updates["schools"]         = bayut["schools"]
-
-                # hospitals
-                if bayut.get("hospitals"):
-                    updates["nearby_hospitals"] = bayut["hospitals"]
-                    updates["hospitals"]         = bayut["hospitals"]
-
-                # transport / commute
-                if bayut.get("transport"):
-                    updates["public_transport"] = bayut["transport"]
-
-                # lifestyle (outdoor/fitness/beauty)
-                if bayut.get("lifestyle"):
-                    updates["lifestyle_dining_text"] = bayut["lifestyle"]
-
-                # shopping text
-                if bayut.get("shopping"):
-                    updates["lifestyle_shopping_text"] = bayut["shopping"]
-
-                # malls
-                if bayut.get("malls"):
-                    updates["malls"] = bayut["malls"]
-                    updates["nearby_shopping"] = bayut["malls"]
-
-                # nearby areas
-                if bayut.get("nearby_areas"):
-                    updates["nearby_areas"] = bayut["nearby_areas"]
-
-                # FAQs as JSON array
+                # FAQs — keep raw (already scraped, no Bayut branding in Q&A)
                 if bayut.get("faqs"):
                     updates["faqs"] = bayut["faqs"]
 
                 # location text (distances to landmarks)
                 if bayut.get("location"):
                     updates["geo_summary"] = bayut["location"]
+
+                # transport / commute (factual data, kept as-is)
+                if bayut.get("transport"):
+                    updates["public_transport"] = bayut["transport"]
+
+                # ── Claude rewrite: humanize copy + extract clean names ──────────
+                rewritten = await _claude_rewrite_area_content(area_name, bayut)
+
+                if rewritten.get("about"):
+                    updates["about"] = rewritten["about"]
+                    if not area.get("description_short"):
+                        updates["description_short"] = rewritten["about"][:500]
+                elif bayut.get("description"):
+                    updates["about"] = bayut["description"]
+
+                if rewritten.get("highlight_why_buy"):
+                    updates["highlight_why_buy"] = rewritten["highlight_why_buy"]
+                if rewritten.get("highlight_who_lives"):
+                    updates["highlight_who_lives"] = rewritten["highlight_who_lives"]
+                if rewritten.get("highlight_vibe"):
+                    updates["highlight_vibe"] = rewritten["highlight_vibe"]
+                elif bayut.get("nutshell"):
+                    updates["highlight_vibe"] = "\n".join(bayut["nutshell"])
+                if rewritten.get("best_streets"):
+                    updates["highlight_best_streets"] = rewritten["best_streets"]
+
+                # Schools — prefer Claude-extracted names (clean strings), else raw
+                schools = rewritten.get("schools") or bayut.get("schools")
+                if schools:
+                    updates["nearby_schools"] = schools
+                    updates["schools"]         = schools
+
+                # Hospitals
+                hospitals = rewritten.get("hospitals") or bayut.get("hospitals")
+                if hospitals:
+                    updates["nearby_hospitals"] = hospitals
+                    updates["hospitals"]         = hospitals
+
+                # Malls
+                malls = rewritten.get("malls") or bayut.get("malls")
+                if malls:
+                    updates["malls"]          = malls
+                    updates["nearby_shopping"] = malls
+
+                # Nearby areas — Claude returns short name strings, not paragraphs
+                nearby = rewritten.get("nearby_areas") or bayut.get("nearby_areas")
+                if nearby:
+                    updates["nearby_areas"] = nearby
+
+                # Lifestyle / shopping text (kept raw — these are factual descriptions)
+                if bayut.get("lifestyle"):
+                    updates["lifestyle_dining_text"] = bayut["lifestyle"]
+                if bayut.get("shopping"):
+                    updates["lifestyle_shopping_text"] = bayut["shopping"]
 
             updates["enriched"] = True
             db().table("areas").update(updates).eq("id", area_id).execute()

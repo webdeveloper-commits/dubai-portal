@@ -45,7 +45,7 @@ Extract ALL fields below. Use null for anything not found on the page.
   "size_sqft_min": 650,
   "size_sqft_max": 2100,
   "property_types": ["Apartment"],
-  "lifestyle_tags": ["Marina", "Luxury"],
+  "lifestyle_tags": ["waterfront", "luxury"],
   "status": "off_plan",
   "amenities": ["Swimming Pool", "Gym", "Concierge", "Children Play Area"],
   "payment_plan_summary": "60/40",
@@ -69,7 +69,15 @@ Extract ALL fields below. Use null for anything not found on the page.
 
 Rules:
 - bedroom_types: derive from text. "Studio" for 0-bed. Format: "Studio", "1BR", "2BR", "3BR", "4BR", "5BR+"
-- lifestyle_tags must be from: Beachfront, Golf, Marina, Downtown, Family, Luxury, Investment, Waterfront, Community
+- lifestyle_tags must be from (lowercase, exact): waterfront, golf, luxury, branded, beachfront, community
+  Rules — use each tag ONLY when clearly evidenced in the text:
+  • waterfront  — canal/creek/lagoon/river view or direct water frontage (not ocean/sea beach)
+  • golf        — project is within a golf community or has golf-course-facing units
+  • luxury      — price > AED 3M average, hotel-grade finishes, penthouses, sky villas, or ultra-premium positioning
+  • branded     — hotel-branded residences: Four Seasons, Ritz-Carlton, Bulgari, Armani, W Hotels, Dorchester, Fairmont, Marriott, etc.
+  • beachfront  — oceanfront, seafront, or beach-access within the development
+  • community   — family-oriented gated community with parks, retail, schools on-site (e.g. townhouses, villas, master-planned)
+  Multiple tags allowed. Use [] if none clearly apply — do NOT guess.
 - property_types must be from: Apartment, Villa, Townhouse, Penthouse, Studio, Duplex, Office
 - status: off_plan / ready / new_launch
 - payment_plan_detail: look for percentages at booking/construction/handover. Return as array of stage objects.

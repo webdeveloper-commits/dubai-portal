@@ -84,7 +84,18 @@ function mapRow(r: any): ProjectData {
     images, imagesExterior: (r.images_exterior ?? []) as string[],
     imagesInterior: (r.images_interior ?? []) as string[],
     imagesAmenities: (r.images_amenities ?? []) as string[],
-    paymentPlanSummary: r.payment_plan_summary ?? "", paymentPlanDetail: r.payment_plan_detail ?? null,
+    paymentPlanSummary: r.payment_plan_summary ?? "", paymentPlanDetail: (() => {
+      const raw = r.payment_plan_detail;
+      if (!raw) return null;
+      if (Array.isArray(raw)) {
+        const obj: Record<string, number> = {};
+        for (const item of raw) {
+          if (item.stage && item.percentage != null) obj[item.stage] = Number(item.percentage);
+        }
+        return Object.keys(obj).length > 0 ? obj : null;
+      }
+      return raw as Record<string, number>;
+    })(),
     floorPlans, faqs, amenities: r.amenities ?? [],
     latitude: r.latitude ?? 25.2048, longitude: r.longitude ?? 55.2708,
     totalUnits: r.total_units ?? null,

@@ -301,7 +301,8 @@ export default async function AreaDetailPage({ params }: Props) {
                             fontWeight: 600,
                             fontSize: 13,
                             color: "#192537",
-                            lineHeight: 1.4,
+                            lineHeight: 1.5,
+                            whiteSpace: "pre-line",
                           }}
                         >
                           {value}
@@ -608,21 +609,36 @@ export default async function AreaDetailPage({ params }: Props) {
                     <AmenityColumn
                       title="Schools"
                       icon="🏫"
-                      items={schools.map((s) => ({ name: s.name, sub: [s.type, s.distance].filter(Boolean).join(" · ") || undefined }))}
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      items={schools.map((s: any) =>
+                        typeof s === "string"
+                          ? { name: s }
+                          : { name: s.name as string, sub: [s.type, s.distance].filter(Boolean).join(" · ") || undefined }
+                      )}
                     />
                   )}
                   {hospitals.length > 0 && (
                     <AmenityColumn
                       title="Healthcare"
                       icon="🏥"
-                      items={hospitals.map((h) => ({ name: h.name, sub: h.distance || undefined }))}
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      items={hospitals.map((h: any) =>
+                        typeof h === "string"
+                          ? { name: h }
+                          : { name: h.name as string, sub: (h.distance as string) || undefined }
+                      )}
                     />
                   )}
                   {malls.length > 0 && (
                     <AmenityColumn
                       title="Shopping"
                       icon="🛍️"
-                      items={malls.map((m) => ({ name: m.name, sub: m.distance || undefined }))}
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      items={malls.map((m: any) =>
+                        typeof m === "string"
+                          ? { name: m }
+                          : { name: m.name as string, sub: (m.distance as string) || undefined }
+                      )}
                     />
                   )}
                 </div>
@@ -692,32 +708,43 @@ export default async function AreaDetailPage({ params }: Props) {
                 }}
               >
                 <SectionHeading>Nearby Areas</SectionHeading>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                  {nearbyAreas.map((name: string) => {
-                    const nearbySlug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-                    return (
-                      <Link
-                        key={name}
-                        href={`/area-guides/${nearbySlug}`}
-                        className="nearby-chip"
-                        style={{
-                          display: "inline-block",
-                          background: "rgba(25,37,55,0.04)",
-                          border: "1.5px solid rgba(25,37,55,0.1)",
-                          color: "#192537",
-                          fontFamily: "Verdana, sans-serif",
-                          fontSize: 12,
-                          padding: "8px 18px",
-                          borderRadius: 999,
-                          textDecoration: "none",
-                          transition: "all 0.2s",
-                        }}
-                      >
-                        {name} →
-                      </Link>
-                    );
-                  })}
-                </div>
+                {/* If items look like area names (short), show as clickable chips; otherwise render as description text */}
+                {nearbyAreas.every((n: string) => n.length < 60) ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                    {nearbyAreas.map((name: string) => {
+                      const nearbySlug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+                      return (
+                        <Link
+                          key={name}
+                          href={`/area-guides/${nearbySlug}`}
+                          className="nearby-chip"
+                          style={{
+                            display: "inline-block",
+                            background: "rgba(25,37,55,0.04)",
+                            border: "1.5px solid rgba(25,37,55,0.1)",
+                            color: "#192537",
+                            fontFamily: "Verdana, sans-serif",
+                            fontSize: 12,
+                            padding: "8px 18px",
+                            borderRadius: 999,
+                            textDecoration: "none",
+                            transition: "all 0.2s",
+                          }}
+                        >
+                          {name} →
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {nearbyAreas.map((text: string, i: number) => (
+                      <p key={i} style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#7a8a9e", lineHeight: 1.85, margin: 0 }}>
+                        {text}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
