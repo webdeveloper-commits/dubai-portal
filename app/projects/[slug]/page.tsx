@@ -6,7 +6,7 @@ import Footer from "@/app/components/Footer";
 import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import {
   MapPin, Bed, Calendar, ChevronLeft, ChevronRight,
-  Phone, CheckCircle2, ChevronDown, Building2, Layers,
+  CheckCircle2, ChevronDown, Building2, Layers,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -54,7 +54,16 @@ function mapRow(r: any): ProjectData {
     sqft_min: f.sqft_min ?? 0, sqft_max: f.sqft_max ?? 0, price_from: f.price_from,
   }));
   const allImgs = (r.images_all ?? []) as string[];
-  const images  = allImgs.length > 0 ? allImgs : [r.image_main].filter(Boolean);
+  // Filter out small icon/checkmark images that opr.ae embeds alongside photos
+  const isPhoto = (url: string) => {
+    if (!url) return false;
+    const l = url.toLowerCase();
+    // Skip images with icon-like keywords in the URL
+    if (/icon|check|tick|badge|verified|logo|svg|amenity[-_]?icon/i.test(l)) return false;
+    return true;
+  };
+  const filteredImgs = allImgs.filter(isPhoto);
+  const images  = filteredImgs.length > 0 ? filteredImgs : [r.image_main].filter(Boolean);
   return {
     id: r.id, name: r.name ?? "Project", tagline: r.tagline ?? "",
     developer: r.whatsapp_share_text ?? "", area: r.geo_summary ?? "Dubai, UAE",
@@ -117,11 +126,18 @@ type GTab = "all" | "exterior" | "interior" | "amenities";
 function Gallery({ images, exterior, interior, amenities }: {
   images: string[]; exterior: string[]; interior: string[]; amenities: string[];
 }) {
+  const [badImgs, setBadImgs] = useState<Set<string>>(new Set());
+  const markBad = (src: string, w: number, h: number) => {
+    if (w < 200 || h < 150) setBadImgs(prev => new Set(prev).add(src));
+  };
+
+  const clean = (arr: string[]) => arr.filter(u => !badImgs.has(u));
+
   const tabs = [
-    { key: "all"       as GTab, label: "All Photos",  imgs: images    },
-    { key: "exterior"  as GTab, label: "Exterior",    imgs: exterior  },
-    { key: "interior"  as GTab, label: "Interior",    imgs: interior  },
-    { key: "amenities" as GTab, label: "Amenities",   imgs: amenities },
+    { key: "all"       as GTab, label: "All Photos",  imgs: clean(images)    },
+    { key: "exterior"  as GTab, label: "Exterior",    imgs: clean(exterior)  },
+    { key: "interior"  as GTab, label: "Interior",    imgs: clean(interior)  },
+    { key: "amenities" as GTab, label: "Amenities",   imgs: clean(amenities) },
   ].filter(t => t.imgs.length > 0);
 
   const [tab, setTab] = useState<GTab>(tabs[0]?.key ?? "all");
@@ -167,7 +183,10 @@ function Gallery({ images, exterior, interior, amenities }: {
           {imgs.slice(0, 9).map((src, i) => (
             <button key={i} onClick={() => setIdx(i)}
               style={{ flexShrink: 0, width: 80, height: 54, borderRadius: 8, overflow: "hidden", border: i === idx ? "2.5px solid #7fe2e3" : "2.5px solid transparent", padding: 0, cursor: "pointer", transition: "border-color 0.2s" }}>
-              <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              <img src={src} alt=""
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                onLoad={e => { const el = e.currentTarget as HTMLImageElement; markBad(src, el.naturalWidth, el.naturalHeight); }}
+              />
             </button>
           ))}
         </div>
@@ -675,11 +694,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
                 </div>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <a href="tel:+97140000000" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "13px", borderRadius: 12, background: "#192537", color: "white", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, textDecoration: "none", boxSizing: "border-box", letterSpacing: "0.02em" }}>
-                  <Phone size={14} /> Call Now
-                </a>
-              </div>
             </div>
 
             {/* Lead form */}
@@ -709,9 +723,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#aaa" }}>Starting from</span>
               <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: 17, color: "#192537", letterSpacing: "-0.02em" }}>{fmt(project.priceFrom)}</span>
-              <a href="tel:+97140000000" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#7fe2e3", color: "#192537", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 12, padding: "9px 20px", borderRadius: 999, textDecoration: "none" }}>
-                <Phone size={12} /> Call Now
-              </a>
             </div>
           )}
         </div>

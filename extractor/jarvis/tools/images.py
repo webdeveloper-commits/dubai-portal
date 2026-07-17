@@ -57,6 +57,7 @@ async def upload_project_images(
 ) -> tuple[str | None, list[str]]:
     """
     Upload main image + up to max_gallery gallery images.
+    Skips images smaller than 300×200 (icons/checkmarks from opr.ae).
     Returns (main_cloudinary_url, gallery_cloudinary_urls).
     Falls back to original URL if upload fails.
     """
@@ -64,11 +65,38 @@ async def upload_project_images(
     if main_url:
         main_cloud = await upload_image(main_url, f"projects/{slug}-main")
         if not main_cloud:
-            main_cloud = main_url  # fallback to original
+            main_cloud = main_url
 
     gallery_cloud = []
-    for i, url in enumerate(gallery_urls[:max_gallery]):
-        cloud_url = await upload_image(url, f"projects/{slug}-{i}")
-        gallery_cloud.append(cloud_url or url)  # fallback to original
+    idx = 0
+    for url in gallery_urls:
+        if len(gallery_cloud) >= max_gallery:
+            break
+        try:
+            result = cloudinary.uploader.upload(
+                url,
+                public_id=f"projects/{slug}-{idx}",
+                overwrite=False,
+                resource_type="image",
+                folder="projects",
+                transformation=[
+                    {"width": 1200, "crop": "limit", "quality": "auto:good", "fetch_format": "auto"}
+                ],
+            )
+            w = result.get("width", 0) or 0
+            h = result.get("height", 0) or 0
+            cloud_url = result.get("secure_url")
+            if cloud_url and w >= 300 and h >= 200:
+                gallery_cloud.append(cloud_url)
+                idx += 1
+            elif cloud_url:
+                logger.info(f"Skipped small image for {slug} ({w}x{h}) — likely an icon")
+            else:
+                gallery_cloud.append(url)
+                idx += 1
+        except Exception as e:
+            logger.warning(f"Gallery upload failed for {slug} image {idx}: {e}")
+            gallery_cloud.append(url)
+            idx += 1
 
     return main_cloud, gallery_cloud

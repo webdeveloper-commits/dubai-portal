@@ -94,7 +94,7 @@ export default async function Home() {
       <HeroSection projects={projects} />
       <FeaturedProjects projects={featuredProjects} />
       <PropertyTypes />
-      <LuxuryResidences />
+      <LuxuryResidences projects={projects} />
       <PropertiesByArea />
       <PropertiesByLifestyle />
       <AboutElysian />
