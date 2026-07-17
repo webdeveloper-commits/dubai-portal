@@ -47,7 +47,7 @@ const lifestyles = [
   },
 ];
 
-export default function PropertiesByLifestyle() {
+export default function PropertiesByLifestyle({ counts = {} }: { counts?: Record<string, number> }) {
   const [active, setActive] = useState<string>("luxury");
   const touchStartX = useRef<number | null>(null);
   const [mobileIndex, setMobileIndex] = useState(0);
@@ -151,7 +151,7 @@ export default function PropertiesByLifestyle() {
                 {/* Arrow button — top right, only on active */}
                 {isActive && (
                   <a
-                    href={`/properties?lifestyle=${item.id}`}
+                    href={`/projects?life=${item.id}`}
                     style={{
                       position: "absolute",
                       top: 20,
@@ -228,7 +228,7 @@ export default function PropertiesByLifestyle() {
                           color: "#7fe2e3",
                           letterSpacing: "0.06em",
                         }}>
-                          {item.count} Properties
+                          {counts[item.id] ?? 0} Projects
                         </span>
                       </div>
 
@@ -290,7 +290,7 @@ export default function PropertiesByLifestyle() {
 
             {/* Arrow link */}
             <a
-              href={`/properties?lifestyle=${lifestyles[mobileIndex].id}`}
+              href={`/projects?life=${lifestyles[mobileIndex].id}`}
               style={{
                 position: "absolute", top: 20, right: 20,
                 width: 44, height: 44, borderRadius: 12,
@@ -307,7 +307,7 @@ export default function PropertiesByLifestyle() {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                 <div style={{ width: 20, height: 2, background: "#7fe2e3", borderRadius: 2 }} />
                 <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#7fe2e3", letterSpacing: "0.06em" }}>
-                  {lifestyles[mobileIndex].count} Properties
+                  {counts[lifestyles[mobileIndex].id] ?? 0} Projects
                 </span>
               </div>
               <h3 style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 500, fontSize: 26, color: "white", margin: "0 0 8px", lineHeight: 1.2 }}>

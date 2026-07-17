@@ -79,7 +79,48 @@ export default async function Home() {
   const featuredProjects: FeaturedProject[] = (featuredRows ?? []).map(mapFeatured);
 
   // Single popup project — the one explicitly marked is_featured
-  const popupProject = (featuredRows ?? []).find(r => r.is_featured) ?? null;
+  const popupProject = (featuredRows ?? []).find((r: Record<string, unknown>) => r.is_featured) ?? null;
+
+  // ── Area counts — match project.area against known area keywords ───────────
+  const AREA_KW: Record<string, string[]> = {
+    "downtown":     ["downtown"],
+    "marina":       ["dubai marina", " marina"],
+    "palm":         ["palm jumeirah"],
+    "business-bay": ["business bay"],
+    "jvc":          ["jumeirah village circle", "jvc"],
+    "meydan":       ["meydan"],
+    "creek":        ["creek harbour", "creek harbor"],
+    "hills":        ["damac hills"],
+    "jbr":          ["jumeirah beach residence", "jbr"],
+    "dso":          ["silicon oasis"],
+    "bluewaters":   ["bluewaters"],
+    "sobha":        ["sobha hartland"],
+  };
+  const areaCounts: Record<string, number> = {};
+  for (const p of projects) {
+    const al = p.area.toLowerCase();
+    for (const [id, kws] of Object.entries(AREA_KW)) {
+      if (kws.some(kw => al.includes(kw))) areaCounts[id] = (areaCounts[id] ?? 0) + 1;
+    }
+  }
+
+  // ── Lifestyle counts — match project.lifestyle_tags ───────────────────────
+  const LIFESTYLE_KW: Record<string, string[]> = {
+    "waterfront": ["waterfront", "canal", "creek"],
+    "golf":       ["golf"],
+    "luxury":     ["luxury", "premium", "ultra"],
+    "branded":    ["branded"],
+    "beachfront": ["beachfront", "beach"],
+    "community":  ["community", "family", "gated"],
+  };
+  const lifestyleCounts: Record<string, number> = {};
+  for (const p of projects) {
+    for (const [id, kws] of Object.entries(LIFESTYLE_KW)) {
+      if ((p.lifestyle ?? []).some((l: string) => kws.some(kw => l.toLowerCase().includes(kw)))) {
+        lifestyleCounts[id] = (lifestyleCounts[id] ?? 0) + 1;
+      }
+    }
+  }
   const popup = popupProject ? {
     name:       popupProject.name   ?? "Project",
     slug:       popupProject.slug   ?? "",
@@ -95,8 +136,8 @@ export default async function Home() {
       <FeaturedProjects projects={featuredProjects} />
       <PropertyTypes />
       <LuxuryResidences projects={projects} />
-      <PropertiesByArea />
-      <PropertiesByLifestyle />
+      <PropertiesByArea counts={areaCounts} />
+      <PropertiesByLifestyle counts={lifestyleCounts} />
       <AboutElysian />
       <Footer />
       <Disclaimer />

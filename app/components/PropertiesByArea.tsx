@@ -46,18 +46,18 @@ function GlassTooltip({ area, onClose }: { area: Area; onClose: () => void }) {
         </div>
         <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.15)", margin: "0 16px" }} />
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 4 }}>Listings</div>
+          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 4 }}>Projects</div>
           <div style={{ fontSize: 20, fontWeight: 500, color: "white" }}>{area.listings}</div>
         </div>
       </div>
       <div style={{ height: 1, background: "rgba(255,255,255,0.15)", margin: "0 18px" }} />
       <div style={{ padding: "12px 18px" }}>
-        <a href={`/properties?area=${area.id}`}
+        <a href={`/projects?area=${encodeURIComponent(area.name)}`}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "11px 0", borderRadius: 999, background: "#192537", color: "white", fontSize: 12, fontWeight: 500, textDecoration: "none", letterSpacing: "0.03em", boxSizing: "border-box" as const, transition: "background 0.2s" }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = "#7fe2e3"; (e.currentTarget as HTMLAnchorElement).style.color = "#192537"; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = "#192537"; (e.currentTarget as HTMLAnchorElement).style.color = "white"; }}
         >
-          View All Listings
+          View All Projects
           <span style={{ width: 22, height: 22, borderRadius: "50%", background: "#7fe2e3", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <ArrowUpRight size={11} color="#192537" />
           </span>
@@ -67,7 +67,10 @@ function GlassTooltip({ area, onClose }: { area: Area; onClose: () => void }) {
   );
 }
 
-export default function PropertiesByArea() {
+export default function PropertiesByArea({ counts = {} }: { counts?: Record<string, number> }) {
+  // Merge real project counts from Supabase into the area data
+  const areasWithCounts = areas.map(a => ({ ...a, listings: counts[a.id] ?? 0 }));
+
   const mapRef      = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
   const markersRef  = useRef<any[]>([]);
@@ -80,11 +83,11 @@ export default function PropertiesByArea() {
   const [mapLoaded,    setMapLoaded]    = useState(false);
   const [activeFilter, setActiveFilter] = useState("All");
 
-  const filters = ["All", "High ROI (8%+)", "100+ Listings"];
+  const filters = ["All", "High ROI (8%+)", "Has Projects"];
 
-  const filteredAreas = areas.filter((a) => {
+  const filteredAreas = areasWithCounts.filter((a) => {
     if (activeFilter === "High ROI (8%+)") return parseFloat(a.roi) >= 8;
-    if (activeFilter === "100+ Listings")  return a.listings >= 100;
+    if (activeFilter === "Has Projects")   return a.listings > 0;
     return true;
   });
 
@@ -309,7 +312,7 @@ export default function PropertiesByArea() {
               >
                 <div>
                   <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 500, fontSize: 12, color: "#192537", marginBottom: 2 }}>{area.name}</div>
-                  <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#7a8a9e" }}>{area.listings} listings</div>
+                  <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#7a8a9e" }}>{area.listings} project{area.listings !== 1 ? "s" : ""}</div>
                 </div>
                 <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 500, fontSize: 12, color: "#7fe2e3", flexShrink: 0, marginLeft: 8 }}>{area.roi}</span>
               </button>
@@ -348,13 +351,13 @@ export default function PropertiesByArea() {
           {filteredAreas.map((area) => {
             const isActive = selected?.id === area.id;
             return (
-              <a key={area.id} href={`/properties?area=${area.id}`}
+              <a key={area.id} href={`/projects?area=${encodeURIComponent(area.name)}`}
                 onClick={(e) => { e.preventDefault(); setSelected(area); }}
                 style={{ flex: "0 0 auto", width: 170, scrollSnapAlign: "start", background: isActive ? "#192537" : "white", borderRadius: 16, padding: "14px 16px", boxShadow: "0 4px 16px rgba(25,37,55,0.08)", border: isActive ? "1.5px solid #7fe2e3" : "1.5px solid transparent", textDecoration: "none", display: "block" }}
               >
                 <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 500, fontSize: 13, color: isActive ? "white" : "#192537", marginBottom: 6, lineHeight: 1.3 }}>{area.name}</div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: isActive ? "rgba(255,255,255,0.6)" : "#7a8a9e" }}>{area.listings} listings</span>
+                  <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: isActive ? "rgba(255,255,255,0.6)" : "#7a8a9e" }}>{area.listings} project{area.listings !== 1 ? "s" : ""}</span>
                   <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 500, fontSize: 13, color: "#7fe2e3" }}>{area.roi}</span>
                 </div>
               </a>
