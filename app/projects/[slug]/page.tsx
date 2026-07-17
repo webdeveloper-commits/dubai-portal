@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, use } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import {
@@ -442,6 +443,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ slug: 
 
   return (
     <main style={{ background: "#f4f6f9" }}>
+      <Navbar />
 
       {/* ── HERO ─────────────────────────────────────────────────────────────── */}
       <section style={{ position: "relative", minHeight: "72vh", display: "flex", alignItems: "flex-end", overflow: "hidden" }}>

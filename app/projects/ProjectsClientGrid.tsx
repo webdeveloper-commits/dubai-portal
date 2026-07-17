@@ -1,8 +1,8 @@
 "use client";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import FilterBar, { FilterState } from "@/app/components/filter";
+import FilterBar, { FilterState, DEFAULT_FILTERS } from "@/app/components/filter";
 import { MapPin, Bed, Calendar, ArrowUpRight, SlidersHorizontal, ChevronDown } from "lucide-react";
 
 interface Project {
@@ -71,6 +71,42 @@ function sortProjects(projects: Project[], key: SortKey): Project[] {
   if (key === "price_desc")   return arr.sort((a, b) => b.priceFrom - a.priceFrom);
   if (key === "handover_asc") return arr.sort((a, b) => a.handoverYear - b.handoverYear);
   return arr;
+}
+
+function hasActiveFilters(f: FilterState): boolean {
+  return !!(
+    f.projectSearch || f.priceFrom > 0 || f.priceTo < 100_000_000 ||
+    f.propertyTypes.length || f.areas.length || f.developers.length ||
+    f.handover.length || f.lifestyle.length
+  );
+}
+
+// Parse URL params → FilterState (always returns a valid state)
+function filtersFromParams(params: URLSearchParams): FilterState {
+  return {
+    projectSearch: params.get("q")    ?? "",
+    priceFrom:     parseInt(params.get("pf") ?? "0"),
+    priceTo:       parseInt(params.get("pt") ?? "100000000"),
+    propertyTypes: params.get("type") ? params.get("type")!.split(",").filter(Boolean) : [],
+    areas:         params.get("area") ? params.get("area")!.split(",").filter(Boolean) : [],
+    developers:    params.get("dev")  ? params.get("dev")!.split(",").filter(Boolean)  : [],
+    handover:      params.get("ho")   ? params.get("ho")!.split(",").filter(Boolean)   : [],
+    lifestyle:     params.get("life") ? params.get("life")!.split(",").filter(Boolean) : [],
+  };
+}
+
+// Serialize FilterState → URL params (omits defaults)
+function filtersToParams(f: FilterState): URLSearchParams {
+  const p = new URLSearchParams();
+  if (f.projectSearch)         p.set("q",    f.projectSearch);
+  if (f.priceFrom > 0)         p.set("pf",   String(f.priceFrom));
+  if (f.priceTo < 100_000_000) p.set("pt",   String(f.priceTo));
+  if (f.propertyTypes.length)  p.set("type", f.propertyTypes.join(","));
+  if (f.areas.length)          p.set("area", f.areas.join(","));
+  if (f.developers.length)     p.set("dev",  f.developers.join(","));
+  if (f.handover.length)       p.set("ho",   f.handover.join(","));
+  if (f.lifestyle.length)      p.set("life", f.lifestyle.join(","));
+  return p;
 }
 
 function ProjectCard({ p }: { p: Project }) {
@@ -142,76 +178,60 @@ function SortDropdown({ value, onChange }: { value: SortKey; onChange: (v: SortK
   );
 }
 
-// Parse URL params into FilterState
-function filtersFromParams(params: URLSearchParams): FilterState | null {
-  const q    = params.get("q")    ?? "";
-  const pf   = parseInt(params.get("pf") ?? "0");
-  const pt   = parseInt(params.get("pt") ?? "100000000");
-  const type = params.get("type") ? params.get("type")!.split(",").filter(Boolean) : [];
-  const area = params.get("area") ? params.get("area")!.split(",").filter(Boolean) : [];
-  const dev  = params.get("dev")  ? params.get("dev")!.split(",").filter(Boolean)  : [];
-  const ho   = params.get("ho")   ? params.get("ho")!.split(",").filter(Boolean)   : [];
-  const life = params.get("life") ? params.get("life")!.split(",").filter(Boolean) : [];
-  const hasAny = q || pf > 0 || pt < 100_000_000 || type.length || area.length || dev.length || ho.length || life.length;
-  if (!hasAny) return null;
-  return { projectSearch: q, priceFrom: pf, priceTo: pt, propertyTypes: type, areas: area, developers: dev, handover: ho, lifestyle: life };
-}
-
-// Serialize FilterState to URL params
-function filtersToParams(f: FilterState): URLSearchParams {
-  const p = new URLSearchParams();
-  if (f.projectSearch)            p.set("q",    f.projectSearch);
-  if (f.priceFrom > 0)            p.set("pf",   String(f.priceFrom));
-  if (f.priceTo < 100_000_000)    p.set("pt",   String(f.priceTo));
-  if (f.propertyTypes.length)     p.set("type", f.propertyTypes.join(","));
-  if (f.areas.length)             p.set("area", f.areas.join(","));
-  if (f.developers.length)        p.set("dev",  f.developers.join(","));
-  if (f.handover.length)          p.set("ho",   f.handover.join(","));
-  if (f.lifestyle.length)         p.set("life", f.lifestyle.join(","));
-  return p;
-}
-
 export default function ProjectsClientGrid({ projects }: { projects: Project[] }) {
   const searchParams = useSearchParams();
   const router       = useRouter();
   const pathname     = usePathname();
 
-  const [filters, setFiltersState] = useState<FilterState | null>(() => filtersFromParams(searchParams));
+  // Track if we triggered a navigation to avoid double-set from URL sync
+  const selfNavRef = useRef(false);
+
+  const [filters, setFiltersState] = useState<FilterState>(() => filtersFromParams(searchParams));
   const [sort, setSort]            = useState<SortKey>("default");
 
-  // Keep filter state in sync with URL (browser back/forward)
+  // Sync filter state when URL changes from browser back/forward
   useEffect(() => {
+    if (selfNavRef.current) {
+      selfNavRef.current = false;
+      return;
+    }
     setFiltersState(filtersFromParams(searchParams));
   }, [searchParams]);
 
-  const setFilters = useCallback((f: FilterState | null) => {
+  const setFilters = useCallback((f: FilterState) => {
     setFiltersState(f);
-    if (!f) {
-      router.replace(pathname, { scroll: false });
-    } else {
-      const qs = filtersToParams(f).toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    }
+    const qs = filtersToParams(f).toString();
+    const newUrl = qs ? `${pathname}?${qs}` : pathname;
+    selfNavRef.current = true;
+    router.replace(newUrl, { scroll: false });
   }, [router, pathname]);
 
+  // Project names for autocomplete suggestions
+  const projectNames = useMemo(() => [...new Set(projects.map(p => p.name))], [projects]);
+
   const displayed = useMemo(() => {
-    const base = filters ? applyFilters(projects, filters) : projects;
-    return sortProjects(base, sort);
+    return sortProjects(applyFilters(projects, filters), sort);
   }, [projects, filters, sort]);
 
-  const activeFilterCount = filters
-    ? [filters.areas, filters.developers, filters.propertyTypes, filters.lifestyle, filters.handover]
-        .reduce((n, arr) => n + arr.length, 0)
-      + (filters.priceFrom > 0 || filters.priceTo < 100_000_000 ? 1 : 0)
-      + (filters.projectSearch ? 1 : 0)
-    : 0;
+  const isFiltered = hasActiveFilters(filters);
+
+  const activeFilterCount =
+    [filters.areas, filters.developers, filters.propertyTypes, filters.lifestyle, filters.handover]
+      .reduce((n, arr) => n + arr.length, 0)
+    + (filters.priceFrom > 0 || filters.priceTo < 100_000_000 ? 1 : 0)
+    + (filters.projectSearch ? 1 : 0);
 
   return (
     <>
       {/* Filter bar — inside dark hero-coloured band */}
       <div style={{ background: "#0d1e2e", padding: "0 24px 48px", marginTop: -1 }}>
         <div style={{ maxWidth: 960, margin: "0 auto" }}>
-          <FilterBar onSearch={setFilters} />
+          <FilterBar
+            filters={filters}
+            onFiltersChange={setFilters}
+            onSearch={setFilters}
+            projectNames={projectNames}
+          />
         </div>
       </div>
 
@@ -226,7 +246,7 @@ export default function ProjectsClientGrid({ projects }: { projects: Project[] }
               {activeFilterCount > 0 && (
                 <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(127,226,227,0.12)", color: "#192537", fontFamily: "Verdana", fontSize: 11, padding: "3px 10px", borderRadius: 999 }}>
                   {activeFilterCount} filter{activeFilterCount !== 1 ? "s" : ""} active
-                  <button onClick={() => setFilters(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#7a8a9e", fontSize: 14, marginLeft: 2 }}>×</button>
+                  <button onClick={() => setFilters(DEFAULT_FILTERS)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#7a8a9e", fontSize: 14, marginLeft: 2 }}>×</button>
                 </span>
               )}
             </p>
@@ -238,9 +258,11 @@ export default function ProjectsClientGrid({ projects }: { projects: Project[] }
             <div style={{ textAlign: "center", padding: "80px 0" }}>
               <p style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 22, color: "#192537", marginBottom: 10 }}>No projects found</p>
               <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#7a8a9e", marginBottom: 24 }}>Try adjusting your filters.</p>
-              <button onClick={() => setFilters(null)} style={{ background: "#192537", color: "white", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, padding: "12px 28px", borderRadius: 999, border: "none", cursor: "pointer" }}>
-                Clear Filters
-              </button>
+              {isFiltered && (
+                <button onClick={() => setFilters(DEFAULT_FILTERS)} style={{ background: "#192537", color: "white", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, padding: "12px 28px", borderRadius: 999, border: "none", cursor: "pointer" }}>
+                  Clear Filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="proj-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 28 }}>

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import FilterBar, { FilterState } from "@/app/components/filter";
+import FilterBar, { FilterState, DEFAULT_FILTERS } from "@/app/components/filter";
 import ProjectResults, { Project } from "@/app/components/ProjectResults";
 
 const rotatingWords = ["Dream Home", "Investment", "Future", "Lifestyle"];
@@ -30,6 +30,7 @@ function applyFilters(projects: Project[], filters: FilterState): Project[] {
 export default function HeroSection({ projects }: { projects: Project[] }) {
   const [wordIndex, setWordIndex] = useState(0);
   const [visible, setVisible] = useState(true);
+  const [heroFilters, setHeroFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [activeFilters, setActiveFilters] = useState<FilterState | null>(null);
   const [results, setResults] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
@@ -154,7 +155,16 @@ export default function HeroSection({ projects }: { projects: Project[] }) {
           </p>
 
           <div style={{ marginBottom: 24, width: "100%" }}>
-            <FilterBar onSearch={handleSearch} onShowMap={() => console.log("show map")} areas={areas} developers={developers} projectNames={projectNames} propertyTypes={propertyTypes} lifestyleOptions={lifestyleOptions} />
+            <FilterBar
+              filters={heroFilters}
+              onFiltersChange={setHeroFilters}
+              onSearch={handleSearch}
+              areas={areas}
+              developers={developers}
+              projectNames={projectNames}
+              propertyTypes={propertyTypes}
+              lifestyleOptions={lifestyleOptions}
+            />
           </div>
 
           <div className="hero-tags">

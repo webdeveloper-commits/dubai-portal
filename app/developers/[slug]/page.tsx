@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
-import { ArrowLeft, MapPin, Phone, TrendingUp } from "lucide-react";
+import { ArrowLeft, MapPin, TrendingUp } from "lucide-react";
 import ProjectsSection from "./ProjectsSection";
+import EnquireDevButton from "./EnquireDevButton";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -134,6 +136,7 @@ export default async function DeveloperPage({ params }: Props) {
 
   return (
     <main style={{ background: "#f4f6f9" }}>
+      <Navbar />
 
       {/* JSON-LD */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: orgSchema }} />
@@ -430,9 +433,7 @@ export default async function DeveloperPage({ params }: Props) {
                 <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#192537", lineHeight: 1.8, marginBottom: 18 }}>
                   Interested in {d.name.split(" ")[0]} projects? Our advisors can match you with the right opportunity.
                 </p>
-                <a href="tel:+97140000000" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#192537", color: "white", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, padding: "13px 20px", borderRadius: 12, textDecoration: "none" }}>
-                  <Phone size={14} /> Call Now — Free Advice
-                </a>
+                <EnquireDevButton developerName={d.name} />
               </div>
             </div>
           </div>

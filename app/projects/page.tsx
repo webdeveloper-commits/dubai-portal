@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { supabase } from "@/lib/supabase";
+import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import ProjectsClientGrid from "./ProjectsClientGrid";
@@ -48,12 +49,14 @@ export default async function ProjectsPage() {
   const { data } = await supabase
     .from("projects")
     .select("id,name,slug,status,price_from,handover_quarter,handover_year,bedroom_min,bedroom_max,property_types,lifestyle_tags,image_main,images_all,geo_summary,developer_slug")
+    .eq("is_published", true)
     .order("created_at", { ascending: false });
 
   const projects = (data ?? []).map(mapRow);
 
   return (
     <main>
+      <Navbar />
 
       {/* Hero — server-rendered, Google sees this immediately */}
       <section style={{ background: "#0d1e2e", paddingTop: 140, paddingBottom: 72, paddingLeft: 24, paddingRight: 24, position: "relative", overflow: "hidden" }}>

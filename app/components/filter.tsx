@@ -42,6 +42,11 @@ export interface FilterState {
   lifestyle: string[];
 }
 
+export const DEFAULT_FILTERS: FilterState = {
+  projectSearch: "", priceFrom: 0, priceTo: 100_000_000,
+  propertyTypes: [], areas: [], developers: [], handover: [], lifestyle: [],
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatAED(val: number): string {
@@ -91,29 +96,29 @@ function CheckboxDropdown({
   const isActive = selected.length > 0;
 
   return (
-    <div ref={ref} style={{ position: "relative", width: "100%" }}>
+    <div ref={ref} style={{ position: "relative", minWidth: 0 }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          gap: 8, width: "100%", height: 48, boxSizing: "border-box",
+          gap: 6, width: "100%", height: 48, boxSizing: "border-box",
           border: isActive ? "1.5px solid #7fe2e3" : "1.5px solid #e0e0e0",
-          borderRadius: 12, padding: "0 14px",
+          borderRadius: 12, padding: "0 12px",
           background: "white", cursor: "pointer", fontFamily: "Verdana",
           fontSize: 13, color: isActive ? "#192537" : "#666",
-          transition: "border-color 0.2s",
+          transition: "border-color 0.2s", minWidth: 0,
         }}
       >
-        <span style={{ fontWeight: isActive ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span style={{ fontWeight: isActive ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "left" }}>
           {btnLabel}
         </span>
-        <ChevronDown size={14} color={isActive ? "#7fe2e3" : "#aaa"}
+        <ChevronDown size={13} color={isActive ? "#7fe2e3" : "#aaa"}
           style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }} />
       </button>
 
       {open && (
         <div style={{
-          position: "absolute", top: 54, left: 0, width: "100%", minWidth: 220,
+          position: "absolute", top: 54, left: 0, minWidth: "100%", width: "max-content", maxWidth: 280,
           background: "white", border: "1.5px solid #e5e5e5", borderRadius: 14,
           zIndex: 300, boxShadow: "0 8px 32px rgba(0,0,0,0.14)", overflow: "hidden",
           boxSizing: "border-box",
@@ -129,14 +134,14 @@ function CheckboxDropdown({
           <div style={{ maxHeight: 260, overflowY: "auto" }}>
             {filtered.map(opt => (
               <label key={opt} style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "10px 16px", fontSize: 13, color: "#333", cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "10px 14px", fontSize: 13, color: "#333", cursor: "pointer",
                 borderBottom: "0.5px solid #f5f5f5",
                 background: selected.includes(opt) ? "#f0fbfb" : "white",
               }}>
-                <span>{opt}</span>
                 <input type="checkbox" checked={selected.includes(opt)} onChange={() => toggle(opt)}
-                  style={{ accentColor: "#7fe2e3", width: 16, height: 16, cursor: "pointer" }} />
+                  style={{ accentColor: "#7fe2e3", width: 15, height: 15, cursor: "pointer", flexShrink: 0 }} />
+                <span style={{ textAlign: "left" }}>{opt}</span>
               </label>
             ))}
             {filtered.length === 0 && <div style={{ padding: "14px 16px", fontSize: 12, color: "#bbb" }}>No results</div>}
@@ -167,28 +172,26 @@ function PriceDropdown({ priceFrom, priceTo, onChange }: {
   const isActive = priceFrom > 0 || priceTo < MAX;
 
   return (
-    <div ref={ref} style={{ position: "relative", width: "100%" }}>
+    <div ref={ref} style={{ position: "relative", minWidth: 0 }}>
       <button onClick={() => setOpen(o => !o)} style={{
-        display: "flex", flexDirection: "column", justifyContent: "center",
+        display: "flex", alignItems: "center", gap: 6,
         width: "100%", height: 48, boxSizing: "border-box",
         border: isActive ? "1.5px solid #7fe2e3" : "1.5px solid #e0e0e0",
-        borderRadius: 12, padding: "4px 14px",
+        borderRadius: 12, padding: "0 12px",
         background: "white", cursor: "pointer", textAlign: "left",
-        transition: "border-color 0.2s",
+        transition: "border-color 0.2s", minWidth: 0, overflow: "hidden",
       }}>
-        <span style={{ fontFamily: "Verdana", fontSize: 10, color: "#aaa", letterSpacing: "0.04em", display: "flex", justifyContent: "space-between" }}>
-          <span>Price</span><span>AED</span>
+        <span style={{ fontFamily: "Verdana", fontSize: 13, color: isActive ? "#192537" : "#666", fontWeight: isActive ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {isActive
+            ? `AED ${formatAED(priceFrom)} – ${formatAED(priceTo)}`
+            : "Price Range"}
         </span>
-        <span style={{ fontFamily: "Verdana", fontSize: 13, color: "#222", fontWeight: 600, display: "flex", gap: 4, alignItems: "center" }}>
-          from <span style={{ color: "#7fe2e3" }}>{formatAED(priceFrom)}</span>
-          &nbsp;to&nbsp;
-          <span style={{ color: "#7fe2e3" }}>{formatAED(priceTo)}</span>
-        </span>
+        <ChevronDown size={13} color={isActive ? "#7fe2e3" : "#aaa"} style={{ flexShrink: 0, marginLeft: "auto", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
       </button>
 
       {open && (
         <div style={{
-          position: "absolute", top: 54, left: 0, width: "100%", minWidth: 280,
+          position: "absolute", top: 54, left: 0, width: "max-content", minWidth: "100%", maxWidth: 300,
           background: "white", border: "1.5px solid #e5e5e5", borderRadius: 14,
           zIndex: 300, boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
           padding: "18px 20px 16px", boxSizing: "border-box",
@@ -218,14 +221,19 @@ function PriceDropdown({ priceFrom, priceTo, onChange }: {
 // ─── Main FilterBar ───────────────────────────────────────────────────────────
 
 export default function FilterBar({
-  onSearch, onShowMap,
+  filters,
+  onFiltersChange,
+  onSearch,
+  onShowMap,
   areas = AREAS,
   developers = DEVELOPERS,
   projectNames = [],
   propertyTypes = PROPERTY_TYPES,
   lifestyleOptions = LIFESTYLE_OPTIONS,
 }: {
-  onSearch?: (filters: FilterState) => void;
+  filters: FilterState;
+  onFiltersChange: (f: FilterState) => void;
+  onSearch?: (f: FilterState) => void;
   onShowMap?: () => void;
   areas?: string[];
   developers?: string[];
@@ -233,10 +241,6 @@ export default function FilterBar({
   propertyTypes?: string[];
   lifestyleOptions?: string[];
 }) {
-  const [filters, setFilters] = useState<FilterState>({
-    projectSearch: "", priceFrom: 0, priceTo: 100_000_000,
-    propertyTypes: [], areas: [], developers: [], handover: [], lifestyle: [],
-  });
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
@@ -255,14 +259,14 @@ export default function FilterBar({
     : [];
 
   function update<K extends keyof FilterState>(key: K, val: FilterState[K]) {
-    setFilters(prev => ({ ...prev, [key]: val }));
+    onFiltersChange({ ...filters, [key]: val });
   }
 
   function selectSuggestion(name: string) {
     const updated = { ...filters, projectSearch: name };
-    setFilters(updated);
-    setShowSuggestions(false);
+    onFiltersChange(updated);
     onSearch?.(updated);
+    setShowSuggestions(false);
   }
 
   return (
@@ -282,12 +286,12 @@ export default function FilterBar({
         /* ── Desktop (>900px): 2 tight rows, buttons in row 2 ── */
         .fb-row1 {
           display: grid;
-          grid-template-columns: 1fr 260px 160px;
+          grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) minmax(0,0.9fr);
           gap: 10px;
         }
         .fb-row2 {
           display: grid;
-          grid-template-columns: 1fr 1fr 1fr 1fr 150px 110px;
+          grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 240px;
           gap: 10px;
           margin-top: 10px;
         }
@@ -295,14 +299,13 @@ export default function FilterBar({
         /* ── Tablet (601–900px): filters in row2, buttons get their own row ── */
         @media (max-width: 900px) and (min-width: 601px) {
           .fb-row1 {
-            grid-template-columns: 1fr 220px 150px;
+            grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) minmax(0,0.9fr);
           }
           .fb-row2 {
-            grid-template-columns: 1fr 1fr 1fr 1fr;
+            grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);
           }
           .fb-row3 {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr;
+            display: flex !important;
             gap: 10px;
             margin-top: 10px;
           }
@@ -311,10 +314,9 @@ export default function FilterBar({
         /* ── Mobile (≤600px): everything single column ── */
         @media (max-width: 600px) {
           .fb-row1 { grid-template-columns: 1fr; }
-          .fb-row2 { grid-template-columns: 1fr; }
+          .fb-row2 { grid-template-columns: 1fr 1fr; }
           .fb-row3 {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr;
+            display: flex !important;
             gap: 10px;
             margin-top: 10px;
           }
@@ -324,7 +326,7 @@ export default function FilterBar({
         .fb-row3 { display: none; }
 
         /* On desktop, show the inline buttons inside row2 */
-        .fb-inline-btns { display: contents; }
+        .fb-inline-btns { display: flex; gap: 8px; }
 
         /* On tablet/mobile, hide inline buttons — they move to row3 */
         @media (max-width: 900px) {
@@ -356,24 +358,27 @@ export default function FilterBar({
 
         {/* ── Row 1: search + price + property type ── */}
         <div className="fb-row1">
-          <div ref={searchRef} style={{ position: "relative", width: "100%" }}>
+          <div ref={searchRef} style={{ position: "relative", minWidth: 0 }}>
             <div style={{
               display: "flex", alignItems: "center", gap: 8,
               border: `1.5px solid ${filters.projectSearch ? "#7fe2e3" : "#e0e0e0"}`, borderRadius: 12,
-              padding: "0 14px", height: 48, background: "white",
+              padding: "0 12px", height: 48, background: "white",
               boxSizing: "border-box", width: "100%",
             }}>
               <Search size={15} color="#aaa" style={{ flexShrink: 0 }} />
               <input
                 type="text" placeholder="Search Project Name"
                 value={filters.projectSearch}
-                onChange={e => { update("projectSearch", e.target.value); setShowSuggestions(true); }}
+                onChange={e => {
+                  update("projectSearch", e.target.value);
+                  setShowSuggestions(true);
+                }}
                 onFocus={() => setShowSuggestions(true)}
                 style={{ border: "none", outline: "none", fontFamily: "Verdana", fontSize: 13, color: "#222", width: "100%", background: "transparent" }}
               />
               {filters.projectSearch && (
                 <button onClick={() => { update("projectSearch", ""); setShowSuggestions(false); }}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", padding: 0, lineHeight: 1 }}>✕</button>
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", padding: 0, lineHeight: 1, flexShrink: 0 }}>✕</button>
               )}
             </div>
             {showSuggestions && suggestions.length > 0 && (
@@ -403,7 +408,7 @@ export default function FilterBar({
 
           <PriceDropdown
             priceFrom={filters.priceFrom} priceTo={filters.priceTo}
-            onChange={(from, to) => setFilters(prev => ({ ...prev, priceFrom: from, priceTo: to }))}
+            onChange={(from, to) => onFiltersChange({ ...filters, priceFrom: from, priceTo: to })}
           />
 
           <CheckboxDropdown label="Property Type" options={propertyTypes}
@@ -428,10 +433,12 @@ export default function FilterBar({
 
           {/* Buttons visible only on desktop (>900px) */}
           <div className="fb-inline-btns">
-            <button className="fb-action fb-map" onClick={onShowMap}>
-              <MapPin size={15} color="#7fe2e3" style={{ flexShrink: 0 }} />
-              Show Map
-            </button>
+            {onShowMap && (
+              <button className="fb-action fb-map" onClick={onShowMap}>
+                <MapPin size={15} color="#7fe2e3" style={{ flexShrink: 0 }} />
+                Show Map
+              </button>
+            )}
 
             <button className="fb-action fb-find" onClick={() => onSearch?.(filters)}>
               <Search size={15} color="#192537" style={{ flexShrink: 0 }} />
@@ -442,12 +449,14 @@ export default function FilterBar({
 
         {/* ── Row 3: buttons only on tablet + mobile ── */}
         <div className="fb-row3">
-          <button className="fb-action fb-map" onClick={onShowMap}>
-            <MapPin size={15} color="#7fe2e3" style={{ flexShrink: 0 }} />
-            Show Map
-          </button>
+          {onShowMap && (
+            <button className="fb-action fb-map" onClick={onShowMap} style={{ flex: 1 }}>
+              <MapPin size={15} color="#7fe2e3" style={{ flexShrink: 0 }} />
+              Show Map
+            </button>
+          )}
 
-          <button className="fb-action fb-find" onClick={() => onSearch?.(filters)}>
+          <button className="fb-action fb-find" onClick={() => onSearch?.(filters)} style={{ flex: 1 }}>
             <Search size={15} color="#192537" style={{ flexShrink: 0 }} />
             Find
           </button>
