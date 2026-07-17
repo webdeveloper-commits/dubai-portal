@@ -151,7 +151,6 @@ export default function PropertiesByArea({ counts = {} }: { counts?: Record<stri
       });
 
       marker.addListener("click", () => showTooltip(area));
-      marker.element.addEventListener("mouseenter", () => showTooltip(area));
       markersRef.current.push(marker);
     });
   }, [showTooltip]);
