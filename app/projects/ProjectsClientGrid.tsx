@@ -206,6 +206,42 @@ export default function ProjectsClientGrid({ projects }: { projects: Project[] }
     router.replace(newUrl, { scroll: false });
   }, [router, pathname]);
 
+  // ── Derive filter options from actual project data ─────────────────────────
+  // This ensures options always match what's in the DB exactly
+
+  // Areas: first segment of geo_summary ("Dubai Marina, Dubai" → "Dubai Marina")
+  const areaOptions = useMemo(() => {
+    const set = new Set<string>();
+    projects.forEach(p => {
+      const area = p.area.split(",")[0]?.trim();
+      if (area) set.add(area);
+    });
+    return Array.from(set).sort();
+  }, [projects]);
+
+  // Developers: title-cased from developer_slug — same as p.developer in the card
+  const developerOptions = useMemo(() => {
+    const set = new Set<string>();
+    projects.forEach(p => { if (p.developer) set.add(p.developer); });
+    return Array.from(set).sort();
+  }, [projects]);
+
+  // Property types: exact values stored in DB ("Apartment", "Villa", etc.)
+  const propertyTypeOptions = useMemo(() => {
+    const set = new Set<string>();
+    projects.forEach(p => p.propertyTypes.forEach(t => { if (t) set.add(t); }));
+    return Array.from(set).sort();
+  }, [projects]);
+
+  // Lifestyle: DB stores lowercase ("beachfront") → title-case for display
+  const lifestyleOptions = useMemo(() => {
+    const set = new Set<string>();
+    projects.forEach(p => p.lifestyle.forEach(t => {
+      if (t) set.add(t.charAt(0).toUpperCase() + t.slice(1));
+    }));
+    return Array.from(set).sort();
+  }, [projects]);
+
   // Project names for autocomplete suggestions
   const projectNames = useMemo(() => [...new Set(projects.map(p => p.name))], [projects]);
 
@@ -231,6 +267,10 @@ export default function ProjectsClientGrid({ projects }: { projects: Project[] }
             onFiltersChange={setFilters}
             onSearch={setFilters}
             projectNames={projectNames}
+            areas={areaOptions}
+            developers={developerOptions}
+            propertyTypes={propertyTypeOptions}
+            lifestyleOptions={lifestyleOptions}
           />
         </div>
       </div>
