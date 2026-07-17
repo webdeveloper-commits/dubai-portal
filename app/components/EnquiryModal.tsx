@@ -1,30 +1,8 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
-import { X, CheckCircle2, ChevronDown, Phone } from "lucide-react";
-
-// ── Country codes (ordered by UAE real-estate market relevance) ───────────────
-const COUNTRY_CODES = [
-  { code: "+971", label: "🇦🇪 UAE (+971)" },
-  { code: "+966", label: "🇸🇦 Saudi Arabia (+966)" },
-  { code: "+974", label: "🇶🇦 Qatar (+974)" },
-  { code: "+965", label: "🇰🇼 Kuwait (+965)" },
-  { code: "+973", label: "🇧🇭 Bahrain (+973)" },
-  { code: "+968", label: "🇴🇲 Oman (+968)" },
-  { code: "+91",  label: "🇮🇳 India (+91)" },
-  { code: "+92",  label: "🇵🇰 Pakistan (+92)" },
-  { code: "+44",  label: "🇬🇧 UK (+44)" },
-  { code: "+1",   label: "🇺🇸 USA/Canada (+1)" },
-  { code: "+49",  label: "🇩🇪 Germany (+49)" },
-  { code: "+33",  label: "🇫🇷 France (+33)" },
-  { code: "+7",   label: "🇷🇺 Russia (+7)" },
-  { code: "+86",  label: "🇨🇳 China (+86)" },
-  { code: "+61",  label: "🇦🇺 Australia (+61)" },
-  { code: "+962", label: "🇯🇴 Jordan (+962)" },
-  { code: "+961", label: "🇱🇧 Lebanon (+961)" },
-  { code: "+20",  label: "🇪🇬 Egypt (+20)" },
-  { code: "+212", label: "🇲🇦 Morocco (+212)" },
-  { code: "+27",  label: "🇿🇦 South Africa (+27)" },
-];
+import { useState, useEffect } from "react";
+import { X, CheckCircle2, Phone } from "lucide-react";
+import { isValidPhoneNumber } from "libphonenumber-js";
+import PhoneField from "./PhoneField";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -40,107 +18,21 @@ interface Props {
   context?: EnquiryContext;
 }
 
-// ── Country code dropdown ─────────────────────────────────────────────────────
-
-function CountryCodeDropdown({
-  value, onChange,
-}: { value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false); setSearch("");
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const selected = COUNTRY_CODES.find(c => c.code === value) ?? COUNTRY_CODES[0];
-  const filtered = COUNTRY_CODES.filter(c =>
-    c.label.toLowerCase().includes(search.toLowerCase()) || c.code.includes(search)
-  );
-
-  return (
-    <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
-      <button
-        type="button"
-        onClick={() => { setOpen(o => !o); setSearch(""); }}
-        style={{
-          display: "flex", alignItems: "center", gap: 4,
-          height: 44, padding: "0 10px 0 12px",
-          background: "#f4f6f9", border: "1.5px solid #e0e0e0",
-          borderRadius: "10px 0 0 10px", cursor: "pointer",
-          fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#192537",
-          whiteSpace: "nowrap", minWidth: 80,
-        }}
-      >
-        <span style={{ fontSize: 14 }}>{selected.label.split(" ")[0]}</span>
-        <span>{value}</span>
-        <ChevronDown size={11} color="#7a8a9e"
-          style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
-      </button>
-
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 9999,
-          background: "white", border: "1.5px solid #e0e0e0", borderRadius: 12,
-          boxShadow: "0 12px 36px rgba(0,0,0,0.14)", minWidth: 220, maxHeight: 260, overflow: "hidden",
-          display: "flex", flexDirection: "column",
-        }}>
-          <input
-            autoFocus
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search country..."
-            style={{
-              padding: "10px 14px", border: "none", borderBottom: "1px solid #f0f0f0",
-              fontFamily: "Verdana", fontSize: 12, outline: "none", background: "#f9f9f9",
-            }}
-          />
-          <div style={{ overflowY: "auto", flex: 1 }}>
-            {filtered.map(c => (
-              <button key={c.code} type="button"
-                onClick={() => { onChange(c.code); setOpen(false); setSearch(""); }}
-                style={{
-                  display: "block", width: "100%", padding: "10px 14px", textAlign: "left",
-                  fontFamily: "Verdana", fontSize: 12, border: "none", cursor: "pointer",
-                  background: c.code === value ? "#f0fbfb" : "white",
-                  color: c.code === value ? "#192537" : "#444",
-                  borderBottom: "0.5px solid #f5f5f5",
-                }}
-                onMouseEnter={e => { if (c.code !== value) (e.currentTarget as HTMLButtonElement).style.background = "#f9f9f9"; }}
-                onMouseLeave={e => { if (c.code !== value) (e.currentTarget as HTMLButtonElement).style.background = "white"; }}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main modal ────────────────────────────────────────────────────────────────
 
 export default function EnquiryModal({ isOpen, onClose, context = {} }: Props) {
-  const [name,        setName]        = useState("");
-  const [email,       setEmail]       = useState("");
-  const [countryCode, setCountryCode] = useState("+971");
-  const [phone,       setPhone]       = useState("");
-  const [message,     setMessage]     = useState("");
-  const [errors,      setErrors]      = useState<Record<string, string>>({});
-  const [loading,     setLoading]     = useState(false);
-  const [sent,        setSent]        = useState(false);
+  const [name,    setName]    = useState("");
+  const [email,   setEmail]   = useState("");
+  const [phone,   setPhone]   = useState("");
+  const [message, setMessage] = useState("");
+  const [errors,  setErrors]  = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [sent,    setSent]    = useState(false);
 
   // Reset on open
   useEffect(() => {
     if (isOpen) {
-      setName(""); setEmail(""); setCountryCode("+971"); setPhone("");
+      setName(""); setEmail(""); setPhone("");
       setMessage(""); setErrors({}); setLoading(false); setSent(false);
     }
   }, [isOpen]);
@@ -161,13 +53,12 @@ export default function EnquiryModal({ isOpen, onClose, context = {} }: Props) {
 
   const validate = () => {
     const errs: Record<string, string> = {};
-    if (!name.trim())        errs.name  = "Your name is required.";
-    if (!email.trim())       errs.email = "Email address is required.";
+    if (!name.trim())  errs.name  = "Your name is required.";
+    if (!email.trim()) errs.email = "Email address is required.";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
-                             errs.email = "Please enter a valid email.";
-    if (!phone.trim())       errs.phone = "Phone number is required.";
-    else if (phone.replace(/\D/g, "").length < 6)
-                             errs.phone = "Please enter a valid phone number.";
+                       errs.email = "Please enter a valid email.";
+    if (!phone || !isValidPhoneNumber("+" + phone))
+                       errs.phone = "Please enter a valid phone number.";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -177,24 +68,25 @@ export default function EnquiryModal({ isOpen, onClose, context = {} }: Props) {
     if (!validate()) return;
     setLoading(true);
 
-    // Collect active filter params from URL
-    const filterDetails = typeof window !== "undefined"
-      ? Object.fromEntries(new URLSearchParams(window.location.search).entries())
-      : {};
+    const params = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search)
+      : new URLSearchParams();
+    const utmSource    = params.get("utm_source");
+    const filterDetails = Object.fromEntries(params.entries());
 
     try {
       const res = await fetch("/api/enquire", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          countryCode,
-          phone: phone.trim(),
-          message: message.trim(),
+          name:          name.trim(),
+          email:         email.trim(),
+          phone:         "+" + phone,
+          message:       message.trim(),
           projectName:   context.projectName   || null,
           developerName: context.developerName || null,
           areaName:      context.areaName      || null,
+          utmSource:     utmSource             || null,
           filterDetails: Object.keys(filterDetails).length ? filterDetails : null,
           sourceUrl:     typeof window !== "undefined" ? window.location.href : null,
         }),
@@ -319,23 +211,9 @@ export default function EnquiryModal({ isOpen, onClose, context = {} }: Props) {
                   {errors.email && <p style={errSt}>{errors.email}</p>}
                 </div>
 
-                {/* Phone with country code */}
+                {/* Phone */}
                 <div>
-                  <div style={{ display: "flex" }}>
-                    <CountryCodeDropdown value={countryCode} onChange={setCountryCode} />
-                    <input
-                      type="tel" placeholder="Phone Number *"
-                      value={phone} onChange={e => setPhone(e.target.value)}
-                      style={{
-                        ...inp, flex: 1,
-                        borderRadius: "0 10px 10px 0",
-                        borderLeft: "none",
-                        borderColor: errors.phone ? "#e53e3e" : "#e0e0e0",
-                      }}
-                      onFocus={e => { if (!errors.phone) e.currentTarget.style.borderColor = "#7fe2e3"; }}
-                      onBlur={e => { if (!errors.phone) e.currentTarget.style.borderColor = "#e0e0e0"; }}
-                    />
-                  </div>
+                  <PhoneField value={phone} onChange={setPhone} error={!!errors.phone} />
                   {errors.phone && <p style={errSt}>{errors.phone}</p>}
                 </div>
 

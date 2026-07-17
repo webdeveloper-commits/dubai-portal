@@ -5,27 +5,29 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
-      name, email, countryCode, phone, message,
-      projectName, developerName, areaName, filterDetails, sourceUrl,
+      name, email, phone, message,
+      projectName, developerName, areaName,
+      utmSource, filterDetails, sourceUrl,
     } = body;
 
     if (!name?.trim())
       return NextResponse.json({ error: "Name is required." }, { status: 400 });
     if (!email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
       return NextResponse.json({ error: "A valid email address is required." }, { status: 400 });
-    if (!phone?.trim() || phone.replace(/\D/g, "").length < 6)
+    if (!phone?.trim() || phone.replace(/\D/g, "").length < 7)
       return NextResponse.json({ error: "A valid phone number is required." }, { status: 400 });
 
-    const cc = (countryCode || "+971").trim();
-    const fullPhone = `${cc} ${phone.trim().replace(/^0+/, "")}`;
+    // phone arrives as full E.164 (e.g. "+971501234567")
+    const fullPhone = phone.trim();
 
-    // Build notes from filter details if present
-    let notes: string | null = null;
+    // Build notes from UTM + filter details
+    const noteParts: string[] = [];
+    if (utmSource) noteParts.push(`UTM Source: ${utmSource}`);
     if (filterDetails && Object.keys(filterDetails).length > 0) {
-      notes = "Filters: " + JSON.stringify(filterDetails);
+      noteParts.push("Filters: " + JSON.stringify(filterDetails));
     }
+    const notes = noteParts.length ? noteParts.join(" | ") : null;
 
-    // Parse price range from filter details into budget fields
     const budgetMin = filterDetails?.priceFrom > 0 ? filterDetails.priceFrom : null;
     const budgetMax = filterDetails?.priceTo < 100_000_000 ? filterDetails.priceTo : null;
 
