@@ -136,7 +136,7 @@ function CheckboxDropdown({
           right: alignRight ? 0 : undefined,
           minWidth: panelMinW,
           background: "white", border: "1.5px solid #e5e5e5", borderRadius: 14,
-          zIndex: 9999, boxShadow: "0 8px 32px rgba(0,0,0,0.14)", overflow: "hidden",
+          zIndex: 80, boxShadow: "0 8px 32px rgba(0,0,0,0.14)", overflow: "hidden",
           boxSizing: "border-box",
         }}>
           {searchable && (
@@ -223,7 +223,7 @@ function PriceDropdown({ priceFrom, priceTo, onChange }: {
           right: alignRight ? 0 : undefined,
           minWidth: PANEL_W,
           background: "white", border: "1.5px solid #e5e5e5", borderRadius: 14,
-          zIndex: 9999, boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
+          zIndex: 80, boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
           padding: "18px 20px 16px", boxSizing: "border-box",
         }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
