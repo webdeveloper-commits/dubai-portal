@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, use } from "react";
+import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import Navbar from "@/app/components/Navbar";
@@ -10,6 +10,9 @@ import {
   CheckCircle2, ChevronDown, Building2, Layers, Ruler, Clock,
 } from "lucide-react";
 import dynamic from "next/dynamic";
+import { isValidPhoneNumber } from "libphonenumber-js";
+import PhoneField from "@/app/components/PhoneField";
+import { getLeadTrackingData } from "@/lib/tracking";
 
 const PrimeLocationMap = dynamic(() => import("@/app/components/PrimeLocationMap"), { ssr: false });
 
@@ -324,54 +327,13 @@ function FaqAccordion({ q, a }: { q: string; a: string }) {
   );
 }
 
-// ─── Country codes ────────────────────────────────────────────────────────────
-
-const CC_LIST = [
-  { code: "+971", flag: "🇦🇪" }, { code: "+966", flag: "🇸🇦" }, { code: "+974", flag: "🇶🇦" },
-  { code: "+965", flag: "🇰🇼" }, { code: "+973", flag: "🇧🇭" }, { code: "+968", flag: "🇴🇲" },
-  { code: "+91",  flag: "🇮🇳" }, { code: "+92",  flag: "🇵🇰" }, { code: "+44",  flag: "🇬🇧" },
-  { code: "+1",   flag: "🇺🇸" }, { code: "+49",  flag: "🇩🇪" }, { code: "+33",  flag: "🇫🇷" },
-  { code: "+7",   flag: "🇷🇺" }, { code: "+86",  flag: "🇨🇳" }, { code: "+61",  flag: "🇦🇺" },
-  { code: "+962", flag: "🇯🇴" }, { code: "+961", flag: "🇱🇧" }, { code: "+20",  flag: "🇪🇬" },
-];
-
-function CCDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-  const sel = CC_LIST.find(c => c.code === value) ?? CC_LIST[0];
-  return (
-    <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
-      <button type="button" onClick={() => setOpen(o => !o)}
-        style={{ display: "flex", alignItems: "center", gap: 3, height: 42, padding: "0 8px 0 10px", background: "#f4f6f9", border: "1.5px solid #eaeaea", borderRadius: "10px 0 0 10px", cursor: "pointer", fontFamily: "Verdana", fontSize: 11, color: "#192537", whiteSpace: "nowrap", minWidth: 72 }}>
-        <span style={{ fontSize: 14 }}>{sel.flag}</span> {value}
-        <ChevronDown size={10} color="#7a8a9e" />
-      </button>
-      {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, zIndex: 200, background: "white", border: "1.5px solid #eaeaea", borderRadius: 10, boxShadow: "0 10px 30px rgba(0,0,0,0.12)", minWidth: 160, maxHeight: 200, overflowY: "auto" }}>
-          {CC_LIST.map(c => (
-            <button key={c.code} type="button" onClick={() => { onChange(c.code); setOpen(false); }}
-              style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "8px 12px", textAlign: "left", fontFamily: "Verdana", fontSize: 11, border: "none", cursor: "pointer", background: c.code === value ? "#f0fbfb" : "white", borderBottom: "0.5px solid #f5f5f5" }}>
-              <span style={{ fontSize: 14 }}>{c.flag}</span> {c.code}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Lead Form ────────────────────────────────────────────────────────────────
 
 function LeadForm({ projectName, developerName, areaName }: { projectName: string; developerName?: string; areaName?: string }) {
   const [name,    setName]    = useState("");
   const [email,   setEmail]   = useState("");
-  const [cc,      setCc]      = useState("+971");
   const [phone,   setPhone]   = useState("");
+  const [message, setMessage] = useState("");
   const [errors,  setErrors]  = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [sent,    setSent]    = useState(false);
@@ -380,7 +342,7 @@ function LeadForm({ projectName, developerName, areaName }: { projectName: strin
     const e: Record<string, string> = {};
     if (!name.trim())  e.name  = "Name is required.";
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = "Valid email required.";
-    if (!phone.trim() || phone.replace(/\D/g, "").length < 6)        e.phone = "Valid phone required.";
+    if (!phone || !isValidPhoneNumber("+" + phone)) e.phone = "Please enter a valid phone number.";
     setErrors(e);
     return !Object.keys(e).length;
   };
@@ -389,14 +351,17 @@ function LeadForm({ projectName, developerName, areaName }: { projectName: strin
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
+    const tracking = getLeadTrackingData();
     try {
       const res = await fetch("/api/enquire", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name.trim(), email: email.trim(), countryCode: cc, phone: phone.trim(),
+          name: name.trim(), email: email.trim(), phone: "+" + phone,
+          message: message.trim(),
           projectName, developerName: developerName || null, areaName: areaName || null,
           sourceUrl: typeof window !== "undefined" ? window.location.href : null,
+          ...tracking,
         }),
       });
       const json = await res.json();
@@ -435,12 +400,14 @@ function LeadForm({ projectName, developerName, areaName }: { projectName: strin
         {errors.email && <p style={errSt}>{errors.email}</p>}
       </div>
       <div>
-        <div style={{ display: "flex" }}>
-          <CCDropdown value={cc} onChange={setCc} />
-          <input type="tel" placeholder="Phone Number *" value={phone} onChange={e => setPhone(e.target.value)}
-            style={{ ...inp, flex: 1, borderRadius: "0 10px 10px 0", borderLeft: "none", borderColor: errors.phone ? "#e53e3e" : "#eaeaea" }} />
-        </div>
+        <PhoneField value={phone} onChange={setPhone} error={!!errors.phone} />
         {errors.phone && <p style={errSt}>{errors.phone}</p>}
+      </div>
+      <div>
+        <textarea placeholder="Message (optional)" value={message} onChange={e => setMessage(e.target.value)}
+          rows={3} style={{ ...inp, resize: "none", lineHeight: 1.6 }}
+          onFocus={e => { e.currentTarget.style.borderColor = "#7fe2e3"; }}
+          onBlur={e => { e.currentTarget.style.borderColor = "#eaeaea"; }} />
       </div>
       {errors.submit && <p style={{ ...errSt, textAlign: "center" }}>{errors.submit}</p>}
       <button type="submit" disabled={loading}
