@@ -607,7 +607,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                 <div style={{ width: 32, height: 32, borderRadius: 10, background: "rgba(127,226,227,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "rgba(255,255,255,0.38)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
-                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, color: "white", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val}</div>
+                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, color: "white" }}>{val}</div>
                 </div>
               </div>
             ))}
@@ -726,48 +726,66 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                         const sqftVal = fp.sqft_max || fp.sqft_min || 0;
                         const barPct  = maxSqft > 0 ? Math.round((sqftVal / maxSqft) * 100) : 0;
                         const bedLabel = fp.type === "Studio" ? "Studio" : bedNum === 1 ? "Bedroom" : "Bedrooms";
-                        return (
+                        return isMobile ? (
+                          /* ── Mobile: flat row ── */
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: "1px solid #eef0f3" }}>
+                            {/* bed badge */}
+                            <div style={{ width: 46, height: 46, borderRadius: 13, background: "linear-gradient(150deg,#192537,#0d1929)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0, gap: 1 }}>
+                              <span style={{ fontFamily: "Montserrat,sans-serif", fontWeight: 900, fontSize: 18, color: "#7fe2e3", lineHeight: 1 }}>{fp.type === "Studio" ? "S" : bedNum}</span>
+                              <span style={{ fontFamily: "Verdana,sans-serif", fontSize: 7, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>BR</span>
+                            </div>
+                            {/* info */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                                <span style={{ fontFamily: "Montserrat,sans-serif", fontWeight: 700, fontSize: 13, color: "#192537" }}>{fp.type}</span>
+                                {fp.sqft_min > 0 && (
+                                  <span style={{ fontFamily: "Verdana,sans-serif", fontSize: 11, color: "#7a8a9e" }}>
+                                    {fp.sqft_min.toLocaleString()}{fp.sqft_max && fp.sqft_max !== fp.sqft_min ? `–${fp.sqft_max.toLocaleString()}` : ""} sqft
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ height: 3, background: "#f0f2f5", borderRadius: 999, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${barPct}%`, background: "linear-gradient(to right,#7fe2e3,#4db8b9)", borderRadius: 999 }} />
+                              </div>
+                            </div>
+                            {/* price */}
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              {fp.price_from ? (
+                                <>
+                                  <div style={{ fontFamily: "Verdana,sans-serif", fontSize: 8, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>From</div>
+                                  <div style={{ fontFamily: "Montserrat,sans-serif", fontWeight: 700, fontSize: 12, color: "#7fe2e3" }}>{fmt(fp.price_from)}</div>
+                                </>
+                              ) : (
+                                <div style={{ fontFamily: "Verdana,sans-serif", fontSize: 10, color: "#aaa", fontStyle: "italic" }}>On request</div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          /* ── Desktop: 3-panel card ── */
                           <div key={i} className="fp-row">
-                            {/* left panel */}
                             <div className="fp-left">
                               <span className="fp-left-num">{fp.type === "Studio" ? "S" : bedNum}</span>
                               <span className="fp-left-label">{bedLabel}</span>
                             </div>
-
-                            {/* centre */}
                             <div className="fp-center">
                               <div style={{ display: "flex", alignItems: "baseline", gap: 16, flexWrap: "wrap", marginBottom: 10 }}>
-                                {/* unit type */}
-                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(127,226,227,0.1)", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 999, padding: "4px 12px", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 11, color: "#0d5e5f" }}>
-                                    <Bed size={10} color="#0d5e5f" /> {fp.type}
-                                  </span>
-                                </div>
-                                {/* baths */}
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(127,226,227,0.1)", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 999, padding: "4px 12px", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 11, color: "#0d5e5f" }}>
+                                  <Bed size={10} color="#0d5e5f" /> {fp.type}
+                                </span>
                                 {fp.beds != null && (
-                                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                    <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#aab2be" }}>·</span>
-                                    <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#7a8a9e" }}>{fp.beds} Bed{fp.beds !== 1 ? "s" : ""}</span>
-                                  </div>
+                                  <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#7a8a9e" }}>· {fp.beds} Bed{fp.beds !== 1 ? "s" : ""}</span>
                                 )}
                               </div>
-                              {/* sqft */}
                               {fp.sqft_min > 0 && (
                                 <div style={{ marginBottom: 10 }}>
-                                  <span className="fp-sqft">
-                                    {fp.sqft_min.toLocaleString()}
-                                    {fp.sqft_max && fp.sqft_max !== fp.sqft_min ? `–${fp.sqft_max.toLocaleString()}` : ""}
-                                  </span>
+                                  <span className="fp-sqft">{fp.sqft_min.toLocaleString()}{fp.sqft_max && fp.sqft_max !== fp.sqft_min ? `–${fp.sqft_max.toLocaleString()}` : ""}</span>
                                   <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#aab2be", marginLeft: 6 }}>sqft</span>
                                 </div>
                               )}
-                              {/* relative size bar */}
                               <div style={{ height: 4, background: "#f0f2f5", borderRadius: 999, overflow: "hidden" }}>
                                 <div style={{ height: "100%", width: `${barPct}%`, background: "linear-gradient(to right, #7fe2e3, #4db8b9)", borderRadius: 999, transition: "width 0.6s ease" }} />
                               </div>
                             </div>
-
-                            {/* right panel — price */}
                             <div className="fp-right">
                               {fp.price_from ? (
                                 <>

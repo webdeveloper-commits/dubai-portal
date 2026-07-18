@@ -109,8 +109,7 @@
 
 .facts-item { display: flex; align-items: center; gap: 10px; padding: 18px 24px; flex-shrink: 0; }
 @media (max-width: 768px) {
-  .facts-item { width: 50%; padding: 14px 14px; box-sizing: border-box; border-bottom: 1px solid rgba(255,255,255,0.06); }
-  .facts-item:nth-child(odd) { border-right: 1px solid rgba(255,255,255,0.06); }
+  .facts-item { width: 100%; padding: 14px 16px; box-sizing: border-box; border-bottom: 1px solid rgba(255,255,255,0.06); border-right: none !important; }
 }
 
 /* ── Gallery thumbs ── */
