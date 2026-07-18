@@ -29,6 +29,8 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+export const revalidate = 3600;
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const { data } = await supabase
     .from("developers")
