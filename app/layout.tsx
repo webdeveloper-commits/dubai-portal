@@ -34,6 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     .from("developers")
     .select("name,slug")
     .eq("published", true)
+    .eq("show_in_menu", true)
     .order("name", { ascending: true });
 
   const developers = (data ?? []) as { name: string; slug: string }[];

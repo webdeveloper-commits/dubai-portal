@@ -80,16 +80,6 @@ export default function DeveloperLogos({ developers }: { developers: Dev[] }) {
           ))}
         </div>
 
-        {/* CTA */}
-        <div style={{ textAlign: "center", marginTop: 44 }}>
-          <Link href="/projects"
-            style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "13px 32px", borderRadius: 999, background: "#192537", color: "white", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, textDecoration: "none", transition: "background 0.2s", letterSpacing: "0.02em" }}
-            onMouseEnter={e => { e.currentTarget.style.background = "#7fe2e3"; e.currentTarget.style.color = "#192537"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "#192537"; e.currentTarget.style.color = "white"; }}
-          >
-            Explore All Projects →
-          </Link>
-        </div>
       </div>
 
       {/* ── Developer logos strip ── */}
