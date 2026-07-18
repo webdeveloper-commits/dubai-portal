@@ -3,6 +3,7 @@ import FeaturedProjects, { FeaturedProject } from "@/app/components/FeaturedProj
 import FeaturedProjectPopup from "@/app/components/FeaturedProjectPopup";
 import PropertyTypes from "@/app/components/PropertyTypes";
 import LuxuryResidences from "@/app/components/LuxuryResidences";
+import DeveloperLogos from "@/app/components/DeveloperLogos";
 import PropertiesByArea from "@/app/components/PropertiesByArea";
 import PropertiesByLifestyle from "@/app/components/PropertiesByLifestyle";
 import AboutElysian from "@/app/components/AboutElysian";
@@ -81,6 +82,15 @@ export default async function Home() {
   // Single popup project — the one explicitly marked is_featured
   const popupProject = (featuredRows ?? []).find((r: Record<string, unknown>) => r.is_featured) ?? null;
 
+  // Developer logos for partner strip
+  const { data: devRows } = await supabase
+    .from("developers")
+    .select("name,slug,logo_url")
+    .eq("published", true)
+    .order("name", { ascending: true });
+
+  const developerLogos = (devRows ?? []) as { name: string; slug: string; logo_url: string | null }[];
+
   // ── Area counts — match project.area against known area keywords ───────────
   const AREA_KW: Record<string, string[]> = {
     "downtown":     ["downtown"],
@@ -135,6 +145,7 @@ export default async function Home() {
       <HeroSection projects={projects} />
       <FeaturedProjects projects={featuredProjects} />
       <PropertyTypes />
+      <DeveloperLogos developers={developerLogos} />
       <LuxuryResidences projects={projects} />
       <PropertiesByArea counts={areaCounts} />
       <PropertiesByLifestyle counts={lifestyleCounts} />
