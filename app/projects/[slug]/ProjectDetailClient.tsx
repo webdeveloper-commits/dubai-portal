@@ -454,6 +454,14 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
   const [project, setProject] = useState<ProjectData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 1024);
+    check();
+    window.addEventListener("resize", check, { passive: true });
+    return () => window.removeEventListener("resize", check);
+  }, []);
   useEffect(() => {
     supabase
       .from("projects")
@@ -497,7 +505,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
     : null;
 
   return (
-    <main style={{ background: "#f4f6f9" }}>
+    <main style={{ background: "#f4f6f9", overflowX: "hidden" }}>
 
       {/* ── HERO ─────────────────────────────────────────────────────────────── */}
       <section className="pd-hero" style={{ position: "relative", minHeight: "75vh", display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
@@ -520,7 +528,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
               <span style={{ fontFamily: "Verdana", fontSize: 11, color: "#7fe2e3" }}>{project.name}</span>
             </div>
 
-            <div className="pd-hero-row" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, flexWrap: "wrap" }}>
+            <div className="pd-hero-row" style={{ display: "flex", alignItems: isMobile ? "flex-start" : "flex-end", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", gap: isMobile ? 16 : 24 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 {tag && project.tag && (
                   <span style={{ display: "inline-block", background: tag.bg, color: tag.color, fontFamily: "Verdana", fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", padding: "6px 16px", borderRadius: 999, marginBottom: 16, border: "1px solid rgba(127,226,227,0.25)", backdropFilter: "blur(8px)" }}>
@@ -563,7 +571,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
               </div>
 
               {project.priceFrom > 0 && (
-                <div className="pd-price-box" style={{ background: "rgba(255,255,255,0.09)", backdropFilter: "blur(14px)", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 20, padding: "20px 26px", textAlign: "right", flexShrink: 0 }}>
+                <div className="pd-price-box" style={{ background: "rgba(255,255,255,0.09)", backdropFilter: "blur(14px)", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 20, padding: isMobile ? "14px 18px" : "20px 26px", textAlign: isMobile ? "left" : "right", width: isMobile ? "100%" : undefined, flexShrink: 0 }}>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "rgba(255,255,255,0.45)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>Starting from</div>
                   <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: "clamp(20px,3vw,32px)", color: "white", letterSpacing: "-0.03em" }}>
                     {fmt(project.priceFrom)}
@@ -603,8 +611,8 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
       </div>
 
       {/* ── MAIN CONTENT ─────────────────────────────────────────────────────── */}
-      <div className="pd-content" style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 24px 96px", boxSizing: "border-box" }}>
-        <div className="detail-layout" style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 36, alignItems: "start" }}>
+      <div className="pd-content" style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "24px 16px 72px" : "48px 24px 96px", boxSizing: "border-box" }}>
+        <div className="detail-layout" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 360px", gap: isMobile ? 20 : 36, alignItems: "start" }}>
 
           {/* ── LEFT ── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
@@ -888,7 +896,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
           </div>
 
           {/* ── RIGHT SIDEBAR ── */}
-          <div className="detail-sidebar" style={{ position: "sticky", top: 100 }}>
+          <div className="detail-sidebar" style={{ position: isMobile ? "static" : "sticky", top: 100 }}>
 
             {/* Price + key info */}
             <div style={{ background: "white", borderRadius: 24, padding: "24px", boxShadow: "0 4px 32px rgba(25,37,55,0.1)", marginBottom: 16, overflow: "hidden", position: "relative" }}>
@@ -989,49 +997,8 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
 
       <style>{`
         @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-
-        /* Facts strip */
         .facts-strip { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
         .facts-strip::-webkit-scrollbar { display: none; }
-
-        /* Floor plan rows */
-        .fp-row { transition: box-shadow 0.2s, transform 0.18s; }
-        .fp-row:hover { box-shadow: 0 6px 24px rgba(25,37,55,0.10) !important; transform: translateY(-1px); }
-
-        /* 1-col layout at tablet */
-        @media (max-width: 1024px) {
-          .detail-layout   { grid-template-columns: 1fr !important; }
-          .detail-sidebar  { position: static !important; }
-          .investment-grid { grid-template-columns: repeat(2,1fr) !important; }
-        }
-
-        /* Hero mobile */
-        @media (max-width: 768px) {
-          .pd-hero         { min-height: 100svh !important; }
-          .pd-hero-content { padding: 96px 16px 32px !important; }
-          .pd-hero-row     { flex-direction: column !important; align-items: flex-start !important; gap: 16px !important; }
-          .pd-price-box    { width: 100% !important; text-align: left !important; padding: 16px 18px !important; }
-          .amenities-grid  { grid-template-columns: repeat(2,1fr) !important; }
-          .commute-grid    { grid-template-columns: 1fr !important; }
-          .pp-grid         { grid-template-columns: repeat(2,1fr) !important; }
-          .investment-grid { grid-template-columns: 1fr !important; }
-          .pd-content      { padding: 28px 16px 72px !important; }
-        }
-
-        /* Small mobile */
-        @media (max-width: 480px) {
-          .pd-hero-content  { padding: 88px 14px 28px !important; }
-          .amenities-grid   { grid-template-columns: 1fr !important; }
-          .investment-grid  { grid-template-columns: 1fr !important; }
-          .pp-grid          { grid-template-columns: 1fr !important; }
-          .pd-content       { padding: 20px 12px 64px !important; }
-          .pd-section-card  { padding: 20px 16px !important; }
-          .detail-layout    { gap: 16px !important; }
-        }
-
-        /* Thumbnail strip — scrollable on touch */
-        .pd-thumbs { -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; }
-        .pd-thumbs button { scroll-snap-align: start; }
       `}</style>
     </main>
   );

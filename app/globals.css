@@ -38,6 +38,38 @@
   }
 }
 
+/* ─── Project detail page ───────────────────────────────────────────────── */
+@keyframes pd-fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
+.pd-facts-strip   { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.pd-facts-strip::-webkit-scrollbar { display: none; }
+.pd-thumbs        { -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; }
+.pd-thumbs button { scroll-snap-align: start; }
+
+.fp-row { transition: box-shadow 0.2s, transform 0.18s; }
+.fp-row:hover { box-shadow: 0 6px 24px rgba(25,37,55,0.10) !important; transform: translateY(-1px); }
+
+@media (max-width: 1024px) {
+  .investment-grid { grid-template-columns: repeat(2,1fr) !important; }
+}
+@media (max-width: 768px) {
+  .pd-hero         { min-height: 100svh !important; }
+  .pd-hero-content { padding: 96px 16px 32px !important; }
+  .amenities-grid  { grid-template-columns: repeat(2,1fr) !important; }
+  .commute-grid    { grid-template-columns: 1fr !important; }
+  .pp-grid         { grid-template-columns: repeat(2,1fr) !important; }
+  .investment-grid { grid-template-columns: 1fr !important; }
+  .pd-section-card { padding: 22px 18px !important; }
+}
+@media (max-width: 480px) {
+  .pd-hero-content { padding: 88px 14px 28px !important; }
+  .amenities-grid  { grid-template-columns: 1fr !important; }
+  .investment-grid { grid-template-columns: 1fr !important; }
+  .pp-grid         { grid-template-columns: 1fr !important; }
+  .pd-section-card { padding: 18px 14px !important; }
+  .fp-row > div:last-child { min-width: 110px !important; padding: 14px 14px !important; }
+}
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #f9f9f9; }
 ::-webkit-scrollbar-thumb { background: #7a8a9e; border-radius: 3px; }
