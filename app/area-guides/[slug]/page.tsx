@@ -177,6 +177,12 @@ export default async function AreaDetailPage({ params }: Props) {
   // nearby_areas: if any item > 60 chars → render as text, not chips
   const nearbyAsChips = nearbyAreas.every((n: string) => n.length < 60);
 
+  // amenities: if any raw item is a long paragraph → switch to prose layout
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const amenitiesAreProse = [...schools, ...hospitals, ...malls].some((item: any) =>
+    typeof item === "string" && item.length > 80
+  );
+
   return (
     <main style={{ background: "#f4f6f9" }}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: breadcrumbSchema }} />
@@ -398,17 +404,17 @@ export default async function AreaDetailPage({ params }: Props) {
             {(aboutParas.length > 0 || area.highlight_why_buy || area.highlight_who_lives || area.highlight_vibe) && (
               <div style={{ background: "white", borderRadius: 20, padding: "32px", boxShadow: "0 2px 16px rgba(25,37,55,0.05)" }}>
 
-                {/* Highlights 3-col grid */}
-                {(area.highlight_why_buy || area.highlight_who_lives || area.highlight_vibe) && (
+                {/* Highlights 3-col grid — only when ≥2 of the 3 fields have data */}
+                {(area.highlight_why_buy || area.highlight_who_lives) && (
                   <div
                     className="highlights-grid"
                     style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 0, marginBottom: 28, borderRadius: 16, overflow: "hidden", border: "1px solid #f0f0f0" }}
                   >
                     {[
-                      { label: "Why Buy Here",   value: area.highlight_why_buy,   pre: false },
-                      { label: "Who Lives Here", value: area.highlight_who_lives, pre: false },
-                      { label: "The Vibe",       value: area.highlight_vibe,      pre: true  },
-                    ].filter(h => h.value).map(({ label, value, pre }, idx) => (
+                      { label: "Why Buy Here",   value: area.highlight_why_buy   },
+                      { label: "Who Lives Here", value: area.highlight_who_lives },
+                      { label: "The Vibe",       value: area.highlight_vibe      },
+                    ].filter(h => h.value).map(({ label, value }, idx) => (
                       <div
                         key={label}
                         style={{
@@ -422,16 +428,7 @@ export default async function AreaDetailPage({ params }: Props) {
                         <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#aaa", letterSpacing: "0.09em", textTransform: "uppercase", marginBottom: 7 }}>
                           {label}
                         </div>
-                        <div
-                          style={{
-                            fontFamily: "Montserrat, sans-serif",
-                            fontWeight: 600,
-                            fontSize: 13,
-                            color: "#192537",
-                            lineHeight: 1.55,
-                            whiteSpace: pre ? "pre-line" : undefined,
-                          }}
-                        >
+                        <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 600, fontSize: 13, color: "#192537", lineHeight: 1.55 }}>
                           {value}
                         </div>
                       </div>
@@ -462,6 +459,26 @@ export default async function AreaDetailPage({ params }: Props) {
                     {area.name} is one of Dubai&apos;s most sought-after communities, offering a blend of modern living and convenient access to the city&apos;s key destinations.
                   </p>
                 )}
+
+                {/* Key Facts — vibe bullet points (only shown when why_buy/who_lives are absent) */}
+                {area.highlight_vibe && !area.highlight_why_buy && !area.highlight_who_lives && (() => {
+                  const vibeLines = (area.highlight_vibe as string).split(/\n+/).map((l: string) => l.trim()).filter(Boolean);
+                  return vibeLines.length > 0 ? (
+                    <div style={{ marginTop: aboutParas.length > 0 ? 24 : 0, padding: "20px 22px", background: "rgba(127,226,227,0.05)", borderRadius: 14, border: "1px solid rgba(127,226,227,0.18)" }}>
+                      <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#0d5e5f", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700, marginBottom: 14 }}>
+                        Key Facts
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {vibeLines.map((line: string, i: number) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, background: "white", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 999, padding: "6px 14px" }}>
+                            <span style={{ color: "#7fe2e3", fontSize: 10, fontWeight: 700 }}>✓</span>
+                            <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#192537" }}>{line}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
 
                 {(area.area_size || area.roi_pct != null) && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 22 }}>
@@ -530,31 +547,25 @@ export default async function AreaDetailPage({ params }: Props) {
             {(area.lifestyle_dining_text || area.lifestyle_parks_text || area.lifestyle_shopping_text) && (
               <div style={{ background: "white", borderRadius: 20, padding: "32px", boxShadow: "0 2px 16px rgba(25,37,55,0.05)" }}>
                 <SectionHeading>Lifestyle</SectionHeading>
-                <div
-                  className="lifestyle-grid"
-                  style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}
-                >
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                   {[
-                    { title: "Dining",   text: area.lifestyle_dining_text,   image: area.lifestyle_dining_image   },
-                    { title: "Parks",    text: area.lifestyle_parks_text,    image: area.lifestyle_parks_image    },
-                    { title: "Shopping", text: area.lifestyle_shopping_text, image: area.lifestyle_shopping_image },
-                  ].filter(c => c.text).map(({ title, text, image }) => (
-                    <div key={title} style={{ borderRadius: 14, overflow: "hidden", border: "1px solid rgba(25,37,55,0.06)", background: "#fafafa" }}>
-                      {image ? (
-                        <div style={{ aspectRatio: "4/3", overflow: "hidden" }}>
-                          <img src={image} alt={title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                        </div>
-                      ) : (
-                        <div style={{ aspectRatio: "4/3", background: "linear-gradient(135deg, rgba(127,226,227,0.1) 0%, rgba(25,37,55,0.05) 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <span style={{ fontSize: 28 }}>
-                            {title === "Dining" ? "🍽️" : title === "Parks" ? "🌿" : "🛍️"}
-                          </span>
-                        </div>
-                      )}
-                      <div style={{ padding: "14px 16px" }}>
-                        <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, color: "#192537", marginBottom: 6 }}>{title}</div>
-                        <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#7a8a9e", lineHeight: 1.7, margin: 0 }}>{text}</p>
+                    { title: "Dining",            emoji: "🍽️", text: area.lifestyle_dining_text,   image: area.lifestyle_dining_image   },
+                    { title: "Parks & Recreation", emoji: "🌿", text: area.lifestyle_parks_text,    image: area.lifestyle_parks_image    },
+                    { title: "Shopping",           emoji: "🛍️", text: area.lifestyle_shopping_text, image: area.lifestyle_shopping_image },
+                  ].filter(c => c.text).map(({ title, emoji, text, image }, idx, arr) => (
+                    <div key={title} style={{ display: "flex", gap: 20, paddingBottom: idx < arr.length - 1 ? 24 : 0, marginBottom: idx < arr.length - 1 ? 24 : 0, borderBottom: idx < arr.length - 1 ? "1px solid #f4f6f9" : "none" }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(127,226,227,0.1)", border: "1px solid rgba(127,226,227,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, marginTop: 2 }}>
+                        {emoji}
                       </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#192537", marginBottom: 10 }}>{title}</div>
+                        {(text as string).split(/\n\n+/).filter(Boolean).map((para: string, i: number) => (
+                          <p key={i} style={{ fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#7a8a9e", lineHeight: 1.8, margin: i === 0 ? 0 : "10px 0 0" }}>{para.trim()}</p>
+                        ))}
+                      </div>
+                      {image && (
+                        <img src={image as string} alt={title} style={{ width: 130, height: 100, objectFit: "cover", borderRadius: 12, flexShrink: 0, alignSelf: "flex-start" }} />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -606,51 +617,112 @@ export default async function AreaDetailPage({ params }: Props) {
             {(schools.length > 0 || hospitals.length > 0 || malls.length > 0) && (
               <div style={{ background: "white", borderRadius: 20, padding: "32px", boxShadow: "0 2px 16px rgba(25,37,55,0.05)" }}>
                 <SectionHeading>Nearby Amenities</SectionHeading>
-                <div
-                  className="amenities-cols"
-                  style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}
-                >
-                  {schools.length > 0 && (
-                    <AmenityColumn
-                      title="Schools"
-                      icon="🏫"
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      items={schools.map((s: any) =>
-                        typeof s === "string"
-                          ? { name: s }
-                          : { name: s.name as string, sub: [s.type, s.distance].filter(Boolean).join(" · ") || undefined }
-                      )}
-                    />
-                  )}
-                  {hospitals.length > 0 && (
-                    <AmenityColumn
-                      title="Healthcare"
-                      icon="🏥"
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      items={hospitals.map((h: any) =>
-                        typeof h === "string"
-                          ? { name: h }
-                          : { name: h.name as string, sub: (h.distance as string) || undefined }
-                      )}
-                    />
-                  )}
-                  {malls.length > 0 && (
-                    <AmenityColumn
-                      title="Shopping"
-                      icon="🛍️"
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      items={malls.map((m: any) =>
-                        typeof m === "string"
-                          ? { name: m }
-                          : { name: m.name as string, sub: (m.distance as string) || undefined }
-                      )}
-                    />
-                  )}
-                </div>
+                {amenitiesAreProse ? (
+                  /* Prose layout — each category is a stacked row with paragraphs */
+                  <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                    {[
+                      { title: "Schools & Education", icon: "🏫", items: schools },
+                      { title: "Healthcare",          icon: "🏥", items: hospitals },
+                      { title: "Shopping",            icon: "🛍️", items: malls },
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    ].filter(s => s.items.length > 0).map(({ title, icon, items }, idx, arr) => (
+                      <div key={title} style={{ paddingBottom: idx < arr.length - 1 ? 24 : 0, marginBottom: idx < arr.length - 1 ? 24 : 0, borderBottom: idx < arr.length - 1 ? "1px solid #f4f6f9" : "none" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                          <span style={{ fontSize: 18 }}>{icon}</span>
+                          <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#192537" }}>{title}</span>
+                        </div>
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        {items.map((s: any, i: number) => {
+                          const text = typeof s === "string" ? s : (s.name as string) ?? "";
+                          return (
+                            <p key={i} style={{ fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#7a8a9e", lineHeight: 1.85, margin: i === 0 ? 0 : "12px 0 0" }}>
+                              {text}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* Chips layout — short names in a 3-col grid */
+                  <div
+                    className="amenities-cols"
+                    style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}
+                  >
+                    {schools.length > 0 && (
+                      <AmenityColumn
+                        title="Schools"
+                        icon="🏫"
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        items={schools.map((s: any) =>
+                          typeof s === "string"
+                            ? { name: s }
+                            : { name: s.name as string, sub: [s.type, s.distance].filter(Boolean).join(" · ") || undefined }
+                        )}
+                      />
+                    )}
+                    {hospitals.length > 0 && (
+                      <AmenityColumn
+                        title="Healthcare"
+                        icon="🏥"
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        items={hospitals.map((h: any) =>
+                          typeof h === "string"
+                            ? { name: h }
+                            : { name: h.name as string, sub: (h.distance as string) || undefined }
+                        )}
+                      />
+                    )}
+                    {malls.length > 0 && (
+                      <AmenityColumn
+                        title="Shopping"
+                        icon="🛍️"
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        items={malls.map((m: any) =>
+                          typeof m === "string"
+                            ? { name: m }
+                            : { name: m.name as string, sub: (m.distance as string) || undefined }
+                        )}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* 6. Location Map */}
+            {/* 6. Nearby Areas */}
+            {nearbyAreas.length > 0 && (
+              <div style={{ background: "white", borderRadius: 20, padding: "32px", boxShadow: "0 2px 16px rgba(25,37,55,0.05)" }}>
+                <SectionHeading>Nearby Areas</SectionHeading>
+                {nearbyAsChips ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                    {nearbyAreas.map((name: string) => {
+                      const nearbySlug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+                      return (
+                        <Link
+                          key={name}
+                          href={`/area-guides/${nearbySlug}`}
+                          className="nearby-chip"
+                          style={{ display: "inline-block", background: "rgba(25,37,55,0.04)", border: "1.5px solid rgba(25,37,55,0.1)", color: "#192537", fontFamily: "Verdana, sans-serif", fontSize: 12, padding: "8px 18px", borderRadius: 999, textDecoration: "none" }}
+                        >
+                          {name} →
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {nearbyAreas.map((text: string, i: number) => (
+                      <p key={i} style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#7a8a9e", lineHeight: 1.85, margin: 0 }}>
+                        {text}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 7. Location Map */}
             <PrimeLocationMap
               areaName={area.name}
               latitude={area.latitude ?? undefined}
@@ -712,37 +784,6 @@ export default async function AreaDetailPage({ params }: Props) {
               </div>
             )}
 
-            {/* 9. Nearby Areas */}
-            {nearbyAreas.length > 0 && (
-              <div style={{ background: "white", borderRadius: 20, padding: "32px", boxShadow: "0 2px 16px rgba(25,37,55,0.05)" }}>
-                <SectionHeading>Nearby Areas</SectionHeading>
-                {nearbyAsChips ? (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                    {nearbyAreas.map((name: string) => {
-                      const nearbySlug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-                      return (
-                        <Link
-                          key={name}
-                          href={`/area-guides/${nearbySlug}`}
-                          className="nearby-chip"
-                          style={{ display: "inline-block", background: "rgba(25,37,55,0.04)", border: "1.5px solid rgba(25,37,55,0.1)", color: "#192537", fontFamily: "Verdana, sans-serif", fontSize: 12, padding: "8px 18px", borderRadius: 999, textDecoration: "none" }}
-                        >
-                          {name} →
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                    {nearbyAreas.map((text: string, i: number) => (
-                      <p key={i} style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#7a8a9e", lineHeight: 1.85, margin: 0 }}>
-                        {text}
-                      </p>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
 
           </div>
 
