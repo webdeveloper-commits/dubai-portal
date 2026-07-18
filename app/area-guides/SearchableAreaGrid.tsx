@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Search, ArrowUpRight } from "lucide-react";
 
 interface AreaSummary {
   id: string;
@@ -44,7 +44,7 @@ function AreaCard({ area }: { area: AreaSummary }) {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto", paddingTop: 16, borderTop: "1px solid #f0f0f0" }}>
             <span style={{ fontFamily: "Montserrat,sans-serif", fontWeight: 700, fontSize: 13, color: "#7fe2e3" }}>Explore →</span>
             <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#192537", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M7 2l5 5-5 5" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <ArrowUpRight size={14} color="white" />
             </div>
           </div>
         </div>

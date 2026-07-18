@@ -547,20 +547,15 @@ export default async function AreaDetailPage({ params }: Props) {
                     { title: "Dining",            emoji: "🍽️", text: area.lifestyle_dining_text,   image: area.lifestyle_dining_image   },
                     { title: "Parks & Recreation", emoji: "🌿", text: area.lifestyle_parks_text,    image: area.lifestyle_parks_image    },
                     { title: "Shopping",           emoji: "🛍️", text: area.lifestyle_shopping_text, image: area.lifestyle_shopping_image },
-                  ].filter(c => c.text).map(({ title, emoji, text, image }, idx, arr) => (
-                    <div key={title} style={{ display: "flex", gap: 20, paddingBottom: idx < arr.length - 1 ? 24 : 0, marginBottom: idx < arr.length - 1 ? 24 : 0, borderBottom: idx < arr.length - 1 ? "1px solid #f4f6f9" : "none" }}>
-                      <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(127,226,227,0.1)", border: "1px solid rgba(127,226,227,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, marginTop: 2 }}>
-                        {emoji}
+                  ].filter(c => c.text).map(({ title, emoji, text }, idx, arr) => (
+                    <div key={title} style={{ paddingBottom: idx < arr.length - 1 ? 24 : 0, marginBottom: idx < arr.length - 1 ? 24 : 0, borderBottom: idx < arr.length - 1 ? "1px solid #f4f6f9" : "none" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                        <span style={{ fontSize: 18 }}>{emoji}</span>
+                        <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#192537" }}>{title}</span>
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#192537", marginBottom: 10 }}>{title}</div>
-                        {(text as string).split(/\n\n+/).filter(Boolean).map((para: string, i: number) => (
-                          <p key={i} style={{ fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#7a8a9e", lineHeight: 1.8, margin: i === 0 ? 0 : "10px 0 0" }}>{para.trim()}</p>
-                        ))}
-                      </div>
-                      {image && (
-                        <img src={image as string} alt={title} style={{ width: 130, height: 100, objectFit: "cover", borderRadius: 12, flexShrink: 0, alignSelf: "flex-start" }} />
-                      )}
+                      {(text as string).split(/\n\n+/).filter(Boolean).map((para: string, i: number) => (
+                        <p key={i} style={{ fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#7a8a9e", lineHeight: 1.85, margin: i === 0 ? 0 : "12px 0 0" }}>{para.trim()}</p>
+                      ))}
                     </div>
                   ))}
                 </div>

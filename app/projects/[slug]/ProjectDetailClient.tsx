@@ -254,7 +254,7 @@ function Gallery({ images, exterior, interior, amenities }: {
         )}
       </div>
       {imgs.length > 1 && (
-        <div style={{ display: "flex", gap: 8, marginTop: 10, overflowX: "auto", paddingBottom: 4 }}>
+        <div className="pd-thumbs" style={{ display: "flex", gap: 8, marginTop: 10, overflowX: "auto", paddingBottom: 4 }}>
           {imgs.slice(0, 9).map((src, i) => (
             <button key={i} onClick={() => setIdx(i)}
               style={{ flexShrink: 0, width: 80, height: 54, borderRadius: 8, overflow: "hidden", border: i === idx ? "2.5px solid #7fe2e3" : "2.5px solid transparent", padding: 0, cursor: "pointer", transition: "border-color 0.2s" }}>
@@ -381,7 +381,7 @@ function LeadForm({ projectName, developerName, areaName }: { projectName: strin
     </div>
   );
 
-  const inp: React.CSSProperties = { width: "100%", padding: "10px 12px", borderRadius: 10, border: "1.5px solid #eaeaea", fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#333", outline: "none", boxSizing: "border-box", background: "#fafafa" };
+  const inp: React.CSSProperties = { width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid #d8dce2", fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#333", outline: "none", boxSizing: "border-box", background: "#f7f8fa" };
   const errSt: React.CSSProperties = { fontFamily: "Verdana", fontSize: 10, color: "#e53e3e", marginTop: 3 };
 
   return (
@@ -411,7 +411,6 @@ function LeadForm({ projectName, developerName, areaName }: { projectName: strin
         style={{ background: loading ? "#b2e8e8" : "linear-gradient(135deg,#7fe2e3,#4db8b9)", color: "#192537", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, padding: "13px", borderRadius: 12, border: "none", cursor: loading ? "default" : "pointer", marginTop: 2, letterSpacing: "0.02em" }}>
         {loading ? "Sending…" : "Request Information"}
       </button>
-      <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#bbb", textAlign: "center", margin: 0 }}>Free consultation · No obligation · Reply within 1 hour</p>
     </form>
   );
 }
@@ -612,7 +611,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
 
             {/* Gallery */}
             {project.images.length > 0 && (
-              <div style={{ background: "white", borderRadius: 24, padding: "28px", boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
+              <div className="pd-section-card" style={{ background: "white", borderRadius: 24, padding: "28px", boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
                 <SH label="Media" title="Gallery" />
                 <Gallery images={project.images} exterior={project.imagesExterior} interior={project.imagesInterior} amenities={project.imagesAmenities} />
               </div>
@@ -1021,12 +1020,18 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
 
         /* Small mobile */
         @media (max-width: 480px) {
-          .pd-hero-content { padding: 88px 14px 28px !important; }
-          .amenities-grid  { grid-template-columns: 1fr !important; }
-          .investment-grid { grid-template-columns: 1fr !important; }
-          .pp-grid         { grid-template-columns: 1fr !important; }
-          .pd-content      { padding: 20px 12px 64px !important; }
+          .pd-hero-content  { padding: 88px 14px 28px !important; }
+          .amenities-grid   { grid-template-columns: 1fr !important; }
+          .investment-grid  { grid-template-columns: 1fr !important; }
+          .pp-grid          { grid-template-columns: 1fr !important; }
+          .pd-content       { padding: 20px 12px 64px !important; }
+          .pd-section-card  { padding: 20px 16px !important; }
+          .detail-layout    { gap: 16px !important; }
         }
+
+        /* Thumbnail strip — scrollable on touch */
+        .pd-thumbs { -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; }
+        .pd-thumbs button { scroll-snap-align: start; }
       `}</style>
     </main>
   );

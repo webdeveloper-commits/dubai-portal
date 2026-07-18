@@ -244,14 +244,6 @@ export default function EnquiryModal({ isOpen, onClose, context = {} }: Props) {
                   {loading ? "Sending…" : "Send Enquiry"}
                 </button>
 
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginTop: -4 }}>
-                  <span style={{ fontFamily: "Verdana", fontSize: 10, color: "#bbb" }}>Free consultation</span>
-                  <span style={{ color: "#e0e0e0" }}>·</span>
-                  <span style={{ fontFamily: "Verdana", fontSize: 10, color: "#bbb" }}>No obligation</span>
-                  <span style={{ color: "#e0e0e0" }}>·</span>
-                  <span style={{ fontFamily: "Verdana", fontSize: 10, color: "#bbb" }}>Reply within 1 hour</span>
-                </div>
-
                 {/* Call option */}
                 <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                   <span style={{ fontFamily: "Verdana", fontSize: 11, color: "#aaa" }}>Prefer to call?</span>

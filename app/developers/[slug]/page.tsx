@@ -455,7 +455,7 @@ export default async function DeveloperPage({ params }: Props) {
           .dev-sidebar { position: static !important; }
         }
         @media (max-width: 640px) {
-          .proj-micro-grid { grid-template-columns: repeat(2,1fr) !important; }
+          .proj-micro-grid { grid-template-columns: 1fr !important; }
           .inv-stats       { grid-template-columns: repeat(2,1fr) !important; }
         }
         details summary::-webkit-details-marker { display: none; }

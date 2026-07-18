@@ -134,9 +134,6 @@ export function LeadForm({ areaName }: { areaName: string }) {
         style={{ background: loading ? "#b2e8e8" : "#7fe2e3", color: "#192537", fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, padding: "14px", borderRadius: 12, border: "none", cursor: loading ? "default" : "pointer", marginTop: 4 }}>
         {loading ? "Sending…" : "Send Enquiry"}
       </button>
-      <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#bbb", textAlign: "center", margin: 0 }}>
-        Free consultation · No obligation · Reply within 1 hour
-      </p>
     </form>
   );
 }
