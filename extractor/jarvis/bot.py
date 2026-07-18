@@ -44,8 +44,17 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
     await update.message.reply_text(
         "JARVIS is running.\n"
-        "Next runs: Tuesday and Friday at 9:00am UAE time.\n"
-        "Send any message to talk to me."
+        "Next runs: Tuesday and Friday at 9:00am UAE time.\n\n"
+        "Commands:\n"
+        "ADD PROJECT [opr.ae URL] — add one project\n"
+        "GET PROJECT [slug or URL] — look up a project in DB\n"
+        "SET FEATURED [slug] — set as featured project\n"
+        "SET HANDPICKED [slug] — add to Handpicked for You\n"
+        "REMOVE HANDPICKED [slug] — remove from Handpicked\n"
+        "APPROVE ALL — submit all pending to Google\n"
+        "BACKFILL PROJECTS — deep scan for missing projects\n"
+        "RUN NOW — run Tuesday pipeline now\n"
+        "STOP — stop current run"
     )
 
 
@@ -145,6 +154,41 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 "not yet in our DB.\nWill take 10–30 minutes depending on how many are missing."
             )
             asyncio.create_task(runner.run_backfill())
+            return
+
+        if upper.startswith("SET HANDPICKED"):
+            slug = user_text[14:].strip()
+            if not slug:
+                await update.message.reply_text(
+                    "Usage: SET HANDPICKED [project-slug]\n"
+                    "Example: SET HANDPICKED sobha-orbis\n\n"
+                    "This adds the project to the 'Handpicked for You' collection."
+                )
+                return
+            asyncio.create_task(runner.run_set_handpicked(slug, True))
+            await update.message.reply_text(f"Marking '{slug}' as Handpicked for You...")
+            return
+
+        if upper.startswith("REMOVE HANDPICKED"):
+            slug = user_text[17:].strip()
+            if not slug:
+                await update.message.reply_text("Usage: REMOVE HANDPICKED [project-slug]")
+                return
+            asyncio.create_task(runner.run_set_handpicked(slug, False))
+            await update.message.reply_text(f"Removing '{slug}' from Handpicked for You...")
+            return
+
+        if upper.startswith("GET PROJECT"):
+            target = user_text[11:].strip()
+            if not target:
+                await update.message.reply_text(
+                    "Usage: GET PROJECT [slug or URL]\n"
+                    "Example: GET PROJECT sobha-orbis\n"
+                    "Example: GET PROJECT dubai-portal.vercel.app/projects/sobha-orbis"
+                )
+                return
+            asyncio.create_task(runner.run_get_project(target))
+            await update.message.reply_text(f"Looking up project '{target}'...")
             return
 
         # ── Everything else → Claude brain ──

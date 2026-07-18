@@ -21,6 +21,19 @@ from bs4 import BeautifulSoup
 from .scraper import get_browser, _new_stealth_page
 from .storage import db
 
+_BRAND_WORDS = re.compile(
+    r'\b(?:bayut\.?com?|bayut|propertyfinder(?:\.ae)?|dubizzle(?:\.com)?|'
+    r'zoopla|rightmove|lamudi|justproperty)\b',
+    re.IGNORECASE,
+)
+
+def _strip_brands(text: str) -> str:
+    """Remove all portal brand names from a text string."""
+    if not text:
+        return text
+    return _BRAND_WORDS.sub("", text).strip()
+
+
 logger = logging.getLogger(__name__)
 
 NOMINATIM_URL      = "https://nominatim.openstreetmap.org/search"
@@ -1299,24 +1312,25 @@ Return ONLY valid JSON. No markdown, no explanation."""
 
 # ── Area content rewriter ──────────────────────────────────────────────────────
 
-_AREA_REWRITE_PROMPT = """You are a professional copywriter for Elysian, a Dubai property portal.
-Rewrite the scraped area guide content below for {area_name} into clean, human-written copy.
+_AREA_REWRITE_PROMPT = """You are a professional copywriter for Elysian, a Dubai property portal. Rewrite the scraped area guide content for {area_name}.
 
-Rules:
-- REMOVE all mentions of Bayut, bayut.com, PropertyFinder, Dubizzle, Zoopla, or any portal/brand name
-- REMOVE generic SEO filler ("nestled", "boasting", "seamlessly blends", "vibrant community")
-- KEEP all specific facts: prices, distances, school names, hospital names, transport lines, years
-- Write in second person or neutral third person — never "I" or "we"
-- Max 3 short paragraphs for `about` (200 words total)
-- `highlight_why_buy`: 1 punchy sentence, max 15 words
-- `highlight_who_lives`: 1 sentence describing the resident profile, max 15 words
-- `highlight_vibe`: 3-5 bullet lines separated by \\n (each under 12 words), capturing what the area feels like
-- `best_streets`: comma-separated list of notable streets/sub-communities (omit if unknown)
-- For schools/hospitals/malls — if they are long paragraph sentences, extract ONLY the actual institution names as a JSON array of plain strings. If no specific names are found, return []
+CRITICAL — BRAND REMOVAL:
+Remove ALL mentions of: Bayut, bayut.com, PropertyFinder, propertyfinder.ae, Dubizzle, dubizzle.com, Zoopla, Rightmove, Lamudi, JustProperty, or any property portal brand. Replace with neutral phrasing ("local market data", "area research", "property market data") or simply remove the reference entirely.
+
+CONTENT RULES (be brief — quality over quantity):
+- `about`: EXACTLY 2 short paragraphs. 80 words TOTAL maximum. Cover what makes the area special and who it suits. No filler phrases (no "nestled", "boasting", "seamlessly", "vibrant").
+- `highlight_why_buy`: 1 punchy sentence, max 10 words.
+- `highlight_who_lives`: 1 sentence about the resident profile, max 10 words.
+- `highlight_vibe`: 3 bullet lines separated by \\n, each under 8 words.
+- `best_streets`: comma-separated, max 3 notable streets/sub-communities. Omit if unknown.
+- `schools`: JSON array of school NAMES only — max 4 items. Plain strings like "GEMS Wellington International School". NO distances, NO descriptions.
+- `hospitals`: JSON array of hospital/clinic NAMES only — max 4 items. Plain strings.
+- `malls`: JSON array of mall/shopping centre NAMES only — max 3 items. Plain strings.
+- `nearby_areas`: JSON array of area name strings — max 5 items.
 
 Return ONLY valid JSON with exactly these keys:
 {{
-  "about": "rewritten 3-paragraph description",
+  "about": "2 short paragraphs, 80 words total max",
   "highlight_why_buy": "...",
   "highlight_who_lives": "...",
   "highlight_vibe": "line1\\nline2\\nline3",
@@ -1503,6 +1517,11 @@ async def enrich_areas() -> list[dict]:
                     updates["lifestyle_shopping_text"] = bayut["shopping"]
 
             updates["enriched"] = True
+            # Strip any remaining portal brand mentions from text fields
+            for field in ("about", "description_short", "geo_summary", "public_transport",
+                          "lifestyle_dining_text", "lifestyle_shopping_text"):
+                if updates.get(field):
+                    updates[field] = _strip_brands(updates[field])
             db().table("areas").update(updates).eq("id", area_id).execute()
             logger.info(f"Area '{area_name}' enriched — lat={lat}, bayut={'yes' if guide_url else 'no'}")
             enriched_records.append({"name": area_name, "slug": area_slug})

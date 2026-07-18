@@ -137,7 +137,7 @@ async def run_tuesday():
                 gallery_urls=raw.get("images_all", []),
                 max_gallery=10,
             )
-            parsed["image_main"]  = main_cloud
+            parsed["image_main"] = main_cloud or (gallery_cloud[0] if gallery_cloud else None)
             parsed["images_all"]  = gallery_cloud
 
             # ── Publish to Supabase ──
@@ -304,6 +304,88 @@ async def run_set_featured(slug: str):
         await notify(f"Error setting featured project: {e}")
 
 
+async def run_set_handpicked(slug: str, state: bool = True):
+    """
+    Mark/unmark a project as Handpicked for You.
+    Triggered by: SET HANDPICKED [slug] / REMOVE HANDPICKED [slug]
+    """
+    try:
+        from .tools.storage import db
+        res = db().table("projects").update({"is_handpicked": state}).eq("slug", slug).execute()
+        if res.data:
+            name = res.data[0].get("name", slug)
+            action = "added to" if state else "removed from"
+            await _revalidate_vercel()
+            await notify(
+                f"Project {action} Handpicked for You!\n\n"
+                f"{name}\n"
+                f"dubai-portal.vercel.app/projects/{slug}"
+            )
+        else:
+            await notify(f"Project '{slug}' not found. Check the slug and try again.")
+    except Exception as e:
+        logger.error(f"run_set_handpicked error: {e}")
+        await notify(f"Error updating handpicked status: {e}")
+
+
+async def run_get_project(slug_or_url: str):
+    """
+    Fetch and display project details from the database by slug or portal URL.
+    Triggered by: GET PROJECT [slug or dubai-portal.vercel.app/projects/slug]
+    """
+    try:
+        from .tools.storage import db
+        # Extract slug from URL if a full URL was provided
+        slug = slug_or_url.strip().rstrip("/")
+        if "/projects/" in slug:
+            slug = slug.split("/projects/")[-1].split("?")[0].rstrip("/")
+
+        res = db().table("projects").select(
+            "name,slug,developer_slug,geo_summary,price_from,price_to,"
+            "handover_quarter,handover_year,status,bedroom_min,bedroom_max,"
+            "property_types,is_published,google_indexed,is_featured,is_handpicked,"
+            "image_main,images_all,aeo_faq,seo_description,data_source_url"
+        ).eq("slug", slug).single().execute()
+
+        if not res.data:
+            await notify(f"No project found with slug '{slug}'.")
+            return
+
+        p = res.data
+        name       = p.get("name", slug)
+        price      = f"AED {p['price_from']:,}" if p.get("price_from") else "Price on request"
+        handover   = f"{p.get('handover_quarter') or ''} {p.get('handover_year') or ''}".strip() or "TBD"
+        beds       = f"{p['bedroom_min']}–{p['bedroom_max']} BR" if p.get("bedroom_min") else "Various"
+        imgs       = len(p.get("images_all") or [])
+        faqs       = len(p.get("aeo_faq") or [])
+        flags      = []
+        if p.get("is_published"):    flags.append("Published")
+        if p.get("google_indexed"): flags.append("Google-indexed")
+        if p.get("is_featured"):    flags.append("Featured")
+        if p.get("is_handpicked"):  flags.append("Handpicked")
+
+        lines = [
+            f"PROJECT: {name}",
+            f"Slug: {slug}",
+            f"Developer: {p.get('developer_slug', 'N/A')}",
+            f"Location: {p.get('geo_summary', 'N/A')}",
+            f"Price: {price}",
+            f"Handover: {handover}",
+            f"Bedrooms: {beds}",
+            f"Status: {p.get('status', 'N/A')}",
+            f"Main image: {'Yes' if p.get('image_main') else 'MISSING'}",
+            f"Gallery images: {imgs}",
+            f"FAQ entries: {faqs}",
+            f"Flags: {', '.join(flags) if flags else 'None'}",
+            f"Source: {p.get('data_source_url', 'N/A')}",
+            f"URL: dubai-portal.vercel.app/projects/{slug}",
+        ]
+        await notify("\n".join(lines))
+    except Exception as e:
+        logger.error(f"run_get_project error: {e}")
+        await notify(f"Error fetching project: {e}")
+
+
 async def run_test_area(area_name: str):
     """Debug: scrape one area from Bayut and report what was found."""
     await notify(f"Testing Bayut scrape for: {area_name}...")
@@ -374,7 +456,7 @@ async def run_add_project(url: str):
             gallery_urls=raw.get("images_all", []),
             max_gallery=10,
         )
-        parsed["image_main"] = main_cloud
+        parsed["image_main"] = main_cloud or (gallery_cloud[0] if gallery_cloud else None)
         parsed["images_all"] = gallery_cloud
 
         # Publish
@@ -492,7 +574,7 @@ async def run_backfill():
                     gallery_urls=raw.get("images_all", []),
                     max_gallery=10,
                 )
-                parsed["image_main"] = main_cloud
+                parsed["image_main"] = main_cloud or (gallery_cloud[0] if gallery_cloud else None)
                 parsed["images_all"] = gallery_cloud
 
                 row_id = publish_project(parsed)

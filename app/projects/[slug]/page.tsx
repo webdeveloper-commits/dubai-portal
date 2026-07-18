@@ -10,28 +10,49 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const { data } = await supabase
     .from("projects")
-    .select("name,seo_title,seo_description,seo_keywords,tagline,image_main,geo_summary,developer_slug,price_from")
+    .select("name,seo_title,seo_description,seo_keywords,tagline,image_main,geo_summary,developer_slug,price_from,description_short")
     .eq("slug", slug)
     .single();
 
   if (!data) return { title: "Project | Elysian Dubai" };
 
-  const name       = data.name as string;
-  const title      = (data.seo_title      || `${name} | Off-Plan Property Dubai`) as string;
-  const desc       = (data.seo_description || `${data.tagline || `Discover ${name}`} in ${data.geo_summary || "Dubai"}. Starting from AED ${Number(data.price_from || 0).toLocaleString()}.`) as string;
-  const keywords   = Array.isArray(data.seo_keywords) ? (data.seo_keywords as string[]) : undefined;
-  const imageUrl   = data.image_main as string | null;
+  const name     = data.name as string;
+  const title    = (data.seo_title || `${name} | Off-Plan Property in Dubai`) as string;
+  // seo_description → description_short fallback → constructed fallback
+  const rawDesc  = (data.seo_description as string | null) || (data.description_short as string | null);
+  const desc     = rawDesc
+    ? rawDesc.slice(0, 160)
+    : `${data.tagline || `Discover ${name}`} in ${data.geo_summary || "Dubai"}. Starting from AED ${Number(data.price_from || 0).toLocaleString()}.`;
+  const keywords = Array.isArray(data.seo_keywords)
+    ? (data.seo_keywords as string[])
+    : typeof data.seo_keywords === "string"
+      ? [data.seo_keywords as string]
+      : undefined;
+  const imageUrl = data.image_main as string | null;
+  const pageUrl  = `https://dubai-portal.vercel.app/projects/${slug}`;
 
   return {
     title,
     description: desc,
     keywords,
     openGraph: {
-      title, description: desc, type: "website", siteName: "Elysian Dubai",
-      images: imageUrl ? [{ url: imageUrl }] : [],
+      title,
+      description: desc,
+      url: pageUrl,
+      type: "website",
+      siteName: "Elysian Realty Dubai",
+      locale: "en_AE",
+      images: imageUrl
+        ? [{ url: imageUrl, width: 1200, height: 630, alt: `${name} - Dubai property` }]
+        : [{ url: "https://elysianrealtydubai.ae/og-default.jpg", width: 1200, height: 630, alt: "Elysian Realty Dubai" }],
     },
-    twitter: { card: "summary_large_image", title, description: desc },
-    alternates: { canonical: `https://dubai-portal.vercel.app/projects/${slug}` },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description: desc,
+      images: imageUrl ? [imageUrl] : [],
+    },
+    alternates: { canonical: pageUrl },
   };
 }
 

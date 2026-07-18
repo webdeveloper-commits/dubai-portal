@@ -107,11 +107,11 @@ Return a JSON object with exactly these keys:
 
 "seo_title": Under 60 chars. Format: "{name} by {developer} | {type} in {area} from AED {price}"
 
-"seo_description": 140-155 chars. Compelling, includes price and handover date.
+"seo_description": "140-160 chars EXACTLY. Must name the project, developer, area, price from AED X, and handover. No clichés. Example: 'Sobha Orbis by Sobha Realty — 1-3BR apartments in Motor City from AED 890K. Q4 2027 handover with 60/40 plan.'"
 
-"seo_keywords": Array of 6 real search phrases people type (e.g. "off plan apartments dubai marina 2027").
+"seo_keywords": ["exactly 6 specific search phrases. Include the project name, developer + city/type, area + off-plan, bedroom type + area, price range phrase, and handover year phrase."],
 
-"aeo_faq": Array of 8 objects with "question" and "answer". Cover: starting price, developer, handover date, payment plan, location, unit types, amenities, foreign ownership eligibility.
+"aeo_faq": [8 objects, each {"question": "ends with ?", "answer": "2-3 sentences with SPECIFIC facts — price, location, developer, sizes, handover. Never say 'Please contact us' or generic filler. Cover: starting price, developer identity, handover date, unit types and sizes, payment plan breakdown, exact location, top 3 amenities, investment case with ROI mention."}]
 
 "whatsapp_share_text": 4 short lines someone would forward to a friend. Use developer exact name (not slug). Last line: dubai-portal.vercel.app/projects/{slug}
 
