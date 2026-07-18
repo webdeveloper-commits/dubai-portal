@@ -501,7 +501,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
     <main style={{ background: "#f4f6f9" }}>
 
       {/* ── HERO ─────────────────────────────────────────────────────────────── */}
-      <section style={{ position: "relative", minHeight: "75vh", display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
+      <section className="pd-hero" style={{ position: "relative", minHeight: "75vh", display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
         {heroImg
           ? <img src={heroImg} alt={project.name} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }} />
           : <div style={{ position: "absolute", inset: 0, background: "linear-gradient(145deg,#0d1e2e 0%,#192537 100%)" }} />
@@ -509,7 +509,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
         <div style={{ position: "absolute", inset: 0, background: heroImg ? "linear-gradient(to bottom, rgba(13,30,46,0.25) 0%, rgba(13,30,46,0.9) 100%)" : "transparent" }} />
         <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(127,226,227,0.05) 1px, transparent 1px)", backgroundSize: "36px 36px", pointerEvents: "none" }} />
 
-        <div style={{ position: "relative", zIndex: 2, width: "100%", padding: "120px 24px 56px", boxSizing: "border-box" }}>
+        <div className="pd-hero-content" style={{ position: "relative", zIndex: 2, width: "100%", padding: "120px 24px 56px", boxSizing: "border-box" }}>
           <div style={{ maxWidth: 1200, margin: "0 auto" }}>
 
             {/* Breadcrumb */}
@@ -521,7 +521,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
               <span style={{ fontFamily: "Verdana", fontSize: 11, color: "#7fe2e3" }}>{project.name}</span>
             </div>
 
-            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, flexWrap: "wrap" }}>
+            <div className="pd-hero-row" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 {tag && project.tag && (
                   <span style={{ display: "inline-block", background: tag.bg, color: tag.color, fontFamily: "Verdana", fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", padding: "6px 16px", borderRadius: 999, marginBottom: 16, border: "1px solid rgba(127,226,227,0.25)", backdropFilter: "blur(8px)" }}>
@@ -564,7 +564,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
               </div>
 
               {project.priceFrom > 0 && (
-                <div style={{ background: "rgba(255,255,255,0.09)", backdropFilter: "blur(14px)", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 20, padding: "20px 26px", textAlign: "right", flexShrink: 0 }}>
+                <div className="pd-price-box" style={{ background: "rgba(255,255,255,0.09)", backdropFilter: "blur(14px)", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 20, padding: "20px 26px", textAlign: "right", flexShrink: 0 }}>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "rgba(255,255,255,0.45)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>Starting from</div>
                   <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: "clamp(20px,3vw,32px)", color: "white", letterSpacing: "-0.03em" }}>
                     {fmt(project.priceFrom)}
@@ -604,7 +604,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
       </div>
 
       {/* ── MAIN CONTENT ─────────────────────────────────────────────────────── */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 24px 96px", boxSizing: "border-box" }}>
+      <div className="pd-content" style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 24px 96px", boxSizing: "border-box" }}>
         <div className="detail-layout" style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 36, alignItems: "start" }}>
 
           {/* ── LEFT ── */}
@@ -990,23 +990,42 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
 
       <style>{`
         @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-        .facts-strip { scrollbar-width: none; }
+
+        /* Facts strip */
+        .facts-strip { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
         .facts-strip::-webkit-scrollbar { display: none; }
+
+        /* Floor plan rows */
         .fp-row { transition: box-shadow 0.2s, transform 0.18s; }
         .fp-row:hover { box-shadow: 0 6px 24px rgba(25,37,55,0.10) !important; transform: translateY(-1px); }
+
+        /* 1-col layout at tablet */
         @media (max-width: 1024px) {
-          .detail-layout    { grid-template-columns: 1fr !important; }
-          .detail-sidebar   { position: static !important; }
-          .investment-grid  { grid-template-columns: 1fr !important; }
+          .detail-layout   { grid-template-columns: 1fr !important; }
+          .detail-sidebar  { position: static !important; }
+          .investment-grid { grid-template-columns: repeat(2,1fr) !important; }
         }
+
+        /* Hero mobile */
         @media (max-width: 768px) {
-          .amenities-grid   { grid-template-columns: repeat(2,1fr) !important; }
-          .commute-grid     { grid-template-columns: 1fr !important; }
-          .pp-grid          { grid-template-columns: repeat(2,1fr) !important; }
+          .pd-hero         { min-height: 100svh !important; }
+          .pd-hero-content { padding: 96px 16px 32px !important; }
+          .pd-hero-row     { flex-direction: column !important; align-items: flex-start !important; gap: 16px !important; }
+          .pd-price-box    { width: 100% !important; text-align: left !important; padding: 16px 18px !important; }
+          .amenities-grid  { grid-template-columns: repeat(2,1fr) !important; }
+          .commute-grid    { grid-template-columns: 1fr !important; }
+          .pp-grid         { grid-template-columns: repeat(2,1fr) !important; }
+          .investment-grid { grid-template-columns: 1fr !important; }
+          .pd-content      { padding: 28px 16px 72px !important; }
         }
+
+        /* Small mobile */
         @media (max-width: 480px) {
-          .amenities-grid   { grid-template-columns: 1fr !important; }
-          .investment-grid  { grid-template-columns: 1fr !important; }
+          .pd-hero-content { padding: 88px 14px 28px !important; }
+          .amenities-grid  { grid-template-columns: 1fr !important; }
+          .investment-grid { grid-template-columns: 1fr !important; }
+          .pp-grid         { grid-template-columns: 1fr !important; }
+          .pd-content      { padding: 20px 12px 64px !important; }
         }
       `}</style>
     </main>

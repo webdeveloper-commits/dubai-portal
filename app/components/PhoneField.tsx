@@ -46,7 +46,7 @@ export default function PhoneField({ value, onChange, error }: Props) {
         border: "1.5px solid #e0e0e0",
         fontFamily: "Verdana, sans-serif",
         fontSize: 12,
-        width: 300,
+        width: "min(300px, 90vw)",
       }}
       searchStyle={{
         fontFamily: "Verdana, sans-serif",
