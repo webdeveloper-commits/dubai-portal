@@ -245,13 +245,15 @@ export default function ProjectsClientGrid({ projects }: { projects: Project[] }
     return Array.from(set).sort();
   }, [projects]);
 
-  // Lifestyle: DB stores lowercase ("beachfront") → title-case for display
+  // Lifestyle: deduplicate case-insensitively then title-case for display
   const lifestyleOptions = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, string>();
     projects.forEach(p => p.lifestyle.forEach(t => {
-      if (t) set.add(t.charAt(0).toUpperCase() + t.slice(1));
+      if (!t) return;
+      const key = t.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, key.charAt(0).toUpperCase() + key.slice(1));
     }));
-    return Array.from(set).sort();
+    return Array.from(map.values()).sort();
   }, [projects]);
 
   // Project names for autocomplete suggestions

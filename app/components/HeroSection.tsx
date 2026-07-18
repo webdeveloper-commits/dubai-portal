@@ -51,7 +51,15 @@ export default function HeroSection({ projects }: { projects: Project[] }) {
   const developers     = [...new Set(projects.map(p => p.developer).filter(Boolean))].sort();
   const projectNames   = projects.map(p => p.name).filter(Boolean).sort();
   const propertyTypes  = [...new Set(projects.flatMap(p => p.propertyTypes ?? []).filter(Boolean))].sort();
-  const lifestyleOptions = [...new Set(projects.flatMap(p => p.lifestyle ?? []).filter(Boolean))].sort();
+  // Deduplicate case-insensitively then title-case for display
+  const lifestyleOptions = (() => {
+    const map = new Map<string, string>();
+    projects.flatMap(p => p.lifestyle ?? []).filter(Boolean).forEach(t => {
+      const key = t.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, key.charAt(0).toUpperCase() + key.slice(1));
+    });
+    return Array.from(map.values()).sort();
+  })();
 
   function handleSearch(filters: FilterState) {
     setLoading(true);

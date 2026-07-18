@@ -57,6 +57,16 @@ function formatAED(val: number): string {
 
 // ─── CheckboxDropdown ─────────────────────────────────────────────────────────
 
+type DropPos = { top: number; left: number; width: number };
+
+function calcDropPos(el: HTMLElement, panelMinW: number): DropPos {
+  const r = el.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const w = Math.min(Math.max(r.width, panelMinW), vw - 16);
+  const left = Math.max(8, Math.min(r.left, vw - w - 8));
+  return { top: r.bottom + 6, left, width: w };
+}
+
 function CheckboxDropdown({
   label, options, selected, onChange, searchable = false, searchPlaceholder = "Search…",
 }: {
@@ -69,7 +79,9 @@ function CheckboxDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [pos, setPos] = useState<DropPos | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const panelMinW = searchable ? 280 : 220;
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -82,10 +94,22 @@ function CheckboxDropdown({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  useEffect(() => {
+    if (!open || !ref.current) return;
+    function update() { if (ref.current) setPos(calcDropPos(ref.current, panelMinW)); }
+    window.addEventListener("resize", update, { passive: true });
+    return () => window.removeEventListener("resize", update);
+  }, [open, panelMinW]);
+
   const filtered = options.filter(o => o.toLowerCase().includes(query.toLowerCase()));
 
   function toggle(val: string) {
     onChange(selected.includes(val) ? selected.filter(s => s !== val) : [...selected, val]);
+  }
+
+  function handleToggle() {
+    if (!open && ref.current) setPos(calcDropPos(ref.current, panelMinW));
+    setOpen(o => !o);
   }
 
   const btnLabel =
@@ -98,7 +122,7 @@ function CheckboxDropdown({
   return (
     <div ref={ref} style={{ position: "relative", minWidth: 0 }}>
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={handleToggle}
         style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           gap: 6, width: "100%", height: 48, boxSizing: "border-box",
@@ -116,11 +140,11 @@ function CheckboxDropdown({
           style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }} />
       </button>
 
-      {open && (
+      {open && pos && (
         <div style={{
-          position: "absolute", top: 54, left: 0, minWidth: "100%", width: "max-content", maxWidth: 280,
+          position: "fixed", top: pos.top, left: pos.left, width: pos.width,
           background: "white", border: "1.5px solid #e5e5e5", borderRadius: 14,
-          zIndex: 300, boxShadow: "0 8px 32px rgba(0,0,0,0.14)", overflow: "hidden",
+          zIndex: 9999, boxShadow: "0 8px 32px rgba(0,0,0,0.14)", overflow: "hidden",
           boxSizing: "border-box",
         }}>
           {searchable && (
@@ -158,6 +182,7 @@ function PriceDropdown({ priceFrom, priceTo, onChange }: {
   priceFrom: number; priceTo: number; onChange: (from: number, to: number) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<DropPos | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const MAX = 100_000_000;
 
@@ -169,11 +194,23 @@ function PriceDropdown({ priceFrom, priceTo, onChange }: {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  useEffect(() => {
+    if (!open || !ref.current) return;
+    function update() { if (ref.current) setPos(calcDropPos(ref.current, 260)); }
+    window.addEventListener("resize", update, { passive: true });
+    return () => window.removeEventListener("resize", update);
+  }, [open]);
+
   const isActive = priceFrom > 0 || priceTo < MAX;
+
+  function handleToggle() {
+    if (!open && ref.current) setPos(calcDropPos(ref.current, 260));
+    setOpen(o => !o);
+  }
 
   return (
     <div ref={ref} style={{ position: "relative", minWidth: 0 }}>
-      <button onClick={() => setOpen(o => !o)} style={{
+      <button onClick={handleToggle} style={{
         display: "flex", alignItems: "center", gap: 6,
         width: "100%", height: 48, boxSizing: "border-box",
         border: isActive ? "1.5px solid #7fe2e3" : "1.5px solid #e0e0e0",
@@ -189,11 +226,11 @@ function PriceDropdown({ priceFrom, priceTo, onChange }: {
         <ChevronDown size={13} color={isActive ? "#7fe2e3" : "#aaa"} style={{ flexShrink: 0, marginLeft: "auto", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
       </button>
 
-      {open && (
+      {open && pos && (
         <div style={{
-          position: "absolute", top: 54, left: 0, width: "max-content", minWidth: "100%", maxWidth: 300,
+          position: "fixed", top: pos.top, left: pos.left, width: pos.width,
           background: "white", border: "1.5px solid #e5e5e5", borderRadius: 14,
-          zIndex: 300, boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
+          zIndex: 9999, boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
           padding: "18px 20px 16px", boxSizing: "border-box",
         }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
