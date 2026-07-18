@@ -46,7 +46,8 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "JARVIS is running.\n"
         "Next runs: Tuesday and Friday at 9:00am UAE time.\n\n"
         "Commands:\n"
-        "ADD PROJECT [opr.ae URL] — add one project\n"
+        "SCRAPE [opr.ae URL] — preview a project without saving\n"
+        "ADD PROJECT [opr.ae URL] — scrape and publish a project\n"
         "GET PROJECT [slug or URL] — look up a project in DB\n"
         "SET FEATURED [slug] — set as featured project\n"
         "SET HANDPICKED [slug] — add to Handpicked for You\n"
@@ -114,6 +115,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 return
             asyncio.create_task(runner.run_test_area(area_name))
             await update.message.reply_text(f"Testing Bayut scrape for '{area_name}'...")
+            return
+
+        if upper.startswith("SCRAPE "):
+            scrape_url = user_text[7:].strip()
+            if not scrape_url:
+                await update.message.reply_text(
+                    "Usage: SCRAPE [opr.ae URL]\n"
+                    "Example: SCRAPE https://opr.ae/projects/sobha-orbis\n\n"
+                    "Previews what JARVIS would extract — does NOT save to database.\n"
+                    "Send ADD PROJECT [url] to actually publish it."
+                )
+                return
+            asyncio.create_task(runner.run_scrape_preview(scrape_url))
+            await update.message.reply_text("Scraping preview (not saving)...")
             return
 
         if upper.startswith("ADD PROJECT"):
