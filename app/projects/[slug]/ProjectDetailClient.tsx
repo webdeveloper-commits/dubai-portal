@@ -282,7 +282,7 @@ function PaymentPlanVisual({ summary, detail, isMobile }: { summary: string; det
     const labels = ["On Booking", "During Construction", "On Handover", "Post Handover"];
     segs = parts.map((pct, i) => ({ pct, label: labels[i] ?? `Part ${i + 1}`, color: COLORS[i] ?? "#ccc" })).filter(s => s.pct > 0);
   }
-  const cols = Math.min(segs.length, isMobile ? 2 : 4);
+  const cols = Math.min(segs.length, 4);
 
   return (
     <div>
@@ -292,10 +292,10 @@ function PaymentPlanVisual({ summary, detail, isMobile }: { summary: string; det
           <div style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", marginBottom: 20, gap: 2 }}>
             {segs.map(s => <div key={s.label} style={{ flex: s.pct, background: s.color, borderRadius: 999 }} />)}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 12 }}>
+          <div className="pp-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
             {segs.map(s => (
               <div key={s.label} style={{ background: "#f8fafc", borderRadius: 14, padding: "16px 14px", borderLeft: `3px solid ${s.color}` }}>
-                <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: isMobile ? 22 : 26, color: s.color, letterSpacing: "-0.03em", lineHeight: 1, marginBottom: 6 }}>{s.pct}%</div>
+                <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: 26, color: s.color, letterSpacing: "-0.03em", lineHeight: 1, marginBottom: 6 }}>{s.pct}%</div>
                 <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#7a8a9e", lineHeight: 1.4 }}>{s.label}</div>
               </div>
             ))}
@@ -455,7 +455,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
   const [project, setProject] = useState<ProjectData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(true);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth <= 1024);
@@ -511,7 +511,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
     <main style={{ background: "#f4f6f9", overflowX: "hidden" }}>
 
       {/* ── HERO ─────────────────────────────────────────────────────────────── */}
-      <section className="pd-hero" style={{ position: "relative", minHeight: "75vh", display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
+      <section className="pd-hero" style={{ position: "relative", display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
         {heroImg
           ? <img src={heroImg} alt={project.name} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }} />
           : <div style={{ position: "absolute", inset: 0, background: "linear-gradient(145deg,#0d1e2e 0%,#192537 100%)" }} />
@@ -519,7 +519,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
         <div style={{ position: "absolute", inset: 0, background: heroImg ? "linear-gradient(to bottom, rgba(13,30,46,0.25) 0%, rgba(13,30,46,0.9) 100%)" : "transparent" }} />
         <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(127,226,227,0.05) 1px, transparent 1px)", backgroundSize: "36px 36px", pointerEvents: "none" }} />
 
-        <div className="pd-hero-content" style={{ position: "relative", zIndex: 2, width: "100%", padding: "120px 24px 56px", boxSizing: "border-box" }}>
+        <div className="pd-hero-content" style={{ position: "relative", zIndex: 2, width: "100%", boxSizing: "border-box" }}>
           <div style={{ maxWidth: 1200, margin: "0 auto" }}>
 
             {/* Breadcrumb */}
@@ -531,7 +531,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
               <span style={{ fontFamily: "Verdana", fontSize: 11, color: "#7fe2e3" }}>{project.name}</span>
             </div>
 
-            <div className="pd-hero-row" style={{ display: "flex", alignItems: isMobile ? "flex-start" : "flex-end", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", gap: isMobile ? 16 : 24 }}>
+            <div className="pd-hero-row">
               <div style={{ flex: 1, minWidth: 0 }}>
                 {tag && project.tag && (
                   <span style={{ display: "inline-block", background: tag.bg, color: tag.color, fontFamily: "Verdana", fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", padding: "6px 16px", borderRadius: 999, marginBottom: 16, border: "1px solid rgba(127,226,227,0.25)", backdropFilter: "blur(8px)" }}>
@@ -574,7 +574,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
               </div>
 
               {project.priceFrom > 0 && (
-                <div className="pd-price-box" style={{ background: "rgba(255,255,255,0.09)", backdropFilter: "blur(14px)", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 20, padding: isMobile ? "14px 18px" : "20px 26px", textAlign: isMobile ? "left" : "right", width: isMobile ? "100%" : undefined, flexShrink: 0 }}>
+                <div className="pd-price-box" style={{ background: "rgba(255,255,255,0.09)", backdropFilter: "blur(14px)", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 20, flexShrink: 0 }}>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "rgba(255,255,255,0.45)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>Starting from</div>
                   <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: "clamp(20px,3vw,32px)", color: "white", letterSpacing: "-0.03em" }}>
                     {fmt(project.priceFrom)}
@@ -591,8 +591,8 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
 
       {/* ── KEY FACTS STRIP ──────────────────────────────────────────────────── */}
       <div style={{ background: "#192537" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 16px" }}>
-          <div style={{ display: "flex", flexWrap: isMobile ? "wrap" : "nowrap", overflowX: isMobile ? "visible" : "auto" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <div className="facts-strip">
             {[
               { icon: <Bed size={14} color="#7fe2e3" />,      label: "Bedrooms",     val: project.bedrooms },
               { icon: <Calendar size={14} color="#7fe2e3" />, label: "Handover",     val: project.handover || "TBA" },
@@ -601,19 +601,13 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
               ...(project.totalUnits ? [{ icon: <Building2 size={14} color="#7fe2e3" />, label: "Total Units", val: String(project.totalUnits) }] : []),
               ...(project.paymentPlanSummary ? [{ icon: <Layers size={14} color="#7fe2e3" />, label: "Payment Plan", val: project.paymentPlanSummary }] : []),
             ].map(({ icon, label, val }, i, arr) => (
-              <div key={label} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: isMobile ? "14px 16px" : "18px 24px",
-                flexShrink: 0,
-                width: isMobile ? "50%" : undefined,
-                boxSizing: "border-box",
-                borderRight: isMobile ? (i % 2 === 0 ? "1px solid rgba(255,255,255,0.06)" : "none") : (i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none"),
-                borderBottom: isMobile ? "1px solid rgba(255,255,255,0.06)" : "none",
+              <div key={label} className="facts-item" style={{
+                borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
               }}>
                 <div style={{ width: 32, height: 32, borderRadius: 10, background: "rgba(127,226,227,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "rgba(255,255,255,0.38)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
-                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: isMobile ? 12 : 13, color: "white", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val}</div>
+                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, color: "white", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val}</div>
                 </div>
               </div>
             ))}
@@ -622,15 +616,15 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
       </div>
 
       {/* ── MAIN CONTENT ─────────────────────────────────────────────────────── */}
-      <div className="pd-content" style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "24px 16px 72px" : "48px 24px 96px", boxSizing: "border-box" }}>
-        <div className="detail-layout" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 360px", gap: isMobile ? 20 : 36, alignItems: "start" }}>
+      <div className="pd-content">
+        <div className="detail-layout">
 
           {/* ── LEFT ── */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 32, minWidth: 0 }}>
 
             {/* Gallery */}
             {project.images.length > 0 && (
-              <div style={{ background: "white", borderRadius: 24, padding: cardPad, boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
+              <div className="pd-card">
                 <SH label="Media" title="Gallery" />
                 <Gallery images={project.images} exterior={project.imagesExterior} interior={project.imagesInterior} amenities={project.imagesAmenities} />
               </div>
@@ -638,7 +632,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
 
             {/* Description + Lifestyle Tags */}
             {(project.descriptionLong || project.descriptionShort) && (
-              <div style={{ background: "white", borderRadius: 24, padding: cardPad, boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
+              <div className="pd-card">
                 <SH label="Overview" title="About This Project" />
                 <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 14, color: "#4a5568", lineHeight: 1.95, margin: "0 0 20px" }}>
                   {project.descriptionLong || project.descriptionShort}
@@ -672,9 +666,9 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
 
             {/* Investment Highlights */}
             {project.investmentPotential.length > 0 && (
-              <div style={{ background: "white", borderRadius: 24, padding: cardPad, boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
+              <div className="pd-card">
                 <SH label="Returns" title="Investment Highlights" />
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2,1fr)", gap: 14 }}>
+                <div className="investment-grid">
                   {project.investmentPotential.map((item: string, i: number) => (
                     <div
                       key={i}
@@ -713,7 +707,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
 
             {/* Payment Plan */}
             {project.paymentPlanSummary && (
-              <div style={{ background: "white", borderRadius: 24, padding: cardPad, boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
+              <div className="pd-card">
                 <SH label="Financing" title="Payment Plan" />
                 <PaymentPlanVisual summary={project.paymentPlanSummary} detail={project.paymentPlanDetail} isMobile={isMobile} />
               </div>
@@ -721,7 +715,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
 
             {/* Floor Plans */}
             {project.floorPlans.length > 0 && (
-              <div style={{ background: "white", borderRadius: 24, padding: cardPad, boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
+              <div className="pd-card">
                 <SH label="Layouts" title="Floor Plans & Sizes" />
                 {(() => {
                   const maxSqft = Math.max(...project.floorPlans.map(fp => fp.sqft_max || fp.sqft_min || 0));
@@ -733,34 +727,15 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                         const barPct  = maxSqft > 0 ? Math.round((sqftVal / maxSqft) * 100) : 0;
                         const bedLabel = fp.type === "Studio" ? "Studio" : bedNum === 1 ? "Bedroom" : "Bedrooms";
                         return (
-                          <div
-                            key={i}
-                            className="fp-row"
-                            style={{
-                              display: "flex", alignItems: "stretch",
-                              borderRadius: 16, overflow: "hidden",
-                              border: "1.5px solid rgba(127,226,227,0.14)",
-                              background: "white",
-                              boxShadow: "0 2px 12px rgba(25,37,55,0.04)",
-                            }}
-                          >
-                            {/* left panel — dark, shows bed count */}
-                            <div style={{
-                              background: "linear-gradient(150deg, #192537 0%, #0d1929 100%)",
-                              minWidth: isMobile ? 64 : 88, display: "flex", flexDirection: "column",
-                              alignItems: "center", justifyContent: "center",
-                              padding: isMobile ? "16px 10px" : "20px 16px", gap: 2, flexShrink: 0,
-                            }}>
-                              <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 900, fontSize: isMobile ? 24 : 32, color: "#7fe2e3", lineHeight: 1, letterSpacing: "-0.03em" }}>
-                                {fp.type === "Studio" ? "S" : bedNum}
-                              </span>
-                              <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 8, color: "rgba(255,255,255,0.38)", letterSpacing: "0.1em", textTransform: "uppercase", textAlign: "center" }}>
-                                {bedLabel}
-                              </span>
+                          <div key={i} className="fp-row">
+                            {/* left panel */}
+                            <div className="fp-left">
+                              <span className="fp-left-num">{fp.type === "Studio" ? "S" : bedNum}</span>
+                              <span className="fp-left-label">{bedLabel}</span>
                             </div>
 
-                            {/* centre — type + sqft + bar */}
-                            <div style={{ flex: 1, padding: isMobile ? "12px 12px" : "16px 22px", display: "flex", flexDirection: "column", justifyContent: "center", minWidth: 0 }}>
+                            {/* centre */}
+                            <div className="fp-center">
                               <div style={{ display: "flex", alignItems: "baseline", gap: 16, flexWrap: "wrap", marginBottom: 10 }}>
                                 {/* unit type */}
                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -779,7 +754,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                               {/* sqft */}
                               {fp.sqft_min > 0 && (
                                 <div style={{ marginBottom: 10 }}>
-                                  <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: isMobile ? 17 : 22, color: "#192537", letterSpacing: "-0.03em" }}>
+                                  <span className="fp-sqft">
                                     {fp.sqft_min.toLocaleString()}
                                     {fp.sqft_max && fp.sqft_max !== fp.sqft_min ? `–${fp.sqft_max.toLocaleString()}` : ""}
                                   </span>
@@ -793,11 +768,11 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                             </div>
 
                             {/* right panel — price */}
-                            <div style={{ borderLeft: "1px solid #f0f2f4", padding: isMobile ? "12px 10px" : "16px 22px", display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center", flexShrink: 0, minWidth: isMobile ? 86 : 130 }}>
+                            <div className="fp-right">
                               {fp.price_from ? (
                                 <>
                                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#c0c8d4", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 5 }}>From</div>
-                                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: isMobile ? 11 : 14, color: "#7fe2e3", textAlign: "right" }}>{fmt(fp.price_from)}</div>
+                                  <div className="fp-price">{fmt(fp.price_from)}</div>
                                 </>
                               ) : (
                                 <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#c8cdd5", fontStyle: "italic", textAlign: "right" }}>Price on<br />request</div>
@@ -827,9 +802,9 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
 
             {/* Amenities */}
             {project.amenities.length > 0 && (
-              <div style={{ background: "white", borderRadius: 24, padding: cardPad, boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
+              <div className="pd-card">
                 <SH label="Lifestyle" title="Amenities & Features" />
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(3,1fr)", gap: 10 }}>
+                <div className="amenities-grid">
                   {project.amenities.map(a => (
                     <div key={a} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 13px", background: "#f8fafc", borderRadius: 12, border: "1px solid #eef0f3" }}>
                       <span style={{ fontSize: 17, lineHeight: 1, flexShrink: 0 }}>{amenityIcon(a)}</span>
@@ -842,7 +817,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
 
             {/* Commute Times */}
             {project.commuteTimes.length > 0 && (
-              <div style={{ background: "white", borderRadius: 24, padding: cardPad, boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
+              <div className="pd-card">
                 <SH label="Connectivity" title="Commute Times" />
                 {/* header strip */}
                 <div style={{ display: "flex", alignItems: "center", gap: 14, background: "linear-gradient(135deg, #192537 0%, #0d1e2e 100%)", borderRadius: 16, padding: "16px 20px", marginBottom: 20 }}>
@@ -852,7 +827,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                     <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "rgba(255,255,255,0.42)" }}>Approximate driving times from this development</div>
                   </div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2,1fr)", gap: 10 }}>
+                <div className="commute-grid">
                   {project.commuteTimes.map((line: string, i: number) => {
                     const parts = line.split(/\s*[—–-]\s*/);
                     const dest = parts[0]?.trim() ?? line;
@@ -891,14 +866,14 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
             )}
 
             {/* Map */}
-            <div style={{ background: "white", borderRadius: 24, padding: cardPad, boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
+            <div className="pd-card">
               <SH label="Where Is It" title="Location & Nearby" />
               <PrimeLocationMap areaName={project.area} latitude={project.latitude ?? undefined} longitude={project.longitude ?? undefined} />
             </div>
 
             {/* FAQs */}
             {project.faqs.length > 0 && (
-              <div style={{ background: "white", borderRadius: 24, padding: cardPad, boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
+              <div className="pd-card">
                 <SH label="Questions" title="Frequently Asked Questions" />
                 {project.faqs.map((f, i) => <FaqAccordion key={i} q={f.q} a={f.a} />)}
               </div>
@@ -907,10 +882,10 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
           </div>
 
           {/* ── RIGHT SIDEBAR ── */}
-          <div className="detail-sidebar" style={{ position: isMobile ? "static" : "sticky", top: 100 }}>
+          <div className="detail-sidebar">
 
             {/* Price + key info */}
-            <div style={{ background: "white", borderRadius: 24, padding: isMobile ? "18px 16px" : "24px", boxShadow: "0 4px 32px rgba(25,37,55,0.1)", marginBottom: 16, overflow: "hidden", position: "relative" }}>
+            <div className="pd-sidebar-card" style={{ marginBottom: 16, overflow: "hidden", position: "relative" }}>
               <div style={{ position: "absolute", top: -24, right: -24, width: 110, height: 110, borderRadius: "50%", background: "rgba(127,226,227,0.05)" }} />
               <div style={{ position: "absolute", bottom: 16, left: -20, width: 70, height: 70, borderRadius: "50%", background: "rgba(127,226,227,0.04)" }} />
 
@@ -975,7 +950,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
             </div>
 
             {/* Lead form */}
-            <div style={{ background: "white", borderRadius: 24, padding: isMobile ? "18px 16px" : "24px", boxShadow: "0 4px 32px rgba(25,37,55,0.1)" }}>
+            <div className="pd-sidebar-card">
               <div style={{ marginBottom: 18 }}>
                 <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#7fe2e3", letterSpacing: "0.22em", textTransform: "uppercase", margin: "0 0 6px" }}>Free Consultation</p>
                 <h3 style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 17, color: "#192537", margin: 0, lineHeight: 1.25 }}>Request More Information</h3>
