@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import Footer from "@/app/components/Footer";
-import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import { Calendar, Clock, ArrowUpRight, ArrowLeft, Tag, Phone } from "lucide-react";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -300,11 +298,6 @@ export default async function BlogPostPage({ params }: Props) {
           </div>
         </div>
       </div>
-
-      <Footer />
-      <Disclaimer />
-      <CookieBanner />
-      <FloatingContact />
 
       <style>{`
         @media (max-width: 1024px) {

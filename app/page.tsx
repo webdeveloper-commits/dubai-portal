@@ -7,8 +7,6 @@ import DeveloperLogos from "@/app/components/DeveloperLogos";
 import PropertiesByArea from "@/app/components/PropertiesByArea";
 import PropertiesByLifestyle from "@/app/components/PropertiesByLifestyle";
 import AboutElysian from "@/app/components/AboutElysian";
-import Footer from "@/app/components/Footer";
-import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import { supabase } from "@/lib/supabase";
 import type { Project } from "@/app/components/ProjectResults";
 
@@ -150,10 +148,6 @@ export default async function Home() {
       <PropertiesByArea counts={areaCounts} />
       <PropertiesByLifestyle counts={lifestyleCounts} />
       <AboutElysian />
-      <Footer />
-      <Disclaimer />
-      <CookieBanner />
-      <FloatingContact />
       <FeaturedProjectPopup project={popup} />
     </main>
   );

@@ -9,6 +9,8 @@ import "./globals.css";
 import Navbar from "@/app/components/Navbar";
 import TrackingInit from "@/app/components/TrackingInit";
 import { supabase } from "@/lib/supabase";
+import Footer from "@/app/components/Footer";
+import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -48,6 +50,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <TrackingInit />
         <Navbar developers={developers} />
         {children}
+        <Footer />
+        <Disclaimer />
+        <CookieBanner />
+        <FloatingContact />
       </body>
     </html>
   );

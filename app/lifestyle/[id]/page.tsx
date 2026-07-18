@@ -2,9 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import Navbar from "@/app/components/Navbar";
-import Footer from "@/app/components/Footer";
-import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import EnquireLifestyleButton from "./EnquireLifestyleButton";
 
 // ─── Lifestyle catalogue ──────────────────────────────────────────────────────
@@ -152,7 +149,6 @@ export default async function LifestylePage({ params }: Props) {
 
   return (
     <main style={{ background: "#f4f6f9" }}>
-      <Navbar />
 
       {/* ── HERO ── */}
       <section style={{ position: "relative", minHeight: 520, display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
@@ -323,11 +319,6 @@ export default async function LifestylePage({ params }: Props) {
           </div>
         </div>
       </section>
-
-      <Footer />
-      <Disclaimer />
-      <CookieBanner />
-      <FloatingContact />
 
       <style>{`
         .ls-card:hover { transform: translateY(-4px); box-shadow: 0 14px 44px rgba(25,37,55,0.13) !important; }

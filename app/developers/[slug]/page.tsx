@@ -2,9 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import Navbar from "@/app/components/Navbar";
-import Footer from "@/app/components/Footer";
-import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import { ArrowLeft, MapPin, TrendingUp } from "lucide-react";
 import ProjectsSection from "./ProjectsSection";
 import EnquireDevButton from "./EnquireDevButton";
@@ -149,7 +146,6 @@ export default async function DeveloperPage({ params }: Props) {
 
   return (
     <main style={{ background: "#f4f6f9" }}>
-      <Navbar />
 
       {/* JSON-LD */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: orgSchema }} />
@@ -452,11 +448,6 @@ export default async function DeveloperPage({ params }: Props) {
           </div>
         </div>
       </section>
-
-      <Footer />
-      <Disclaimer />
-      <CookieBanner />
-      <FloatingContact />
 
       <style>{`
         @media (max-width: 1024px) {

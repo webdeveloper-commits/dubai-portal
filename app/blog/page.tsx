@@ -1,7 +1,4 @@
 import { supabase } from "@/lib/supabase";
-import Navbar from "@/app/components/Navbar";
-import Footer from "@/app/components/Footer";
-import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import BlogClientGrid from "./BlogClientGrid";
 
 export const revalidate = 3600;
@@ -65,10 +62,6 @@ export default async function BlogPage() {
         </div>
       </section>
 
-      <Footer />
-      <Disclaimer />
-      <CookieBanner />
-      <FloatingContact />
     </main>
   );
 }

@@ -1,8 +1,5 @@
 import { Suspense } from "react";
 import { supabase } from "@/lib/supabase";
-import Navbar from "@/app/components/Navbar";
-import Footer from "@/app/components/Footer";
-import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import ProjectsClientGrid from "./ProjectsClientGrid";
 import ProjectsEnquiryCTA from "./ProjectsEnquiryCTA";
 
@@ -56,7 +53,6 @@ export default async function ProjectsPage() {
 
   return (
     <main>
-      <Navbar />
 
       {/* Hero — server-rendered, Google sees this immediately */}
       <section style={{ background: "#0d1e2e", paddingTop: 140, paddingBottom: 72, paddingLeft: 24, paddingRight: 24, position: "relative", overflow: "hidden" }}>
@@ -97,10 +93,6 @@ export default async function ProjectsPage() {
       {/* CTA — client for enquiry modal */}
       <ProjectsEnquiryCTA />
 
-      <Footer />
-      <Disclaimer />
-      <CookieBanner />
-      <FloatingContact />
     </main>
   );
 }

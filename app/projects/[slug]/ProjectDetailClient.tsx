@@ -2,9 +2,6 @@
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import Navbar from "@/app/components/Navbar";
-import Footer from "@/app/components/Footer";
-import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import {
   MapPin, Bed, Calendar, ChevronLeft, ChevronRight,
   CheckCircle2, ChevronDown, Building2, Layers, Ruler, Clock,
@@ -502,7 +499,6 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
 
   return (
     <main style={{ background: "#f4f6f9" }}>
-      <Navbar />
 
       {/* ── HERO ─────────────────────────────────────────────────────────────── */}
       <section style={{ position: "relative", minHeight: "75vh", display: "flex", alignItems: "flex-end", overflow: "hidden" }}>
@@ -991,11 +987,6 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
           )}
         </div>
       </div>
-
-      <Footer />
-      <Disclaimer />
-      <CookieBanner />
-      <FloatingContact />
 
       <style>{`
         @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }

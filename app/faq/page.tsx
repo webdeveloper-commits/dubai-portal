@@ -1,8 +1,6 @@
 "use client";
 import { useState } from "react";
 import { Plus, Minus } from "lucide-react";
-import Footer from "@/app/components/Footer";
-import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import type { Metadata } from "next";
 
 const faqCategories = [
@@ -251,10 +249,6 @@ export default function FAQPage() {
         </div>
       </section>
 
-      <Footer />
-      <Disclaimer />
-      <CookieBanner />
-      <FloatingContact />
     </main>
   );
 }

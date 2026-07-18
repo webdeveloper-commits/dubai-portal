@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import Footer from "@/app/components/Footer";
-import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import SearchableDevGrid from "./SearchableDevGrid";
 
 export const revalidate = 3600;
@@ -99,10 +97,6 @@ export default async function DevelopersPage() {
         </div>
       </section>
 
-      <Footer />
-      <Disclaimer />
-      <CookieBanner />
-      <FloatingContact />
     </main>
   );
 }

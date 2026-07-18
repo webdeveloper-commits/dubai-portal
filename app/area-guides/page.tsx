@@ -1,7 +1,4 @@
 import { supabase } from "@/lib/supabase";
-import Navbar from "@/app/components/Navbar";
-import Footer from "@/app/components/Footer";
-import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import SearchableAreaGrid from "./SearchableAreaGrid";
 
 interface AreaSummary {
@@ -43,8 +40,6 @@ export default async function AreaGuidesPage() {
   return (
     <main style={{ background: "#f4f6f9" }}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: breadcrumbSchema }} />
-
-      <Navbar />
 
       {/* ── Hero ── */}
       <section
@@ -239,11 +234,6 @@ export default async function AreaGuidesPage() {
           </a>
         </div>
       </section>
-
-      <Footer />
-      <Disclaimer />
-      <CookieBanner />
-      <FloatingContact />
 
     </main>
   );

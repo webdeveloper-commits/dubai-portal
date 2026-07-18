@@ -2,9 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import Navbar from "@/app/components/Navbar";
-import Footer from "@/app/components/Footer";
-import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
 import { FaqAccordion, LeadForm, PrimeLocationMap, EnquireButton } from "./ClientComponents";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -187,8 +184,6 @@ export default async function AreaDetailPage({ params }: Props) {
     <main style={{ background: "#f4f6f9" }}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: breadcrumbSchema }} />
       {faqSchema && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: faqSchema }} />}
-
-      <Navbar />
 
       {/* ── HERO ── */}
       <section
@@ -856,11 +851,6 @@ export default async function AreaDetailPage({ params }: Props) {
           </Link>
         </div>
       </div>
-
-      <Footer />
-      <Disclaimer />
-      <CookieBanner />
-      <FloatingContact />
 
       <style>{`
         .nearby-chip:hover { background: rgba(127,226,227,0.1) !important; border-color: #7fe2e3 !important; color: #0d5e5f !important; }
