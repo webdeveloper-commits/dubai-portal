@@ -31,6 +31,8 @@ const PROPERTY_TYPES = [
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// (DropPos removed — dropdowns now use position:absolute, not position:fixed)
+
 export interface FilterState {
   projectSearch: string;
   priceFrom: number;
@@ -57,16 +59,6 @@ function formatAED(val: number): string {
 
 // ─── CheckboxDropdown ─────────────────────────────────────────────────────────
 
-type DropPos = { top: number; left: number; width: number };
-
-function calcDropPos(el: HTMLElement, panelMinW: number): DropPos {
-  const r = el.getBoundingClientRect();
-  const vw = window.innerWidth;
-  const w = Math.min(Math.max(r.width, panelMinW), vw - 16);
-  const left = Math.max(8, Math.min(r.left, vw - w - 8));
-  return { top: r.bottom + 6, left, width: w };
-}
-
 function CheckboxDropdown({
   label, options, selected, onChange, searchable = false, searchPlaceholder = "Search…",
 }: {
@@ -79,7 +71,7 @@ function CheckboxDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [pos, setPos] = useState<DropPos | null>(null);
+  const [alignRight, setAlignRight] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const panelMinW = searchable ? 280 : 220;
 
@@ -94,13 +86,6 @@ function CheckboxDropdown({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  useEffect(() => {
-    if (!open || !ref.current) return;
-    function update() { if (ref.current) setPos(calcDropPos(ref.current, panelMinW)); }
-    window.addEventListener("resize", update, { passive: true });
-    return () => window.removeEventListener("resize", update);
-  }, [open, panelMinW]);
-
   const filtered = options.filter(o => o.toLowerCase().includes(query.toLowerCase()));
 
   function toggle(val: string) {
@@ -108,7 +93,10 @@ function CheckboxDropdown({
   }
 
   function handleToggle() {
-    if (!open && ref.current) setPos(calcDropPos(ref.current, panelMinW));
+    if (!open && ref.current) {
+      const r = ref.current.getBoundingClientRect();
+      setAlignRight(r.left + panelMinW > window.innerWidth - 8);
+    }
     setOpen(o => !o);
   }
 
@@ -140,9 +128,13 @@ function CheckboxDropdown({
           style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }} />
       </button>
 
-      {open && pos && (
+      {open && (
         <div style={{
-          position: "fixed", top: pos.top, left: pos.left, width: pos.width,
+          position: "absolute",
+          top: "calc(100% + 6px)",
+          left: alignRight ? undefined : 0,
+          right: alignRight ? 0 : undefined,
+          minWidth: panelMinW,
           background: "white", border: "1.5px solid #e5e5e5", borderRadius: 14,
           zIndex: 9999, boxShadow: "0 8px 32px rgba(0,0,0,0.14)", overflow: "hidden",
           boxSizing: "border-box",
@@ -182,9 +174,10 @@ function PriceDropdown({ priceFrom, priceTo, onChange }: {
   priceFrom: number; priceTo: number; onChange: (from: number, to: number) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<DropPos | null>(null);
+  const [alignRight, setAlignRight] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const MAX = 100_000_000;
+  const PANEL_W = 260;
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -194,17 +187,13 @@ function PriceDropdown({ priceFrom, priceTo, onChange }: {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  useEffect(() => {
-    if (!open || !ref.current) return;
-    function update() { if (ref.current) setPos(calcDropPos(ref.current, 260)); }
-    window.addEventListener("resize", update, { passive: true });
-    return () => window.removeEventListener("resize", update);
-  }, [open]);
-
   const isActive = priceFrom > 0 || priceTo < MAX;
 
   function handleToggle() {
-    if (!open && ref.current) setPos(calcDropPos(ref.current, 260));
+    if (!open && ref.current) {
+      const r = ref.current.getBoundingClientRect();
+      setAlignRight(r.left + PANEL_W > window.innerWidth - 8);
+    }
     setOpen(o => !o);
   }
 
@@ -226,9 +215,13 @@ function PriceDropdown({ priceFrom, priceTo, onChange }: {
         <ChevronDown size={13} color={isActive ? "#7fe2e3" : "#aaa"} style={{ flexShrink: 0, marginLeft: "auto", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
       </button>
 
-      {open && pos && (
+      {open && (
         <div style={{
-          position: "fixed", top: pos.top, left: pos.left, width: pos.width,
+          position: "absolute",
+          top: "calc(100% + 6px)",
+          left: alignRight ? undefined : 0,
+          right: alignRight ? 0 : undefined,
+          minWidth: PANEL_W,
           background: "white", border: "1.5px solid #e5e5e5", borderRadius: 14,
           zIndex: 9999, boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
           padding: "18px 20px 16px", boxSizing: "border-box",

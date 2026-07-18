@@ -319,7 +319,7 @@ function FaqAccordion({ q, a }: { q: string; a: string }) {
         </span>
       </button>
       <div style={{ maxHeight: open ? 400 : 0, overflow: "hidden", transition: "max-height 0.3s ease" }}>
-        <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#7a8a9e", lineHeight: 1.85, paddingBottom: 20, paddingRight: 40, margin: 0 }}>{a}</p>
+        <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 14, color: "#4a5568", lineHeight: 1.85, paddingBottom: 20, paddingRight: 40, margin: 0 }}>{a}</p>
       </div>
     </div>
   );
@@ -427,7 +427,7 @@ function SH({ label, title }: { label?: string; title: string }) {
           <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#7fe2e3", letterSpacing: "0.28em", textTransform: "uppercase" }}>{label}</span>
         </div>
       )}
-      <h2 style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 21, color: "#192537", margin: 0, letterSpacing: "-0.02em" }}>{title}</h2>
+      <h2 style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 22, color: "#192537", margin: 0, letterSpacing: "-0.02em" }}>{title}</h2>
     </div>
   );
 }
@@ -640,7 +640,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
             {(project.descriptionLong || project.descriptionShort) && (
               <div style={{ background: "white", borderRadius: 24, padding: cardPad, boxShadow: "0 2px 20px rgba(25,37,55,0.06)" }}>
                 <SH label="Overview" title="About This Project" />
-                <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#7a8a9e", lineHeight: 1.95, margin: "0 0 20px" }}>
+                <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 14, color: "#4a5568", lineHeight: 1.95, margin: "0 0 20px" }}>
                   {project.descriptionLong || project.descriptionShort}
                 </p>
                 {/* Property type chips */}
@@ -688,7 +688,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                       }}
                     >
                       <span style={{ color: "#7fe2e3", fontSize: 16, flexShrink: 0, marginTop: 1 }}>✦</span>
-                      <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#555", lineHeight: 1.7, margin: 0 }}>{item}</p>
+                      <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#444", lineHeight: 1.75, margin: 0 }}>{item}</p>
                     </div>
                   ))}
                 </div>
@@ -831,9 +831,9 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                 <SH label="Lifestyle" title="Amenities & Features" />
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(3,1fr)", gap: 10 }}>
                   {project.amenities.map(a => (
-                    <div key={a} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 13px", background: "#f8fafc", borderRadius: 12, border: "1px solid #eef0f3" }}>
-                      <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{amenityIcon(a)}</span>
-                      <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#555", lineHeight: 1.3 }}>{a}</span>
+                    <div key={a} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 13px", background: "#f8fafc", borderRadius: 12, border: "1px solid #eef0f3" }}>
+                      <span style={{ fontSize: 17, lineHeight: 1, flexShrink: 0 }}>{amenityIcon(a)}</span>
+                      <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#444", lineHeight: 1.35 }}>{a}</span>
                     </div>
                   ))}
                 </div>
@@ -875,11 +875,11 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                           {icon}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#555", lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap" }}>{dest}</div>
+                          <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 12, color: "#444", lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap" }}>{dest}</div>
                           {time && (
-                            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 3 }}>
-                              <Clock size={9} color="#7fe2e3" />
-                              <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 12, color: "#7fe2e3" }}>{time}</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4 }}>
+                              <Clock size={10} color="#7fe2e3" />
+                              <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, color: "#7fe2e3" }}>{time}</span>
                             </div>
                           )}
                         </div>
