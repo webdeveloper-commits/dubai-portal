@@ -46,8 +46,8 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "JARVIS is running.\n"
         "Next runs: Tuesday and Friday at 9:00am UAE time.\n\n"
         "Commands:\n"
-        "SCRAPE [opr.ae URL] — preview a project without saving\n"
-        "ADD PROJECT [opr.ae URL] — scrape and publish a project\n"
+        "SCRAPE [opr.ae URL] — scrape opr.ae URL and publish to DB\n"
+        "ADD PROJECT [opr.ae URL] — same as SCRAPE\n"
         "GET PROJECT [slug or URL] — look up a project in DB\n"
         "SET FEATURED [slug] — set as featured project\n"
         "SET HANDPICKED [slug] — add to Handpicked for You\n"
@@ -123,12 +123,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await update.message.reply_text(
                     "Usage: SCRAPE [opr.ae URL]\n"
                     "Example: SCRAPE https://opr.ae/projects/sobha-orbis\n\n"
-                    "Previews what JARVIS would extract — does NOT save to database.\n"
-                    "Send ADD PROJECT [url] to actually publish it."
+                    "Scrapes the full project page, generates copy + SEO, uploads images and saves to the database."
                 )
                 return
-            asyncio.create_task(runner.run_scrape_preview(scrape_url))
-            await update.message.reply_text("Scraping preview (not saving)...")
+            if runner.is_running():
+                await update.message.reply_text("A run is already in progress. Send STOP to cancel it first.")
+                return
+            await update.message.reply_text(f"Scraping and publishing:\n{scrape_url}")
+            asyncio.create_task(runner.run_add_project(scrape_url))
             return
 
         if upper.startswith("ADD PROJECT"):

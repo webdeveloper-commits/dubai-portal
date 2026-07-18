@@ -386,60 +386,6 @@ async def run_get_project(slug_or_url: str):
         await notify(f"Error fetching project: {e}")
 
 
-async def run_scrape_preview(url: str):
-    """
-    Scrape an opr.ae project URL and report what was found — WITHOUT saving to DB.
-    Use this to preview a project before committing to ADD PROJECT.
-    Triggered by: SCRAPE [opr.ae URL]
-    """
-    if not url.startswith("http"):
-        url = "https://opr.ae" + ("/" if not url.startswith("/") else "") + url
-
-    await notify(f"Scraping preview (not saving):\n{url}")
-
-    try:
-        raw = await scrape_project_detail(url)
-        if not raw:
-            await notify("Could not scrape that URL. Check it is a valid opr.ae project page.")
-            return
-
-        name      = raw.get("name", "Unknown")
-        imgs      = len(raw.get("images_all", []))
-        desc_len  = len(raw.get("description_raw", ""))
-        has_area  = bool(raw.get("area_description"))
-        has_main  = bool(raw.get("image_main"))
-        nearby_a  = len(raw.get("nearby_attractions_raw", []))
-        nearby_h  = len(raw.get("nearby_hospitals_raw", []))
-        nearby_s  = len(raw.get("nearby_schools_raw", []))
-        lat       = raw.get("latitude")
-        body      = (raw.get("body_text") or "")[:600]
-
-        lines = [
-            f"SCRAPE PREVIEW: {name}",
-            f"URL: {url}",
-            f"",
-            f"Main image: {'Found' if has_main else 'MISSING'}",
-            f"Gallery images: {imgs}",
-            f"Description text: {desc_len} chars",
-            f"Area description: {'Found' if has_area else 'not found'}",
-            f"Geo coordinates: {'Found' if lat else 'not found'}",
-            f"Nearby attractions: {nearby_a}",
-            f"Nearby hospitals: {nearby_h}",
-            f"Nearby schools: {nearby_s}",
-            f"",
-            f"Body text preview:",
-            body[:400],
-            f"",
-            f"To publish this project, send:",
-            f"ADD PROJECT {url}",
-        ]
-        await notify("\n".join(lines))
-
-    except Exception as e:
-        logger.error(f"run_scrape_preview error: {e}")
-        await notify(f"Scrape preview error: {e}")
-
-
 async def run_test_area(area_name: str):
     """Debug: scrape one area from Bayut and report what was found."""
     await notify(f"Testing Bayut scrape for: {area_name}...")
