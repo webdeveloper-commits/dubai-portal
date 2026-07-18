@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
       projectName, developerName, areaName, sourceUrl,
       // UTM / ad tracking (from lib/tracking.ts → getLeadTrackingData)
       utm_source, utm_medium, utm_campaign, utm_content, utm_term,
-      gclid, landing_page,
+      gclid, landing_page, custom_params,
       // What the user was searching for before they hit the form
       search_context,
     } = body;
@@ -35,7 +35,11 @@ export async function POST(req: NextRequest) {
       ].filter(Boolean).join(" | ");
       noteParts.push(`Ad: ${adParts}`);
     }
-    if (landing_page)   noteParts.push(`Landing: ${landing_page}`);
+    if (custom_params && Object.keys(custom_params).length > 0) {
+      const customStr = Object.entries(custom_params).map(([k, v]) => `${k}=${v}`).join(" | ");
+      noteParts.push(`Ad custom params: ${customStr}`);
+    }
+    if (landing_page) noteParts.push(`Landing: ${landing_page}`);
 
     if (search_context && Object.keys(search_context).length > 0) {
       const sc = search_context;

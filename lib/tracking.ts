@@ -6,14 +6,15 @@ const UTM_KEY    = "ely_utm";    // Google Ads / UTM data from landing page
 const SEARCH_KEY = "ely_search"; // Last active filter/search state
 
 export interface UTMData {
-  utm_source?:   string;
-  utm_medium?:   string;
-  utm_campaign?: string;
-  utm_content?:  string;
-  utm_term?:     string;
-  gclid?:        string;  // Google Click ID (auto-appended by Google Ads)
-  landing_page?: string;  // full URL where user first arrived
-  captured_at?:  string;
+  utm_source?:     string;
+  utm_medium?:     string;
+  utm_campaign?:   string;
+  utm_content?:    string;
+  utm_term?:       string;
+  gclid?:          string;  // Google Click ID (auto-appended by Google Ads)
+  landing_page?:   string;  // full URL where user first arrived
+  captured_at?:    string;
+  custom_params?:  Record<string, string>; // any extra params Google Ads sends (lifestyle=beach, area=marina, etc.)
 }
 
 export interface SearchContext {
@@ -44,15 +45,21 @@ export function captureUTMParams(): void {
 
     if (sessionStorage.getItem(UTM_KEY)) return; // Already captured this session
 
+    // Separate known UTM/Google fields from custom ad params
+    const KNOWN = new Set(["utm_source","utm_medium","utm_campaign","utm_content","utm_term","gclid"]);
+    const custom: Record<string, string> = {};
+    p.forEach((val, key) => { if (!KNOWN.has(key)) custom[key] = val; });
+
     const data: UTMData = {
-      utm_source:   utmSource                    || undefined,
-      utm_medium:   p.get("utm_medium")          || undefined,
-      utm_campaign: p.get("utm_campaign")        || undefined,
-      utm_content:  p.get("utm_content")         || undefined,
-      utm_term:     p.get("utm_term")            || undefined,
-      gclid:        gclid                        || undefined,
-      landing_page: window.location.href,
-      captured_at:  new Date().toISOString(),
+      utm_source:    utmSource                    || undefined,
+      utm_medium:    p.get("utm_medium")          || undefined,
+      utm_campaign:  p.get("utm_campaign")        || undefined,
+      utm_content:   p.get("utm_content")         || undefined,
+      utm_term:      p.get("utm_term")            || undefined,
+      gclid:         gclid                        || undefined,
+      landing_page:  window.location.href,
+      captured_at:   new Date().toISOString(),
+      custom_params: Object.keys(custom).length ? custom : undefined,
     };
     sessionStorage.setItem(UTM_KEY, JSON.stringify(data));
   } catch { /* sessionStorage may be blocked (private mode, etc.) */ }
@@ -86,12 +93,13 @@ export function getLeadTrackingData(): {
   utm_term:       string | null;
   gclid:          string | null;
   landing_page:   string | null;
+  custom_params:  Record<string, string> | null;
   search_context: SearchContext | null;
 } {
   const empty = {
     utm_source: null, utm_medium: null, utm_campaign: null,
     utm_content: null, utm_term: null, gclid: null,
-    landing_page: null, search_context: null,
+    landing_page: null, custom_params: null, search_context: null,
   };
   if (typeof window === "undefined") return empty;
 
@@ -99,17 +107,21 @@ export function getLeadTrackingData(): {
     const utm:    UTMData       | null = JSON.parse(sessionStorage.getItem(UTM_KEY)    || "null");
     const search: SearchContext | null = JSON.parse(sessionStorage.getItem(SEARCH_KEY) || "null");
 
-    // Also check current URL as fallback (e.g. user landed directly on detail page via ad)
+    // Fallback: read current URL params (covers direct ad landing on a detail page)
     const p = new URLSearchParams(window.location.search);
+    const KNOWN = new Set(["utm_source","utm_medium","utm_campaign","utm_content","utm_term","gclid"]);
+    const currentCustom: Record<string, string> = {};
+    p.forEach((val, key) => { if (!KNOWN.has(key)) currentCustom[key] = val; });
 
     return {
-      utm_source:    utm?.utm_source   || p.get("utm_source")   || null,
-      utm_medium:    utm?.utm_medium   || p.get("utm_medium")   || null,
-      utm_campaign:  utm?.utm_campaign || p.get("utm_campaign") || null,
-      utm_content:   utm?.utm_content  || p.get("utm_content")  || null,
-      utm_term:      utm?.utm_term     || p.get("utm_term")     || null,
-      gclid:         utm?.gclid        || p.get("gclid")        || null,
-      landing_page:  utm?.landing_page || null,
+      utm_source:    utm?.utm_source    || p.get("utm_source")   || null,
+      utm_medium:    utm?.utm_medium    || p.get("utm_medium")   || null,
+      utm_campaign:  utm?.utm_campaign  || p.get("utm_campaign") || null,
+      utm_content:   utm?.utm_content   || p.get("utm_content")  || null,
+      utm_term:      utm?.utm_term      || p.get("utm_term")     || null,
+      gclid:         utm?.gclid         || p.get("gclid")        || null,
+      landing_page:  utm?.landing_page  || null,
+      custom_params: utm?.custom_params || (Object.keys(currentCustom).length ? currentCustom : null),
       search_context: search || null,
     };
   } catch { return empty; }
