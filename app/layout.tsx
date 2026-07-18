@@ -32,12 +32,13 @@ export const metadata: Metadata = {
 export const revalidate = 3600;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const { data } = await supabase
+  const { data, error: devErr } = await supabase
     .from("developers")
     .select("name,slug")
-    .eq("published", true)
     .eq("show_in_menu", true)
     .order("name", { ascending: true });
+
+  if (devErr) console.error("[layout] developers query error:", devErr.message);
 
   const developers = (data ?? []) as { name: string; slug: string }[];
 
