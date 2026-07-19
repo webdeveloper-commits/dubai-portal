@@ -22,23 +22,6 @@ logger = logging.getLogger(__name__)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-BAD_PATTERNS = ["united_kingdom", "flag", ".svg", "21x21", "20x20", "intltelplp"]
-
-
-def is_bad(url: str | None) -> bool:
-    if not url:
-        return True
-    u = url.lower()
-    return any(p in u for p in BAD_PATTERNS)
-
-
-def first_good(images: list) -> str | None:
-    for img in (images or []):
-        if isinstance(img, str) and not is_bad(img):
-            return img
-    return None
-
-
 async def run(dry_run: bool = False, limit: int = 0):
     db = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -46,27 +29,25 @@ async def run(dry_run: bool = False, limit: int = 0):
     all_projects = res.data or []
     logger.info(f"Total projects in Supabase: {len(all_projects)}")
 
-    to_fix = [p for p in all_projects if is_bad(p.get("image_main"))]
-    logger.info(f"Projects with bad/missing image_main: {len(to_fix)}")
-
     if limit:
-        to_fix = to_fix[:limit]
+        all_projects = all_projects[:limit]
 
     fixed = skipped = 0
 
-    for p in to_fix:
+    for p in all_projects:
         slug = p["slug"]
-        good_img = first_good(p.get("images_all") or [])
+        imgs = p.get("images_all") or []
 
-        if not good_img:
-            logger.warning(f"No good image in images_all for: {slug}")
+        if not imgs:
+            logger.warning(f"No images_all for: {slug}")
             skipped += 1
             continue
 
-        logger.info(f"{'[DRY RUN] ' if dry_run else ''}Fix {slug}: {good_img[:80]}")
+        new_main = imgs[0]
+        logger.info(f"{'[DRY RUN] ' if dry_run else ''}Set image_main for {slug}: {new_main[:80]}")
 
         if not dry_run:
-            db.table("projects").update({"image_main": good_img}).eq("id", p["id"]).execute()
+            db.table("projects").update({"image_main": new_main}).eq("id", p["id"]).execute()
 
         fixed += 1
 
