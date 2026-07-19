@@ -177,16 +177,40 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
 
     try:
         logger.info("Loading opr.ae/projects...")
-        await page.goto(PROJECTS_URL, wait_until="domcontentloaded", timeout=45_000)
+        await page.goto(PROJECTS_URL, wait_until="load", timeout=60_000)
 
-        # Wait for any project link to appear — resilient to button text changes
+        # Dismiss GDPR / cookie consent popup if present — blocks JS init on EU servers
+        for consent_sel in [
+            "button:has-text('Accept all')",
+            "button:has-text('Accept All')",
+            "button:has-text('Accept & close')",
+            "button:has-text('I agree')",
+            "button:has-text('Agree')",
+            "button:has-text('OK')",
+            "button:has-text('Got it')",
+            "[aria-label='Close']",
+        ]:
+            try:
+                btn = page.locator(consent_sel).first
+                if await btn.count() > 0:
+                    await btn.click(timeout=3_000)
+                    logger.info(f"Dismissed consent popup via '{consent_sel}'")
+                    await asyncio.sleep(1)
+                    break
+            except Exception:
+                pass
+
+        # Wait for project cards — up to 20s after consent dismissed
         try:
-            await page.wait_for_selector("a[href*='/projects/']", timeout=30_000)
+            await page.wait_for_selector("a:has-text('Discover more')", timeout=20_000)
             logger.info("Project cards detected on page")
         except Exception:
-            logger.warning("Timed out waiting for project cards — may be blocked")
+            logger.warning("Timed out waiting for project cards — trying JS scroll trigger")
+            # Scroll down to trigger lazy-load if cards haven't appeared
+            await page.evaluate("window.scrollTo(0, 600)")
+            await asyncio.sleep(5)
 
-        await asyncio.sleep(3)
+        await asyncio.sleep(2)
 
         title = await page.title()
         logger.info(f"Page title: {title}")
