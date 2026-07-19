@@ -200,15 +200,20 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             except Exception:
                 pass
 
-        # Wait for project cards — up to 20s after consent dismissed
+        # Wait for project cards — up to 25s after consent dismissed
         try:
-            await page.wait_for_selector("a:has-text('Discover more')", timeout=20_000)
+            await page.wait_for_selector("a:has-text('Discover more')", timeout=25_000)
             logger.info("Project cards detected on page")
         except Exception:
-            logger.warning("Timed out waiting for project cards — trying JS scroll trigger")
-            # Scroll down to trigger lazy-load if cards haven't appeared
-            await page.evaluate("window.scrollTo(0, 600)")
-            await asyncio.sleep(5)
+            logger.warning("Cards not visible yet — scrolling to trigger lazy-load")
+            await page.evaluate("window.scrollTo(0, 800)")
+            await asyncio.sleep(6)
+            # One more attempt after scroll
+            try:
+                await page.wait_for_selector("a:has-text('Discover more')", timeout=15_000)
+                logger.info("Project cards appeared after scroll")
+            except Exception:
+                logger.warning("Still no project cards — will try extraction anyway")
 
         await asyncio.sleep(2)
 
@@ -234,34 +239,19 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
                 logger.info(f"Load More stopped at click {load_n + 1}: {e}")
                 break
 
-        # Extract all card data in one JS call — find by project URL pattern, not button text
+        # Extract all card data in one JS call — find by "Discover more" button (original approach)
         cards_data: list[dict] = await page.evaluate("""() => {
             const results = [];
-            const seen = new Set();
-
-            // Find all links pointing to /projects/<slug> — resilient to button text changes
-            const NAV_SLUGS = new Set(['coming-soon','map','search','filter','list','grid','all']);
-            const links = Array.from(document.querySelectorAll('a[href*="/projects/"]')).filter(a => {
-                const href = a.getAttribute('href') || '';
-                if (!/\\/projects\\/[^\\/]+/.test(href)) return false;
-                const slug = href.replace(/\\/$/, '').split('/projects/').pop() || '';
-                if (NAV_SLUGS.has(slug)) return false;
-                if (a.closest('nav, header, footer')) return false;
-                return true;
-            });
-
+            const links = Array.from(document.querySelectorAll('a')).filter(
+                a => a.textContent.trim().toLowerCase().includes('discover more')
+            );
             links.forEach(link => {
+                const card = link.closest('div[class], article') || link.parentElement;
+                if (!card) return;
                 const href = link.getAttribute('href') || '';
-                if (seen.has(href)) return;
-                seen.add(href);
-
-                // Walk up to find the card container
-                const card = link.closest('div[class], article, li, section') || link.parentElement;
-                const text = card ? (card.innerText || '') : (link.innerText || '');
-
-                // Thumbnail: find element with background-image in the card
+                const text = card.innerText || '';
                 let thumbnail = '';
-                const bgEl = card ? card.querySelector('[style*="background-image"]') : null;
+                const bgEl = card.querySelector('[style*="background-image"]');
                 if (bgEl) {
                     const style = bgEl.getAttribute('style') || '';
                     const m = style.match(/url\\([\"']?(https?:\\/\\/[^\"')]+)[\"']?\\)/);
