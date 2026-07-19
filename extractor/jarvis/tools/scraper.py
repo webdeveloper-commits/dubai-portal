@@ -179,21 +179,27 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
         logger.info("Loading opr.ae/projects...")
         await page.goto(PROJECTS_URL, wait_until="load", timeout=60_000)
 
-        # Dismiss Cookiebot consent popup via JS (buttons are non-standard elements)
-        await asyncio.sleep(4)  # give consent dialog time to fully load
-        removed = await page.evaluate("""() => {
+        # Dismiss Cookiebot consent — must call submitCustomConsent so the site's
+        # AJAX product-listing call fires (removing the DOM element alone is not enough)
+        await asyncio.sleep(4)  # give Cookiebot SDK time to fully initialise
+        result = await page.evaluate("""() => {
             const dialog = document.getElementById('CybotCookiebotDialog');
             const overlay = document.getElementById('CybotCookiebotDialogBodyUnderlay');
             if (dialog) dialog.remove();
             if (overlay) overlay.remove();
             document.body.style.overflow = '';
-            return !!dialog;
+            let method = 'none';
+            if (window.Cookiebot && window.Cookiebot.submitCustomConsent) {
+                window.Cookiebot.submitCustomConsent(true, true, true);
+                method = 'submitCustomConsent';
+            } else if (window.CookieConsent && window.CookieConsent.acceptAll) {
+                window.CookieConsent.acceptAll();
+                method = 'acceptAll';
+            }
+            return { removed: !!dialog, method };
         }""")
-        if removed:
-            logger.info("Cookiebot dialog removed via JS")
-        else:
-            logger.warning("CybotCookiebotDialog not found — may already be gone or page changed")
-        await asyncio.sleep(1)
+        logger.info(f"Cookiebot consent: removed={result['removed']} method={result['method']}")
+        await asyncio.sleep(3)  # let consent event propagate and AJAX fire
 
         # Wait for project cards — up to 25s after consent dismissed
         try:
