@@ -179,26 +179,41 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
         logger.info("Loading opr.ae/projects...")
         await page.goto(PROJECTS_URL, wait_until="load", timeout=60_000)
 
-        # Dismiss GDPR / cookie consent popup if present — blocks JS init on EU servers
-        for consent_sel in [
-            "button:has-text('Accept all')",
+        # Dismiss GDPR / cookie consent popup (Sourcepoint CMP loads inside an iframe)
+        # Must check all frames — page.locator() cannot see inside iframes
+        await asyncio.sleep(3)  # give the consent iframe time to load
+        consent_dismissed = False
+        consent_texts = [
             "button:has-text('Accept All')",
-            "button:has-text('Accept & close')",
+            "button:has-text('Accept all')",
+            "button:has-text('Accept')",
             "button:has-text('I agree')",
             "button:has-text('Agree')",
             "button:has-text('OK')",
             "button:has-text('Got it')",
+            "button:has-text('Continue')",
             "[aria-label='Close']",
-        ]:
-            try:
-                btn = page.locator(consent_sel).first
-                if await btn.count() > 0:
-                    await btn.click(timeout=3_000)
-                    logger.info(f"Dismissed consent popup via '{consent_sel}'")
-                    await asyncio.sleep(1)
-                    break
-            except Exception:
-                pass
+            "[title='Accept All']",
+        ]
+        all_frames = [page] + page.frames  # check main page + every iframe
+        for frame in all_frames:
+            if consent_dismissed:
+                break
+            for sel in consent_texts:
+                try:
+                    btn = frame.locator(sel).first
+                    if await btn.count() > 0:
+                        await btn.click(timeout=3_000)
+                        logger.info(f"Dismissed consent popup in frame '{frame.name or 'main'}' via '{sel}'")
+                        await asyncio.sleep(2)
+                        consent_dismissed = True
+                        break
+                except Exception:
+                    pass
+        if not consent_dismissed:
+            logger.warning("Could not find consent button — trying Escape key")
+            await page.keyboard.press("Escape")
+            await asyncio.sleep(2)
 
         # Wait for project cards — up to 25s after consent dismissed
         try:
