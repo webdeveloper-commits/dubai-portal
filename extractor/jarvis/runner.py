@@ -494,47 +494,44 @@ async def run_add_project(url: str):
 
 # ── Backfill — catch all existing opr.ae projects not yet in DB ────────────────
 
-_BACKFILL_PER_RUN = 20   # projects scraped per BACKFILL run — keeps each run under ~12 min
-_BACKFILL_SCAN_DEPTH = 25  # Load More clicks during deep scan
+_BACKFILL_PER_RUN = 50  # projects per auto-backfill run (~25 min each)
 
 
-async def run_backfill():
+async def run_backfill(auto: bool = False) -> bool:
     """
-    Deep scan of opr.ae to backfill projects missed during initial scraping.
-    Each run scrapes up to 20 projects. Send BACKFILL PROJECTS again for the next batch.
-    Clicks Load More 25x (vs normal 5x) to reach older listings.
-    Triggered by: BACKFILL PROJECTS
+    Scan opr.ae API for projects not yet in DB and import them.
+    Processes up to _BACKFILL_PER_RUN per call to avoid rate-limiting.
+
+    auto=True  → quieter Telegram output, returns True when all done
+    auto=False → verbose output (triggered manually via BACKFILL PROJECTS)
+
+    Returns True when no more projects remain (backfill complete).
     """
     global _active_task
     _active_task = asyncio.current_task()
 
-    await notify(
-        f"JARVIS — Backfill started\n"
-        f"Deep-scanning opr.ae ({_BACKFILL_SCAN_DEPTH}× Load More) for projects not in our DB...\n"
-        f"Will process up to {_BACKFILL_PER_RUN} per run to avoid rate-limiting.\n"
-        f"Send BACKFILL PROJECTS again after this finishes for the next batch."
-    )
-
-    import jarvis.tools.scraper as _scraper
-    original_max = _scraper.MAX_LOAD_MORE
-    _scraper.MAX_LOAD_MORE = _BACKFILL_SCAN_DEPTH
+    if not auto:
+        await notify(
+            f"JARVIS — Backfill started\n"
+            f"Scanning opr.ae API for projects not in our DB...\n"
+            f"Will process up to {_BACKFILL_PER_RUN} per run.\n"
+            f"Send BACKFILL PROJECTS again after this finishes for the next batch."
+        )
 
     try:
         existing_slugs = get_existing_slugs()
-
-        # Scan deep — collect only _BACKFILL_PER_RUN stubs at a time
         stubs = await scan_new_projects(existing_slugs, max_new=_BACKFILL_PER_RUN)
 
-        _scraper.MAX_LOAD_MORE = original_max  # restore right after scan
-
         if not stubs:
-            await notify("Backfill complete — no missing projects found. DB is fully up to date.")
-            return
+            if not auto:
+                await notify("Backfill complete — no missing projects found. DB is fully up to date.")
+            return True  # signal: all done
 
-        await notify(
-            f"Found {len(stubs)} missing projects this batch. Processing now...\n"
-            f"(There may be more — send BACKFILL PROJECTS again after this finishes.)"
-        )
+        if not auto:
+            await notify(
+                f"Found {len(stubs)} missing projects this batch. Processing now...\n"
+                f"(There may be more — send BACKFILL PROJECTS again after this finishes.)"
+            )
 
         published = []
         errors    = []
@@ -571,7 +568,7 @@ async def run_backfill():
 
                 main_cloud, gallery_cloud = await upload_project_images(
                     slug=parsed["slug"],
-                    main_url=raw.get("image_main"),
+                    main_url=stub.get("thumbnail") or raw.get("image_main"),
                     gallery_urls=raw.get("images_all", []),
                     max_gallery=10,
                 )
@@ -590,8 +587,8 @@ async def run_backfill():
                 else:
                     errors.append(parsed["name"])
 
-                # Progress update every 5 items
-                if (i + 1) % 5 == 0:
+                # Progress update every 10 items (less noise in auto mode)
+                if not auto and (i + 1) % 10 == 0:
                     await notify(
                         f"Backfill progress: {i + 1}/{len(stubs)} processed "
                         f"({len(published)} published, {len(skipped)} skipped, {len(errors)} errors)"
@@ -601,7 +598,7 @@ async def run_backfill():
 
             except asyncio.CancelledError:
                 await notify(
-                    f"Backfill stopped by user.\n"
+                    f"Backfill stopped.\n"
                     f"Published: {len(published)}, skipped: {len(skipped)}, failed: {len(errors)}"
                 )
                 raise
@@ -609,32 +606,34 @@ async def run_backfill():
                 logger.error(f"Backfill error for '{name}': {e}")
                 errors.append(name)
 
-        # Final summary
-        lines = [f"Backfill batch done — {len(stubs)} projects processed this run\n"]
-        lines.append(f"Published: {len(published)}")
-        lines.append(f"Skipped (non-UAE / duplicate): {len(skipped)}")
-        lines.append(f"Failed: {len(errors)}")
-        if published:
+        # Summary
+        total_in_db = len(get_existing_slugs())
+        lines = [f"Backfill batch done — {len(published)} published, {len(skipped)} skipped, {len(errors)} failed"]
+        lines.append(f"Total projects in DB now: {total_in_db}")
+        if published and not auto:
             lines.append("\nPublished this batch:")
             for p in published:
                 price = f"AED {p['price']:,}" if p["price"] else "Price on request"
                 lines.append(f"  • {p['name']} — {price}")
                 lines.append(f"    dubai-portal.vercel.app/projects/{p['slug']}")
-        lines.append("\nSend BACKFILL PROJECTS again to process the next batch.")
-        if published:
-            lines.append("Send APPROVE ALL to submit these to Google.")
+        if not auto:
+            lines.append("\nSend BACKFILL PROJECTS again to process the next batch.")
+            if published:
+                lines.append("Send APPROVE ALL to submit these to Google.")
         await notify("\n".join(lines))
 
-        # Enrich any new areas/developers created during backfill
+        # Enrich new areas/developers
         if published:
-            await notify("Running enrichment for new areas and developers from backfill...")
             enrich_summary = await run_enrichment()
-            await notify(f"Enrichment complete:\n{enrich_summary}")
+            if enrich_summary.strip() and not auto:
+                await notify(f"Enrichment complete:\n{enrich_summary}")
+
+        await _revalidate_vercel()
+        return False  # more projects may remain
 
     except asyncio.CancelledError:
-        _scraper.MAX_LOAD_MORE = original_max
         raise
     except Exception as e:
-        _scraper.MAX_LOAD_MORE = original_max
         logger.error(f"run_backfill error: {e}")
         await notify(f"Backfill error: {e}")
+        return False

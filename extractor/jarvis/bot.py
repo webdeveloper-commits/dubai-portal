@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 # Global app reference so scheduler can send messages
 _app: Application | None = None
+_backfill_job = None  # reference so we can cancel it when backfill completes
 
 
 def get_app() -> Application:
@@ -44,7 +45,8 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
     await update.message.reply_text(
         "JARVIS is running.\n"
-        "Next runs: Tuesday and Friday at 9:00am UAE time.\n\n"
+        "Weekly runs: Tuesday and Friday at 9:00am UAE time.\n"
+        "Auto-backfill: 3× daily at 11am, 7pm, 3am UAE until all projects imported.\n\n"
         "Commands:\n"
         "SCRAPE [opr.ae URL] — scrape opr.ae URL and publish to DB\n"
         "ADD PROJECT [opr.ae URL] — same as SCRAPE\n"
@@ -53,7 +55,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "SET HANDPICKED [slug] — add to Handpicked for You\n"
         "REMOVE HANDPICKED [slug] — remove from Handpicked\n"
         "APPROVE ALL — submit all pending to Google\n"
-        "BACKFILL PROJECTS — deep scan for missing projects\n"
+        "BACKFILL PROJECTS — run one backfill batch now\n"
         "RUN NOW — run Tuesday pipeline now\n"
         "STOP — stop current run"
     )
@@ -249,15 +251,39 @@ async def _scheduled_tuesday():
     asyncio.create_task(runner.run_tuesday())
 
 
+async def _scheduled_backfill():
+    """Auto-backfill 3× per day until all opr.ae projects are imported."""
+    global _backfill_job
+    if runner.is_running():
+        logger.info("Auto-backfill skipped — a run is already active")
+        return
+    logger.info("Auto-backfill starting...")
+    all_done = await runner.run_backfill(auto=True)
+    if all_done and _backfill_job:
+        _backfill_job.remove()
+        _backfill_job = None
+        await notify(
+            "Auto-backfill complete!\n"
+            "All opr.ae projects are now in the database.\n"
+            "Send APPROVE ALL to submit them all to Google."
+        )
+
+
 async def _post_init(app: Application) -> None:
     """Start the scheduler after the event loop is running."""
+    global _backfill_job
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(
         _scheduled_tuesday,
         CronTrigger(day_of_week="tue,fri", hour=RUN_HOUR_UTC, minute=0),
     )
+    # Auto-backfill at 07:00, 15:00, 23:00 UTC (clear of the 05:00 Tuesday run)
+    _backfill_job = scheduler.add_job(
+        _scheduled_backfill,
+        CronTrigger(hour="7,15,23", minute=0),
+    )
     scheduler.start()
-    logger.info(f"Scheduler started — Tuesday and Friday at {RUN_HOUR_UTC}:00 UTC (9am UAE)")
+    logger.info(f"Scheduler started — Tuesday/Friday at {RUN_HOUR_UTC}:00 UTC, backfill at 07:00/15:00/23:00 UTC")
 
 
 def run() -> None:
