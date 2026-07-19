@@ -1,6 +1,7 @@
 """
-Backfill image_main for projects where it's wrong (UK flag, SVG, missing).
-Uses the first good image from the project's existing images_all field.
+Backfill image_main for existing projects using the opr-search API's ImageLink.
+The UK flag ended up as images_all[0] because it was the phone input country icon
+scraped from the page. The API's ImageLink is the real project thumbnail.
 
 Run on the server:
   cd /var/www/dubai-portal/extractor
@@ -11,6 +12,10 @@ import asyncio
 import argparse
 import logging
 import os
+import requests
+import cloudinary
+import cloudinary.uploader
+from urllib.parse import unquote
 from supabase import create_client
 from dotenv import load_dotenv
 
@@ -22,6 +27,59 @@ logger = logging.getLogger(__name__)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD"),
+    api_key=os.getenv("CLOUDINARY_KEY"),
+    api_secret=os.getenv("CLOUDINARY_SECRET"),
+    secure=True,
+)
+
+OPR_SEARCH_API = (
+    "https://opr-search.mpp.agency/api/projects"
+    "?populate=*&pagination[pageSize]=1500&sort=id:desc"
+)
+
+
+def fetch_api_images() -> dict[str, str]:
+    """Return {slug: ImageLink} from the opr-search API."""
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://opr.ae/projects",
+        "Origin": "https://opr.ae",
+    }
+    resp = requests.get(OPR_SEARCH_API, headers=headers, timeout=30)
+    resp.raise_for_status()
+    result = {}
+    for item in resp.json().get("data", []):
+        attrs = item.get("attributes", {})
+        link = attrs.get("Link", "")
+        slug = unquote(link.rstrip("/").split("/")[-1])
+        img = attrs.get("ImageLink", "")
+        if slug and img:
+            result[slug] = img
+    logger.info(f"Fetched {len(result)} project thumbnails from opr-search API")
+    return result
+
+
+def upload_main(slug: str, source_url: str) -> str | None:
+    """Upload to Cloudinary with overwrite=True, return secure URL."""
+    try:
+        result = cloudinary.uploader.upload(
+            source_url,
+            public_id=f"projects/{slug}-main",
+            overwrite=True,
+            resource_type="image",
+            folder="projects",
+            transformation=[
+                {"width": 1200, "crop": "limit", "quality": "auto:good", "fetch_format": "auto"}
+            ],
+        )
+        return result.get("secure_url")
+    except Exception as e:
+        logger.error(f"Cloudinary upload failed for {slug}: {e}")
+        return None
+
+
 async def run(dry_run: bool = False, limit: int = 0):
     db = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -32,26 +90,35 @@ async def run(dry_run: bool = False, limit: int = 0):
     if limit:
         all_projects = all_projects[:limit]
 
-    fixed = skipped = 0
+    logger.info("Fetching real thumbnails from opr-search API...")
+    api_images = fetch_api_images()
+
+    fixed = skipped = no_api_match = 0
 
     for p in all_projects:
         slug = p["slug"]
-        imgs = p.get("images_all") or []
+        api_img = api_images.get(slug)
 
-        if not imgs:
-            logger.warning(f"No images_all for: {slug}")
-            skipped += 1
+        if not api_img:
+            logger.warning(f"No API match for: {slug}")
+            no_api_match += 1
             continue
 
-        new_main = imgs[0]
-        logger.info(f"{'[DRY RUN] ' if dry_run else ''}Set image_main for {slug}: {new_main[:80]}")
+        logger.info(f"{'[DRY RUN] ' if dry_run else ''}Fix {slug}: {api_img[:100]}")
 
         if not dry_run:
-            db.table("projects").update({"image_main": new_main}).eq("id", p["id"]).execute()
+            cloud_url = upload_main(slug, api_img)
+            if cloud_url:
+                db.table("projects").update({"image_main": cloud_url}).eq("id", p["id"]).execute()
+                logger.info(f"  → Saved: {cloud_url[:100]}")
+            else:
+                logger.error(f"  → Upload failed, skipping DB update for {slug}")
+                skipped += 1
+                continue
 
         fixed += 1
 
-    logger.info(f"\nDone. Fixed: {fixed} | Skipped (no images_all): {skipped}")
+    logger.info(f"\nDone. Fixed: {fixed} | No API match: {no_api_match} | Errors: {skipped}")
 
 
 if __name__ == "__main__":
