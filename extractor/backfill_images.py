@@ -3,6 +3,9 @@ Backfill image_main for existing projects using the opr-search API's ImageLink.
 The UK flag ended up as images_all[0] because it was the phone input country icon
 scraped from the page. The API's ImageLink is the real project thumbnail.
 
+Matches projects by extracting the opr.ae slug from data_source_url (the stored
+original URL), since Claude may generate a different slug than the one in the URL.
+
 Run on the server:
   cd /var/www/dubai-portal/extractor
   source venv/bin/activate
@@ -36,12 +39,12 @@ cloudinary.config(
 
 OPR_SEARCH_API = (
     "https://opr-search.mpp.agency/api/projects"
-    "?populate=*&pagination[pageSize]=1500&sort=id:desc"
+    "?populate=*&pagination%5BpageSize%5D=1500&sort=id:desc"
 )
 
 
 def fetch_api_images() -> dict[str, str]:
-    """Return {slug: ImageLink} from the opr-search API."""
+    """Return {opr_slug: ImageLink} keyed by the slug in the opr.ae URL."""
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://opr.ae/projects",
@@ -61,7 +64,12 @@ def fetch_api_images() -> dict[str, str]:
     return result
 
 
-def upload_main(slug: str, source_url: str) -> str | None:
+def opr_slug_from_url(url: str) -> str:
+    """Extract the project slug from an opr.ae URL."""
+    return unquote((url or "").rstrip("/").split("/")[-1])
+
+
+def upload_main(slug: str, source_url: str):
     """Upload to Cloudinary with overwrite=True, return secure URL."""
     try:
         result = cloudinary.uploader.upload(
@@ -83,7 +91,7 @@ def upload_main(slug: str, source_url: str) -> str | None:
 async def run(dry_run: bool = False, limit: int = 0):
     db = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    res = db.table("projects").select("id,slug,image_main,images_all").execute()
+    res = db.table("projects").select("id,slug,image_main,images_all,data_source_url").execute()
     all_projects = res.data or []
     logger.info(f"Total projects in Supabase: {len(all_projects)}")
 
@@ -93,32 +101,36 @@ async def run(dry_run: bool = False, limit: int = 0):
     logger.info("Fetching real thumbnails from opr-search API...")
     api_images = fetch_api_images()
 
-    fixed = skipped = no_api_match = 0
+    fixed = skipped = no_match = 0
 
     for p in all_projects:
-        slug = p["slug"]
-        api_img = api_images.get(slug)
+        db_slug = p["slug"]
+        source_url = p.get("data_source_url") or ""
+        opr_slug = opr_slug_from_url(source_url)
 
+        api_img = api_images.get(opr_slug)
         if not api_img:
-            logger.warning(f"No API match for: {slug}")
-            no_api_match += 1
+            logger.warning(f"No API match for: {db_slug} (opr slug: {opr_slug!r})")
+            no_match += 1
             continue
 
-        logger.info(f"{'[DRY RUN] ' if dry_run else ''}Fix {slug}: {api_img[:100]}")
+        logger.info(f"{'[DRY RUN] ' if dry_run else ''}Fix {db_slug}")
+        logger.info(f"  opr slug : {opr_slug}")
+        logger.info(f"  image    : {api_img}")
 
         if not dry_run:
-            cloud_url = upload_main(slug, api_img)
+            cloud_url = upload_main(db_slug, api_img)
             if cloud_url:
                 db.table("projects").update({"image_main": cloud_url}).eq("id", p["id"]).execute()
-                logger.info(f"  → Saved: {cloud_url[:100]}")
+                logger.info(f"  saved    : {cloud_url[:100]}")
             else:
-                logger.error(f"  → Upload failed, skipping DB update for {slug}")
+                logger.error(f"  upload failed — skipping DB update for {db_slug}")
                 skipped += 1
                 continue
 
         fixed += 1
 
-    logger.info(f"\nDone. Fixed: {fixed} | No API match: {no_api_match} | Errors: {skipped}")
+    logger.info(f"\nDone. Fixed: {fixed} | No API match: {no_match} | Errors: {skipped}")
 
 
 if __name__ == "__main__":
