@@ -179,39 +179,61 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
         logger.info("Loading opr.ae/projects...")
         await page.goto(PROJECTS_URL, wait_until="load", timeout=60_000)
 
-        # Dismiss GDPR / cookie consent popup (Sourcepoint CMP loads inside an iframe)
-        # Must check all frames — page.locator() cannot see inside iframes
-        await asyncio.sleep(3)  # give the consent iframe time to load
+        # Dismiss GDPR / cookie consent popup
+        await asyncio.sleep(4)  # give consent iframe time to fully load
+
+        # Log all frames so we can see what iframes are present
+        frames = page.frames
+        logger.info(f"Frames on page: {len(frames)}")
+        for i, f in enumerate(frames):
+            logger.info(f"  Frame {i}: name='{f.name}' url='{f.url[:80]}'")
+
+        # Log all buttons on the main page
+        main_buttons = await page.evaluate("""() =>
+            Array.from(document.querySelectorAll('button,[role="button"]'))
+                .map(b => b.textContent.trim().slice(0,60))
+                .filter(t => t.length > 0).slice(0,15)
+        """)
+        logger.info(f"Main page buttons: {main_buttons}")
+
+        # Try every frame for every common consent button text
         consent_dismissed = False
-        consent_texts = [
-            "button:has-text('Accept All')",
-            "button:has-text('Accept all')",
-            "button:has-text('Accept')",
-            "button:has-text('I agree')",
-            "button:has-text('Agree')",
-            "button:has-text('OK')",
-            "button:has-text('Got it')",
-            "button:has-text('Continue')",
-            "[aria-label='Close']",
-            "[title='Accept All']",
+        consent_sels = [
+            "button:has-text('Accept All')", "button:has-text('Accept all')",
+            "button:has-text('Accept')",     "button:has-text('I Accept')",
+            "button:has-text('I agree')",    "button:has-text('Agree')",
+            "button:has-text('OK')",         "button:has-text('Got it')",
+            "button:has-text('Continue')",   "button:has-text('Save')",
+            "[title='Accept All']",          "[aria-label='Accept All']",
         ]
-        all_frames = [page] + page.frames  # check main page + every iframe
-        for frame in all_frames:
+        for frame in frames:
             if consent_dismissed:
                 break
-            for sel in consent_texts:
+            # Log buttons inside each frame
+            try:
+                frame_buttons = await frame.evaluate("""() =>
+                    Array.from(document.querySelectorAll('button,[role="button"]'))
+                        .map(b => b.textContent.trim().slice(0,60))
+                        .filter(t => t.length > 0).slice(0,10)
+                """)
+                if frame_buttons:
+                    logger.info(f"  Frame '{frame.name}' buttons: {frame_buttons}")
+            except Exception:
+                pass
+            for sel in consent_sels:
                 try:
                     btn = frame.locator(sel).first
                     if await btn.count() > 0:
                         await btn.click(timeout=3_000)
-                        logger.info(f"Dismissed consent popup in frame '{frame.name or 'main'}' via '{sel}'")
+                        logger.info(f"Dismissed consent in frame '{frame.name}' via '{sel}'")
                         await asyncio.sleep(2)
                         consent_dismissed = True
                         break
                 except Exception:
                     pass
+
         if not consent_dismissed:
-            logger.warning("Could not find consent button — trying Escape key")
+            logger.warning("Could not dismiss consent — trying Escape key")
             await page.keyboard.press("Escape")
             await asyncio.sleep(2)
 
