@@ -264,6 +264,22 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
 
         logger.info(f"JS extracted {len(cards_data)} total cards")
 
+        # Diagnostic: log what IS on the page so we can understand what the server sees
+        diag = await page.evaluate("""() => ({
+            total_links:    document.querySelectorAll('a').length,
+            discover_links: Array.from(document.querySelectorAll('a')).filter(a => a.textContent.toLowerCase().includes('discover')).length,
+            load_more:      Array.from(document.querySelectorAll('a,button')).filter(a => a.textContent.toLowerCase().includes('load more')).length,
+            body_chars:     document.body.innerText.length,
+            sample_text:    document.body.innerText.slice(0, 300).replace(/\\n+/g, ' '),
+        })""")
+        logger.info(
+            f"Page diagnostic — total links: {diag['total_links']}, "
+            f"'discover' links: {diag['discover_links']}, "
+            f"'load more': {diag['load_more']}, "
+            f"body chars: {diag['body_chars']}"
+        )
+        logger.info(f"Page sample text: {diag['sample_text']}")
+
         for card in cards_data:
             if len(new_projects) >= max_new:
                 logger.info(f"Reached max_new limit ({max_new})")
