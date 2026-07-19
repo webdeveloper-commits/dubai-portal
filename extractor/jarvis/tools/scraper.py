@@ -199,12 +199,12 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
         # Try every frame for every common consent button text
         consent_dismissed = False
         consent_sels = [
+            "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",  # Cookiebot "Allow all"
+            "button:has-text('Allow all')",  "button:has-text('Allow All')",
             "button:has-text('Accept All')", "button:has-text('Accept all')",
-            "button:has-text('Accept')",     "button:has-text('I Accept')",
-            "button:has-text('I agree')",    "button:has-text('Agree')",
-            "button:has-text('OK')",         "button:has-text('Got it')",
-            "button:has-text('Continue')",   "button:has-text('Save')",
-            "[title='Accept All']",          "[aria-label='Accept All']",
+            "button:has-text('Accept')",     "button:has-text('I agree')",
+            "button:has-text('Agree')",      "button:has-text('OK')",
+            "button:has-text('Continue')",
         ]
         for frame in frames:
             if consent_dismissed:
