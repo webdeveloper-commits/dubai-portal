@@ -207,19 +207,18 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             return { removed: !!dialog, method };
         }""")
         logger.info(f"Cookiebot consent: removed={result['removed']} method={result['method']}")
-        await asyncio.sleep(3)  # let consent event propagate and AJAX fire
+        await asyncio.sleep(5)  # let consent event propagate and project AJAX fire
 
-        # Wait for project cards — up to 25s after consent dismissed
+        # Wait for skeleton cards to be replaced with real project cards
         try:
-            await page.wait_for_selector("a:has-text('Discover more')", timeout=25_000)
+            await page.wait_for_selector("a:has-text('Discover more')", timeout=60_000)
             logger.info("Project cards detected on page")
         except Exception:
             logger.warning("Cards not visible yet — scrolling to trigger lazy-load")
-            await page.evaluate("window.scrollTo(0, 800)")
-            await asyncio.sleep(6)
-            # One more attempt after scroll
+            await page.evaluate("window.scrollTo(0, 400)")
+            await asyncio.sleep(8)
             try:
-                await page.wait_for_selector("a:has-text('Discover more')", timeout=15_000)
+                await page.wait_for_selector("a:has-text('Discover more')", timeout=30_000)
                 logger.info("Project cards appeared after scroll")
             except Exception:
                 logger.warning("Still no project cards — will try extraction anyway")
