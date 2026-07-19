@@ -111,7 +111,7 @@ Return a JSON object with exactly these keys:
 
 "seo_keywords": ["exactly 6 specific search phrases. Include the project name, developer + city/type, area + off-plan, bedroom type + area, price range phrase, and handover year phrase."],
 
-"aeo_faq": [8 objects, each {"question": "ends with ?", "answer": "2-3 sentences with SPECIFIC facts — price, location, developer, sizes, handover. Never say 'Please contact us' or generic filler. Cover: starting price, developer identity, handover date, unit types and sizes, payment plan breakdown, exact location, top 3 amenities, investment case with ROI mention."}]
+"aeo_faq": Rewrite and expand the SOURCE FAQs below into 8 polished Q&A pairs. If source FAQs are empty, generate from project data. Each object: {{"question": "ends with ?", "answer": "2-3 sentences with SPECIFIC facts — price, location, developer, sizes, handover. Never say 'Please contact us' or generic filler."}}
 
 "whatsapp_share_text": 4 short lines someone would forward to a friend. Use developer exact name (not slug). Last line: dubai-portal.vercel.app/projects/{slug}
 
@@ -127,6 +127,9 @@ Slug: {slug}
 
 Raw description:
 {text}
+
+SOURCE FAQs from opr.ae (rewrite these — improve wording, expand answers with specifics):
+{scraped_faqs}
 
 Return ONLY the JSON object. No markdown fences. No explanation."""
 
@@ -254,6 +257,7 @@ async def parse_and_humanize(raw: dict) -> dict | None:
                         status=structured.get("status", "off_plan"),
                         payment_plan=payment,
                         slug=slug,
+                        scraped_faqs=json.dumps(raw.get("scraped_faqs", []), ensure_ascii=False) if raw.get("scraped_faqs") else "None — generate from project data",
                     )
                 }],
             )

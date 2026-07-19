@@ -131,9 +131,10 @@ async def run_tuesday():
                 parsed["area_id"] = area_id
 
             # ── Upload images to Cloudinary ──
+            # Prefer API's ImageLink (stub thumbnail) over browser-extracted image
             main_cloud, gallery_cloud = await upload_project_images(
                 slug=parsed["slug"],
-                main_url=raw.get("image_main"),
+                main_url=stub.get("thumbnail") or raw.get("image_main"),
                 gallery_urls=raw.get("images_all", []),
                 max_gallery=10,
             )

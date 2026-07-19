@@ -288,12 +288,29 @@ async def scrape_project_detail(url: str) -> dict | None:
                 const h2 = document.querySelector('h2');
                 result.name = (h1 && h1.innerText.trim()) || (h2 && h2.innerText.trim()) || document.title || '';
 
-                // Main image from wrapper1 background-image
-                const wrapper = document.querySelector('.wrapper1, [class*="wrapper1"]');
-                if (wrapper) {
-                    const style = wrapper.getAttribute('style') || wrapper.style.backgroundImage || '';
-                    const m = style.match(/url\\([\"']?(https?:\\/\\/[^\"')\\s]+)[\"']?\\)/);
-                    result.image_main = m ? m[1].replace(/%7B.*$/, '') : '';
+                // Main image — find largest background-image, skip SVG/icons
+                result.image_main = '';
+                const allBg = Array.from(document.querySelectorAll('[style*="background-image"]'));
+                for (const el of allBg) {
+                    const s = el.getAttribute('style') || '';
+                    const m = s.match(/url\\([\"']?(https?:\\/\\/[^\"')\\s]+)[\"']?\\)/);
+                    if (!m) continue;
+                    const u = m[1].replace(/%7B.*$/, '');
+                    // Skip SVG files, tiny icons (21x21, 20x20 etc in URL), and flags
+                    if (u.includes('.svg') || /\\/\\d{1,3}x\\d{1,3}\\//.test(u) || u.includes('flag')) continue;
+                    // Prefer CDN or creatium images (not icon libraries)
+                    if (u.includes('cdn.opr') || u.includes('creatium') || u.includes('cloudinary')) {
+                        result.image_main = u;
+                        break;
+                    }
+                }
+                // Final fallback: any large-looking https image
+                if (!result.image_main) {
+                    for (const el of allBg) {
+                        const s = el.getAttribute('style') || '';
+                        const m = s.match(/url\\([\"']?(https?:\\/\\/[^\"')\\s]+)[\"']?\\)/);
+                        if (m) { const u = m[1].replace(/%7B.*$/, ''); if (!u.includes('.svg')) { result.image_main = u; break; } }
+                    }
                 }
 
                 // All paragraph text for description — filter out cookie/privacy/tracking text
@@ -457,11 +474,33 @@ async def scrape_project_detail(url: str) -> dict | None:
                     if (items.length > 0) result[def[0]] = [...new Set(items)].slice(0, 10);
                 });
 
+                // ── FAQs from page ────────────────────────────────────────────
+                result.scraped_faqs = [];
+                const faqRoot = document.querySelector('[id*="faq" i], [class*="faq" i]');
+                if (faqRoot) {
+                    const allEls = Array.from(faqRoot.querySelectorAll('h2,h3,h4,p,li'));
+                    let pendingQ = '';
+                    for (const el of allEls) {
+                        const t = el.innerText.trim();
+                        if (!t) continue;
+                        if (['H2','H3','H4'].includes(el.tagName) && t.endsWith('?')) {
+                            if (pendingQ) result.scraped_faqs.push({ question: pendingQ, answer: '' });
+                            pendingQ = t;
+                        } else if (pendingQ && ['P','LI'].includes(el.tagName) && t.length > 20) {
+                            result.scraped_faqs.push({ question: pendingQ, answer: t });
+                            pendingQ = '';
+                        }
+                    }
+                    if (pendingQ) result.scraped_faqs.push({ question: pendingQ, answer: '' });
+                    result.scraped_faqs = result.scraped_faqs.slice(0, 12);
+                }
+
                 return result;
             }""")
 
             data["name"]                   = extracted.get("name", "")
             data["image_main"]             = extracted.get("image_main") or None
+            data["scraped_faqs"]           = extracted.get("scraped_faqs", [])
             data["description_raw"]        = extracted.get("description_raw", "")
             data["body_text"]              = extracted.get("body_text", "")
             data["images_all"]             = extracted.get("images_all", [])
