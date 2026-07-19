@@ -266,6 +266,8 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             load_more:      Array.from(document.querySelectorAll('a,button')).filter(a => a.textContent.toLowerCase().includes('load more')).length,
             body_chars:     document.body.innerText.length,
             sample_text:    document.body.innerText.slice(0, 300).replace(/\\n+/g, ' '),
+            project_hrefs:  Array.from(document.querySelectorAll('a[href*="/projects/"]')).slice(0,10).map(a => a.getAttribute('href')),
+            link_texts:     Array.from(document.querySelectorAll('a')).map(a => a.textContent.trim().slice(0,40)).filter(t=>t).slice(0,20),
         })""")
         logger.info(
             f"Page diagnostic — total links: {diag['total_links']}, "
@@ -274,6 +276,8 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             f"body chars: {diag['body_chars']}"
         )
         logger.info(f"Page sample text: {diag['sample_text']}")
+        logger.info(f"Project hrefs sample: {diag['project_hrefs']}")
+        logger.info(f"Link texts sample: {diag['link_texts']}")
 
         for card in cards_data:
             if len(new_projects) >= max_new:
