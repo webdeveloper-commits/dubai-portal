@@ -175,9 +175,17 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
 
     new_projects: list[dict] = []
 
+    api_responses: list[str] = []
+
+    async def _capture_api(response):
+        url = response.url
+        if any(kw in url for kw in ["api", "project", "json", "graphql", "rest", "ajax"]):
+            api_responses.append(f"{response.status} {url[:120]}")
+
     try:
+        page.on("response", lambda r: asyncio.ensure_future(_capture_api(r)))
         logger.info("Loading opr.ae/projects...")
-        await page.goto(PROJECTS_URL, wait_until="load", timeout=60_000)
+        await page.goto(PROJECTS_URL, wait_until="networkidle", timeout=90_000)
 
         # Dismiss Cookiebot consent — must call submitCustomConsent so the site's
         # AJAX product-listing call fires (removing the DOM element alone is not enough)
@@ -284,6 +292,9 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
         logger.info(f"Page sample text: {diag['sample_text']}")
         logger.info(f"Project hrefs sample: {diag['project_hrefs']}")
         logger.info(f"Link texts sample: {diag['link_texts']}")
+        logger.info(f"API responses captured: {api_responses[:15]}")
+        await page.screenshot(path="/tmp/opr_debug.png", full_page=False)
+        logger.info("Screenshot saved to /tmp/opr_debug.png")
 
         for card in cards_data:
             if len(new_projects) >= max_new:
