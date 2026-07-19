@@ -179,8 +179,8 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
 
     async def _capture_api(response):
         url = response.url
-        if any(kw in url for kw in ["api", "project", "json", "graphql", "rest", "ajax"]):
-            api_responses.append(f"{response.status} {url[:120]}")
+        if "opr.ae" in url or "sgtm.opr" in url:
+            api_responses.append(f"{response.status} {url[:150]}")
 
     try:
         page.on("response", lambda r: asyncio.ensure_future(_capture_api(r)))
@@ -279,6 +279,7 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             discover_links: Array.from(document.querySelectorAll('a')).filter(a => a.textContent.toLowerCase().includes('discover')).length,
             load_more:      Array.from(document.querySelectorAll('a,button')).filter(a => a.textContent.toLowerCase().includes('load more')).length,
             body_chars:     document.body.innerText.length,
+            body_chars_all: document.body.textContent.length,
             sample_text:    document.body.innerText.slice(0, 300).replace(/\\n+/g, ' '),
             project_hrefs:  Array.from(document.querySelectorAll('a[href*="/projects/"]')).slice(0,10).map(a => a.getAttribute('href')),
             link_texts:     Array.from(document.querySelectorAll('a')).map(a => a.textContent.trim().slice(0,40)).filter(t=>t).slice(0,20),
@@ -287,7 +288,7 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             f"Page diagnostic — total links: {diag['total_links']}, "
             f"'discover' links: {diag['discover_links']}, "
             f"'load more': {diag['load_more']}, "
-            f"body chars: {diag['body_chars']}"
+            f"body chars: {diag['body_chars']} (textContent: {diag['body_chars_all']})"
         )
         logger.info(f"Page sample text: {diag['sample_text']}")
         logger.info(f"Project hrefs sample: {diag['project_hrefs']}")
