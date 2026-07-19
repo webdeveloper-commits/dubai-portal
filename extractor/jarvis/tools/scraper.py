@@ -3,6 +3,7 @@ opr.ae scraper — uses async_playwright, browser singleton.
 Handles: dynamic load, Load More button, background-image CSS extraction,
 gallery tabs, non-UAE filtering, ad card filtering.
 """
+import os
 import re
 import asyncio
 import random
@@ -83,8 +84,11 @@ async def get_browser() -> Browser:
     global _pw, _browser
     if _browser is None or not _browser.is_connected():
         _pw = await async_playwright().start()
+        proxy_url = os.getenv("SCRAPER_PROXY")
+        proxy = {"server": proxy_url} if proxy_url else None
         _browser = await _pw.chromium.launch(
             headless=True,
+            proxy=proxy,
             args=[
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
@@ -97,7 +101,7 @@ async def get_browser() -> Browser:
                 "--ignore-certificate-errors",
             ],
         )
-        logger.info("Chromium launched (stealth mode)")
+        logger.info(f"Chromium launched (stealth mode{'+ proxy' if proxy_url else ''})")
     return _browser
 
 
@@ -212,10 +216,14 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             const seen = new Set();
 
             // Find all links pointing to /projects/<slug> — resilient to button text changes
+            const NAV_SLUGS = new Set(['coming-soon','map','search','filter','list','grid','all']);
             const links = Array.from(document.querySelectorAll('a[href*="/projects/"]')).filter(a => {
                 const href = a.getAttribute('href') || '';
-                // Must be /projects/something (not bare /projects or /projects/)
-                return /\\/projects\\/[^\\/]+/.test(href);
+                if (!/\\/projects\\/[^\\/]+/.test(href)) return false;
+                const slug = href.replace(/\\/$/, '').split('/projects/').pop() || '';
+                if (NAV_SLUGS.has(slug)) return false;
+                if (a.closest('nav, header, footer')) return false;
+                return true;
             });
 
             links.forEach(link => {
