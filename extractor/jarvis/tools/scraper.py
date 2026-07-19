@@ -176,11 +176,18 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
     new_projects: list[dict] = []
 
     api_responses: list[str] = []
+    delivery_html: list[str] = []
 
     async def _capture_api(response):
         url = response.url
-        # capture every request so we can find the project data API
         api_responses.append(f"{response.status} {url[:150]}")
+        if "delivery-builder" in url and response.status == 200:
+            try:
+                body = await response.text()
+                delivery_html.append(body)
+                logger.info(f"delivery-builder ({url[-40:]}) — {len(body)} chars, sample: {body[:300]}")
+            except Exception as e:
+                logger.warning(f"Could not read delivery-builder body: {e}")
 
     try:
         page.on("response", lambda r: asyncio.ensure_future(_capture_api(r)))
