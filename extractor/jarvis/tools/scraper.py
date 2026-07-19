@@ -13,9 +13,7 @@ from playwright.async_api import async_playwright, Browser, Page, Playwright
 
 logger = logging.getLogger(__name__)
 
-OPR_BASE      = "https://opr.ae"
-PROJECTS_URL  = "https://opr.ae/projects"
-MAX_LOAD_MORE = 5
+OPR_BASE = "https://opr.ae"
 
 # ── Browser singleton ──────────────────────────────────────────────────────────
 
@@ -162,209 +160,85 @@ def _parse_href_url(href: str) -> str | None:
     return clean if clean else None
 
 
-# ── Step 1: Scan listing page for new project URLs ─────────────────────────────
+# ── Step 1: Scan listing via opr-search Strapi API (no browser needed) ────────
+
+OPR_SEARCH_API = "https://opr-search.mpp.agency/api/projects?populate=*&pagination[pageSize]=1500&sort=id:desc"
+
+NON_UAE = {
+    "bali", "indonesia", "egypt", "cairo", "istanbul", "turkey",
+    "london", "thailand", "phuket", "morocco", "spain", "portugal",
+    "greece", "india", "pakistan", "malaysia", "singapore",
+    "new cairo", "hurghada", "sharm", "nairobi", "kenya",
+    "nigeria", "ghana", "tanzania", "rwanda", "ethiopia",
+    "georgia", "tbilisi", "bahrain", "oman", "kuwait", "qatar",
+    "saudi", "riyadh", "jeddah",
+}
+
 
 async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list[dict]:
     """
-    Visit opr.ae/projects, collect up to max_new new project URLs.
-    Clicks Load More up to MAX_LOAD_MORE times to expose more cards.
-    Skips (does not break at) known projects — listing order isn't guaranteed newest-first.
+    Fetch project listings from the opr-search Strapi API directly.
+    No browser / consent handling needed.
     """
-    browser = await get_browser()
-    page = await _new_stealth_page(browser)
+    import requests as _requests
 
     new_projects: list[dict] = []
 
-    api_responses: list[str] = []
-    delivery_html: list[str] = []
-
-    async def _capture_api(response):
-        url = response.url
-        api_responses.append(f"{response.status} {url[:150]}")
-        if "delivery-builder" in url and response.status == 200:
-            try:
-                body = await response.text()
-                delivery_html.append(body)
-                logger.info(f"delivery-builder ({url[-40:]}) — {len(body)} chars, sample: {body[:300]}")
-            except Exception as e:
-                logger.warning(f"Could not read delivery-builder body: {e}")
-
     try:
-        page.on("response", lambda r: asyncio.ensure_future(_capture_api(r)))
-        logger.info("Loading opr.ae/projects...")
-        await page.goto(PROJECTS_URL, wait_until="networkidle", timeout=90_000)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://opr.ae/projects",
+            "Origin": "https://opr.ae",
+        }
+        logger.info(f"Fetching project list from {OPR_SEARCH_API}")
+        resp = _requests.get(OPR_SEARCH_API, headers=headers, timeout=30)
+        resp.raise_for_status()
+        projects = resp.json().get("data", [])
+        logger.info(f"API returned {len(projects)} total projects")
 
-        # Dismiss Cookiebot consent — must call submitCustomConsent so the site's
-        # AJAX product-listing call fires (removing the DOM element alone is not enough)
-        await asyncio.sleep(4)  # give Cookiebot SDK time to fully initialise
-        result = await page.evaluate("""() => {
-            const dialog = document.getElementById('CybotCookiebotDialog');
-            const overlay = document.getElementById('CybotCookiebotDialogBodyUnderlay');
-            if (dialog) dialog.remove();
-            if (overlay) overlay.remove();
-            document.body.style.overflow = '';
-            let method = 'none';
-            if (window.Cookiebot && window.Cookiebot.submitCustomConsent) {
-                window.Cookiebot.submitCustomConsent(true, true, true);
-                method = 'submitCustomConsent';
-            } else if (window.CookieConsent && window.CookieConsent.acceptAll) {
-                window.CookieConsent.acceptAll();
-                method = 'acceptAll';
-            }
-            return { removed: !!dialog, method };
-        }""")
-        logger.info(f"Cookiebot consent: removed={result['removed']} method={result['method']}")
-        logger.info("Waiting 30s for project AJAX to resolve...")
-        await asyncio.sleep(30)
-        await page.screenshot(path="/tmp/opr_after_consent.png", full_page=False)
-        logger.info("Post-consent screenshot saved to /tmp/opr_after_consent.png")
-
-        # Wait for skeleton cards to be replaced with real project cards
-        try:
-            await page.wait_for_selector("a:has-text('Discover more')", timeout=60_000)
-            logger.info("Project cards detected on page")
-        except Exception:
-            logger.warning("Cards not visible yet — scrolling to trigger lazy-load")
-            await page.evaluate("window.scrollTo(0, 400)")
-            await asyncio.sleep(8)
-            try:
-                await page.wait_for_selector("a:has-text('Discover more')", timeout=30_000)
-                logger.info("Project cards appeared after scroll")
-            except Exception:
-                logger.warning("Still no project cards — will try extraction anyway")
-
-        await asyncio.sleep(2)
-
-        title = await page.title()
-        logger.info(f"Page title: {title}")
-
-        # Click Load More to expose additional project cards before extracting
-        for load_n in range(MAX_LOAD_MORE):
-            try:
-                btn = page.locator(
-                    "a:has-text('Load more'), button:has-text('Load more'), "
-                    "a:has-text('Show more'), button:has-text('Show more'), "
-                    "a.abu-loadmore, button.abu-loadmore"
-                ).first
-                if await btn.count() == 0:
-                    logger.info(f"No Load More button after {load_n} click(s) — stopping pagination")
-                    break
-                # Force-click even if hidden (opr.ae hides it with CSS but it still works)
-                await btn.evaluate("el => el.click()")
-                await asyncio.sleep(3)
-                logger.info(f"Clicked Load More ({load_n + 1}/{MAX_LOAD_MORE})")
-            except Exception as e:
-                logger.info(f"Load More stopped at click {load_n + 1}: {e}")
-                break
-
-        # Extract all card data in one JS call — find by "Discover more" button (original approach)
-        cards_data: list[dict] = await page.evaluate("""() => {
-            const results = [];
-            const links = Array.from(document.querySelectorAll('a')).filter(
-                a => a.textContent.trim().toLowerCase().includes('discover more')
-            );
-            links.forEach(link => {
-                const card = link.closest('div[class], article') || link.parentElement;
-                if (!card) return;
-                const href = link.getAttribute('href') || '';
-                const text = card.innerText || '';
-                let thumbnail = '';
-                const bgEl = card.querySelector('[style*="background-image"]');
-                if (bgEl) {
-                    const style = bgEl.getAttribute('style') || '';
-                    const m = style.match(/url\\([\"']?(https?:\\/\\/[^\"')]+)[\"']?\\)/);
-                    if (m) thumbnail = m[1].replace(/%7B.*$/, '');
-                }
-                results.push({ href, text, thumbnail });
-            });
-            return results;
-        }""")
-
-        logger.info(f"JS extracted {len(cards_data)} total cards")
-
-        # Diagnostic: log what IS on the page so we can understand what the server sees
-        diag = await page.evaluate("""() => ({
-            total_links:    document.querySelectorAll('a').length,
-            discover_links: Array.from(document.querySelectorAll('a')).filter(a => a.textContent.toLowerCase().includes('discover')).length,
-            load_more:      Array.from(document.querySelectorAll('a,button')).filter(a => a.textContent.toLowerCase().includes('load more')).length,
-            body_chars:     document.body.innerText.length,
-            body_chars_all: document.body.textContent.length,
-            sample_text:    document.body.innerText.slice(0, 300).replace(/\\n+/g, ' '),
-            project_hrefs:  Array.from(document.querySelectorAll('a[href*="/projects/"]')).slice(0,10).map(a => a.getAttribute('href')),
-            link_texts:     Array.from(document.querySelectorAll('a')).map(a => a.textContent.trim().slice(0,40)).filter(t=>t).slice(0,20),
-        })""")
-        logger.info(
-            f"Page diagnostic — total links: {diag['total_links']}, "
-            f"'discover' links: {diag['discover_links']}, "
-            f"'load more': {diag['load_more']}, "
-            f"body chars: {diag['body_chars']} (textContent: {diag['body_chars_all']})"
-        )
-        logger.info(f"Page sample text: {diag['sample_text']}")
-        logger.info(f"Project hrefs sample: {diag['project_hrefs']}")
-        logger.info(f"Link texts sample: {diag['link_texts']}")
-        logger.info(f"API responses captured ({len(api_responses)} total):")
-        for r in api_responses:
-            logger.info(f"  {r}")
-        await page.screenshot(path="/tmp/opr_debug.png", full_page=False)
-        logger.info("Screenshot saved to /tmp/opr_debug.png")
-
-        for card in cards_data:
+        for item in projects:
             if len(new_projects) >= max_new:
                 logger.info(f"Reached max_new limit ({max_new})")
                 break
 
-            href = card.get("href", "")
-            if not href:
+            attrs = item.get("attributes", {})
+            link  = attrs.get("Link", "")
+            if not link:
                 continue
 
-            url = href if href.startswith("http") else OPR_BASE + href
-            slug = unquote(url.rstrip("/").split("/")[-1])
-            card_text = (card.get("text") or "").lower()
+            slug = unquote(link.rstrip("/").split("/")[-1])
 
-            # Skip known projects (don't break — listing order isn't guaranteed newest-first)
             if slug in existing_slugs:
                 logger.debug(f"Known project '{slug}' — skipping")
                 continue
 
-            # Pre-filter: skip cards that clearly show a non-UAE location in the card text
-            # Saves scraping the full detail page just for Claude to say "skip"
-            NON_UAE = [
-                "bali", "indonesia", "egypt", "cairo", "istanbul", "turkey",
-                "london", "thailand", "phuket", "morocco", "spain", "portugal",
-                "greece", "india", "pakistan", "malaysia", "singapore",
-                "new cairo", "hurghada", "sharm", "nairobi", "kenya",
-                "nigeria", "ghana", "tanzania", "rwanda", "ethiopia",
-                "georgia", "tbilisi", "bahrain", "oman", "kuwait", "qatar",
-                "saudi", "riyadh", "jeddah",
-            ]
-            if any(kw in card_text for kw in NON_UAE):
-                logger.info(f"Pre-filter skipped non-UAE card: {slug}")
+            # Filter non-UAE by area name and slug keywords
+            area_name = ""
+            area_data = attrs.get("area", {}) or {}
+            if area_data.get("data"):
+                area_name = (area_data["data"].get("attributes", {}).get("name") or "").lower()
+
+            combined = f"{slug} {area_name}".lower()
+            if any(kw in combined for kw in NON_UAE):
+                logger.info(f"Pre-filter skipped non-UAE: {slug}")
                 continue
 
-            # Parse name and price from card text
-            lines = [l.strip() for l in card_text.split("\n") if l.strip()]
-            name = slug.replace("-", " ").title()
-            price_text = ""
-            for line in lines:
-                if "aed" in line and any(c.isdigit() for c in line):
-                    price_text = line
-                elif len(line) > 3 and "discover" not in line and "from" not in line:
-                    name = line.title()
-                    break
+            name      = attrs.get("ProjectName") or slug.replace("-", " ").title()
+            price_raw = attrs.get("StartingPrice")
+            price_text = f"AED {int(price_raw):,}" if price_raw else ""
+            thumbnail  = attrs.get("ImageLink") or ""
 
             new_projects.append({
-                "url": url,
-                "slug": slug,
-                "name": name,
+                "url":        link,
+                "slug":       slug,
+                "name":       name,
                 "price_text": price_text,
-                "thumbnail": card.get("thumbnail", ""),
+                "thumbnail":  thumbnail,
             })
             logger.info(f"Queued: {name} ({slug})")
 
     except Exception as e:
         logger.error(f"scan_new_projects failed: {e}")
-    finally:
-        await page.close()
 
     logger.info(f"scan_new_projects complete — {len(new_projects)} new projects queued")
     return new_projects
