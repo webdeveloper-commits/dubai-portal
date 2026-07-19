@@ -179,8 +179,8 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
 
     async def _capture_api(response):
         url = response.url
-        if "opr.ae" in url or "sgtm.opr" in url:
-            api_responses.append(f"{response.status} {url[:150]}")
+        # capture every request so we can find the project data API
+        api_responses.append(f"{response.status} {url[:150]}")
 
     try:
         page.on("response", lambda r: asyncio.ensure_future(_capture_api(r)))
@@ -207,7 +207,10 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             return { removed: !!dialog, method };
         }""")
         logger.info(f"Cookiebot consent: removed={result['removed']} method={result['method']}")
-        await asyncio.sleep(5)  # let consent event propagate and project AJAX fire
+        logger.info("Waiting 30s for project AJAX to resolve...")
+        await asyncio.sleep(30)
+        await page.screenshot(path="/tmp/opr_after_consent.png", full_page=False)
+        logger.info("Post-consent screenshot saved to /tmp/opr_after_consent.png")
 
         # Wait for skeleton cards to be replaced with real project cards
         try:
@@ -292,7 +295,9 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
         logger.info(f"Page sample text: {diag['sample_text']}")
         logger.info(f"Project hrefs sample: {diag['project_hrefs']}")
         logger.info(f"Link texts sample: {diag['link_texts']}")
-        logger.info(f"API responses captured: {api_responses[:15]}")
+        logger.info(f"API responses captured ({len(api_responses)} total):")
+        for r in api_responses:
+            logger.info(f"  {r}")
         await page.screenshot(path="/tmp/opr_debug.png", full_page=False)
         logger.info("Screenshot saved to /tmp/opr_debug.png")
 
