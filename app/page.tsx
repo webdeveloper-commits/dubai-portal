@@ -1,5 +1,6 @@
 import HeroSection from "@/app/components/HeroSection";
 import FeaturedProjects, { FeaturedProject } from "@/app/components/FeaturedProjects";
+import HandpickedProjects from "@/app/components/HandpickedProjects";
 import FeaturedProjectPopup from "@/app/components/FeaturedProjectPopup";
 import PropertyTypes from "@/app/components/PropertyTypes";
 import LuxuryResidences from "@/app/components/LuxuryResidences";
@@ -80,6 +81,16 @@ export default async function Home() {
   // Single popup project — the one explicitly marked is_featured
   const popupProject = (featuredRows ?? []).find((r: Record<string, unknown>) => r.is_featured) ?? null;
 
+  // Handpicked projects for the curated section
+  const { data: handpickedRows } = await supabase
+    .from("projects")
+    .select("id,name,slug,status,price_from,handover_quarter,handover_year,bedroom_min,bedroom_max,property_types,lifestyle_tags,image_main,images_all,geo_summary,developer_slug")
+    .eq("is_published", true)
+    .eq("is_handpicked", true)
+    .order("created_at", { ascending: false });
+
+  const handpickedProjects = (handpickedRows ?? []).map(mapRow);
+
   // Developer logos for partner strip
   const { data: devRows } = await supabase
     .from("developers")
@@ -142,6 +153,7 @@ export default async function Home() {
     <main>
       <HeroSection projects={projects} />
       <FeaturedProjects projects={featuredProjects} />
+      <HandpickedProjects projects={handpickedProjects} />
       <PropertyTypes />
       <DeveloperLogos developers={developerLogos} />
       <LuxuryResidences projects={projects} />
