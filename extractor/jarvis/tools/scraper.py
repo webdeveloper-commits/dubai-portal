@@ -179,63 +179,21 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
         logger.info("Loading opr.ae/projects...")
         await page.goto(PROJECTS_URL, wait_until="load", timeout=60_000)
 
-        # Dismiss GDPR / cookie consent popup
-        await asyncio.sleep(4)  # give consent iframe time to fully load
-
-        # Log all frames so we can see what iframes are present
-        frames = page.frames
-        logger.info(f"Frames on page: {len(frames)}")
-        for i, f in enumerate(frames):
-            logger.info(f"  Frame {i}: name='{f.name}' url='{f.url[:80]}'")
-
-        # Log all buttons on the main page
-        main_buttons = await page.evaluate("""() =>
-            Array.from(document.querySelectorAll('button,[role="button"]'))
-                .map(b => b.textContent.trim().slice(0,60))
-                .filter(t => t.length > 0).slice(0,15)
-        """)
-        logger.info(f"Main page buttons: {main_buttons}")
-
-        # Try every frame for every common consent button text
-        consent_dismissed = False
-        consent_sels = [
-            "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",  # Cookiebot "Allow all"
-            "button:has-text('Allow all')",  "button:has-text('Allow All')",
-            "button:has-text('Accept All')", "button:has-text('Accept all')",
-            "button:has-text('Accept')",     "button:has-text('I agree')",
-            "button:has-text('Agree')",      "button:has-text('OK')",
-            "button:has-text('Continue')",
-        ]
-        for frame in frames:
-            if consent_dismissed:
-                break
-            # Log buttons inside each frame
-            try:
-                frame_buttons = await frame.evaluate("""() =>
-                    Array.from(document.querySelectorAll('button,[role="button"]'))
-                        .map(b => b.textContent.trim().slice(0,60))
-                        .filter(t => t.length > 0).slice(0,10)
-                """)
-                if frame_buttons:
-                    logger.info(f"  Frame '{frame.name}' buttons: {frame_buttons}")
-            except Exception:
-                pass
-            for sel in consent_sels:
-                try:
-                    btn = frame.locator(sel).first
-                    if await btn.count() > 0:
-                        await btn.click(timeout=3_000)
-                        logger.info(f"Dismissed consent in frame '{frame.name}' via '{sel}'")
-                        await asyncio.sleep(2)
-                        consent_dismissed = True
-                        break
-                except Exception:
-                    pass
-
-        if not consent_dismissed:
-            logger.warning("Could not dismiss consent — trying Escape key")
-            await page.keyboard.press("Escape")
-            await asyncio.sleep(2)
+        # Dismiss Cookiebot consent popup via JS (buttons are non-standard elements)
+        await asyncio.sleep(4)  # give consent dialog time to fully load
+        removed = await page.evaluate("""() => {
+            const dialog = document.getElementById('CybotCookiebotDialog');
+            const overlay = document.getElementById('CybotCookiebotDialogBodyUnderlay');
+            if (dialog) dialog.remove();
+            if (overlay) overlay.remove();
+            document.body.style.overflow = '';
+            return !!dialog;
+        }""")
+        if removed:
+            logger.info("Cookiebot dialog removed via JS")
+        else:
+            logger.warning("CybotCookiebotDialog not found — may already be gone or page changed")
+        await asyncio.sleep(1)
 
         # Wait for project cards — up to 25s after consent dismissed
         try:
