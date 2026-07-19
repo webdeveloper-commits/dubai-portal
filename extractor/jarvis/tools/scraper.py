@@ -175,8 +175,9 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
         logger.info("Loading opr.ae/projects...")
         await page.goto(PROJECTS_URL, wait_until="domcontentloaded", timeout=45_000)
 
+        # Wait for any project link to appear — resilient to button text changes
         try:
-            await page.wait_for_selector("a:has-text('Discover more')", timeout=30_000)
+            await page.wait_for_selector("a[href*='/projects/']", timeout=30_000)
             logger.info("Project cards detected on page")
         except Exception:
             logger.warning("Timed out waiting for project cards — may be blocked")
@@ -189,31 +190,46 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
         # Click Load More to expose additional project cards before extracting
         for load_n in range(MAX_LOAD_MORE):
             try:
-                btn = page.locator("a:has-text('Load more'), button:has-text('Load more'), a:has-text('Show more'), button:has-text('Show more')").first
+                btn = page.locator(
+                    "a:has-text('Load more'), button:has-text('Load more'), "
+                    "a:has-text('Show more'), button:has-text('Show more'), "
+                    "a.abu-loadmore, button.abu-loadmore"
+                ).first
                 if await btn.count() == 0:
                     logger.info(f"No Load More button after {load_n} click(s) — stopping pagination")
                     break
-                await btn.click()
+                # Force-click even if hidden (opr.ae hides it with CSS but it still works)
+                await btn.evaluate("el => el.click()")
                 await asyncio.sleep(3)
                 logger.info(f"Clicked Load More ({load_n + 1}/{MAX_LOAD_MORE})")
             except Exception as e:
                 logger.info(f"Load More stopped at click {load_n + 1}: {e}")
                 break
 
-        # Extract all card data in one JS call — much faster than per-card Playwright calls
+        # Extract all card data in one JS call — find by project URL pattern, not button text
         cards_data: list[dict] = await page.evaluate("""() => {
             const results = [];
-            const links = Array.from(document.querySelectorAll('a')).filter(
-                a => a.textContent.trim().toLowerCase().includes('discover more')
-            );
+            const seen = new Set();
+
+            // Find all links pointing to /projects/<slug> — resilient to button text changes
+            const links = Array.from(document.querySelectorAll('a[href*="/projects/"]')).filter(a => {
+                const href = a.getAttribute('href') || '';
+                // Must be /projects/something (not bare /projects or /projects/)
+                return /\\/projects\\/[^\\/]+/.test(href);
+            });
+
             links.forEach(link => {
-                const card = link.closest('div[class], article') || link.parentElement;
-                if (!card) return;
                 const href = link.getAttribute('href') || '';
-                const text = card.innerText || '';
-                // Thumbnail: find element with background-image style
+                if (seen.has(href)) return;
+                seen.add(href);
+
+                // Walk up to find the card container
+                const card = link.closest('div[class], article, li, section') || link.parentElement;
+                const text = card ? (card.innerText || '') : (link.innerText || '');
+
+                // Thumbnail: find element with background-image in the card
                 let thumbnail = '';
-                const bgEl = card.querySelector('[style*="background-image"]');
+                const bgEl = card ? card.querySelector('[style*="background-image"]') : null;
                 if (bgEl) {
                     const style = bgEl.getAttribute('style') || '';
                     const m = style.match(/url\\([\"']?(https?:\\/\\/[^\"')]+)[\"']?\\)/);
