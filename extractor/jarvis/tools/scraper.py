@@ -282,6 +282,21 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
                 logger.debug(f"Known project '{slug}' — skipping")
                 continue
 
+            # Pre-filter: skip cards that clearly show a non-UAE location in the card text
+            # Saves scraping the full detail page just for Claude to say "skip"
+            NON_UAE = [
+                "bali", "indonesia", "egypt", "cairo", "istanbul", "turkey",
+                "london", "thailand", "phuket", "morocco", "spain", "portugal",
+                "greece", "india", "pakistan", "malaysia", "singapore",
+                "new cairo", "hurghada", "sharm", "nairobi", "kenya",
+                "nigeria", "ghana", "tanzania", "rwanda", "ethiopia",
+                "georgia", "tbilisi", "bahrain", "oman", "kuwait", "qatar",
+                "saudi", "riyadh", "jeddah",
+            ]
+            if any(kw in card_text for kw in NON_UAE):
+                logger.info(f"Pre-filter skipped non-UAE card: {slug}")
+                continue
+
             # Parse name and price from card text
             lines = [l.strip() for l in card_text.split("\n") if l.strip()]
             name = slug.replace("-", " ").title()
