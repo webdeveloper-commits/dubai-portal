@@ -229,11 +229,12 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             thumbnail  = attrs.get("ImageLink") or ""
 
             new_projects.append({
-                "url":        link,
-                "slug":       slug,
-                "name":       name,
-                "price_text": price_text,
-                "thumbnail":  thumbnail,
+                "url":          link,
+                "slug":         slug,
+                "name":         name,
+                "price_text":   price_text,
+                "thumbnail":    thumbnail,
+                "brochure_url": attrs.get("PDF") or "",
             })
             logger.info(f"Queued: {name} ({slug})")
 

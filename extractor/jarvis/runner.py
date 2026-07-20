@@ -138,8 +138,9 @@ async def run_tuesday():
                 gallery_urls=raw.get("images_all", []),
                 max_gallery=10,
             )
-            parsed["image_main"] = main_cloud or (gallery_cloud[0] if gallery_cloud else None)
-            parsed["images_all"]  = gallery_cloud
+            parsed["image_main"]   = main_cloud or (gallery_cloud[0] if gallery_cloud else None)
+            parsed["images_all"]   = gallery_cloud
+            parsed["brochure_url"] = stub.get("brochure_url") or ""
 
             # ── Publish to Supabase ──
             row_id = publish_project(parsed)
@@ -572,8 +573,9 @@ async def run_backfill(auto: bool = False) -> bool:
                     gallery_urls=raw.get("images_all", []),
                     max_gallery=10,
                 )
-                parsed["image_main"] = main_cloud or (gallery_cloud[0] if gallery_cloud else None)
-                parsed["images_all"] = gallery_cloud
+                parsed["image_main"]   = main_cloud or (gallery_cloud[0] if gallery_cloud else None)
+                parsed["images_all"]   = gallery_cloud
+                parsed["brochure_url"] = stub.get("brochure_url") or ""
 
                 row_id = publish_project(parsed)
                 if row_id:

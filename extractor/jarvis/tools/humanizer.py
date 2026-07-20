@@ -13,6 +13,41 @@ logger = logging.getLogger(__name__)
 client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
 
 
+def _clean_json(text: str) -> str:
+    """
+    Strip markdown fences then fix literal newlines/tabs inside JSON strings.
+    Uses a state machine so it handles nested quotes and escapes correctly.
+    """
+    text = text.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+    text = text.strip()
+
+    # Walk character by character, replacing bare newlines inside strings
+    result = []
+    in_string = False
+    escape_next = False
+    for ch in text:
+        if escape_next:
+            result.append(ch)
+            escape_next = False
+        elif ch == "\\" and in_string:
+            result.append(ch)
+            escape_next = True
+        elif ch == '"':
+            result.append(ch)
+            in_string = not in_string
+        elif in_string and ch == "\n":
+            result.append("\\n")
+        elif in_string and ch == "\r":
+            pass  # drop bare carriage returns
+        elif in_string and ch == "\t":
+            result.append("\\t")
+        else:
+            result.append(ch)
+    return "".join(result)
+
+
 def _make_slug(name: str) -> str:
     slug = name.lower().strip()
     slug = re.sub(r"[^\w\s-]", "", slug)
@@ -115,6 +150,8 @@ Return a JSON object with exactly these keys:
 
 "whatsapp_share_text": 4 short lines someone would forward to a friend. Use developer exact name (not slug). Last line: dubai-portal.vercel.app/projects/{slug}
 
+CRITICAL: Return ONLY a single valid JSON object. Use \\n for line breaks inside strings — never literal newlines. No markdown fences.
+
 Project name: {name}
 Developer: {developer}
 Location: {location}
@@ -209,9 +246,7 @@ async def parse_and_humanize(raw: dict) -> dict | None:
                     "content": f"{EXTRACT_PROMPT}\n\nRAW TEXT:\n{body_text[:6000]}"
                 }],
             )
-            text = resp.content[0].text.strip()
-            text = re.sub(r"^```(?:json)?\s*", "", text)
-            text = re.sub(r"\s*```$", "", text)
+            text = _clean_json(resp.content[0].text)
             structured = json.loads(text)
             if structured.get("skip"):
                 logger.info("Claude flagged project as non-UAE — skipping")
@@ -261,9 +296,7 @@ async def parse_and_humanize(raw: dict) -> dict | None:
                     )
                 }],
             )
-            text = resp.content[0].text.strip()
-            text = re.sub(r"^```(?:json)?\s*", "", text)
-            text = re.sub(r"\s*```$", "", text)
+            text = _clean_json(resp.content[0].text)
             humanized = json.loads(text)
             break
         except Exception as e:
