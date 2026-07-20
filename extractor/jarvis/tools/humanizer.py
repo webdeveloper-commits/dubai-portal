@@ -140,7 +140,7 @@ Return a JSON object with exactly these keys:
   Para 2: Location and community advantages
   Para 3: Investment angle, payment plan, handover
 
-"seo_title": Under 60 chars. Format: "{name} by {developer} | {type} in {area} from AED {price}"
+"seo_title": Under 60 chars. Example: "Sobha Orbis by Sobha Realty | Apartments in Motor City from AED 890K"
 
 "seo_description": "140-160 chars EXACTLY. Must name the project, developer, area, price from AED X, and handover. No clichés. Example: 'Sobha Orbis by Sobha Realty — 1-3BR apartments in Motor City from AED 890K. Q4 2027 handover with 60/40 plan.'"
 
