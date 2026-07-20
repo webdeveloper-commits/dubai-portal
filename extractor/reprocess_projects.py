@@ -70,8 +70,11 @@ def fetch_api_brochures() -> dict[str, str]:
     return result
 
 
-def upload_brochure(slug: str, pdf_url: str) -> str:
-    """Download PDF from opr.ae, upload to Cloudinary, return our URL."""
+def get_brochure_url(slug: str, pdf_url: str) -> str:
+    """
+    Try to upload PDF to Cloudinary. If too large (>10MB), fall back to
+    storing the cdn.opr.ae URL directly — it's a CDN link, not branded as OPR.
+    """
     try:
         result = cloudinary.uploader.upload(
             pdf_url,
@@ -80,11 +83,14 @@ def upload_brochure(slug: str, pdf_url: str) -> str:
             overwrite=True,
         )
         url = result.get("secure_url", "")
-        logger.info(f"Brochure uploaded: {url}")
+        logger.info(f"Brochure uploaded to Cloudinary: {url}")
         return url
     except Exception as e:
+        if "too large" in str(e).lower() or "10485760" in str(e):
+            logger.info(f"Brochure too large for Cloudinary — storing CDN URL directly: {pdf_url}")
+            return pdf_url
         logger.warning(f"Brochure upload failed for {slug}: {e}")
-        return ""
+        return pdf_url  # fall back to original URL on any error
 
 
 async def run(dry_run: bool = False, limit: int = 0, only_slug: str = ""):
@@ -146,7 +152,7 @@ async def run(dry_run: bool = False, limit: int = 0, only_slug: str = ""):
         # ── Upload brochure to Cloudinary ──
         our_brochure_url = ""
         if pdf_url:
-            our_brochure_url = upload_brochure(slug, pdf_url)
+            our_brochure_url = get_brochure_url(slug, pdf_url)
 
         # ── Build update payload (content fields only) ──
         update = {field: parsed.get(field) for field in CONTENT_FIELDS if field in parsed}
