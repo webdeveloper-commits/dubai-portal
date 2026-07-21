@@ -124,7 +124,7 @@ export default function DeveloperLogos({ developers }: { developers: Dev[] }) {
         .dl-track {
           display: flex;
           width: max-content;
-          animation: dl-scroll 38s linear infinite;
+          animation: dl-scroll 80s linear infinite;
         }
         .dl-track:hover { animation-play-state: paused; }
         .dl-logo:hover { border-color: rgba(127,226,227,0.55) !important; box-shadow: 0 3px 14px rgba(127,226,227,0.1); }

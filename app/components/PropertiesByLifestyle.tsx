@@ -151,7 +151,7 @@ export default function PropertiesByLifestyle({ counts = {} }: { counts?: Record
                 {/* Arrow button — top right, only on active */}
                 {isActive && (
                   <a
-                    href={`/lifestyle/${item.id}`}
+                    href={`/projects?life=${item.id}`}
                     style={{
                       position: "absolute",
                       top: 20,

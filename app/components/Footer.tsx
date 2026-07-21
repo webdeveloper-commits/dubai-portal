@@ -2,38 +2,39 @@
 import { useState } from "react";
 import { ArrowUp, Phone, Mail, MapPin, Camera, Briefcase, Globe, MessageCircle, Play } from "lucide-react";
 
-const footerLinks = {
+type FooterCol = { label: string; href: string };
+const footerLinks: Record<string, FooterCol[]> = {
   "Properties": [
-    "Apartments for Sale",
-    "Villas for Sale",
-    "Penthouses",
-    "Townhouses",
-    "Commercial",
-    "Off-Plan Projects",
+    { label: "Apartments for Sale",    href: "/projects?type=Apartment" },
+    { label: "Villas for Sale",        href: "/projects?type=Villa" },
+    { label: "Penthouses",             href: "/projects?type=Penthouse" },
+    { label: "Townhouses",             href: "/projects?type=Townhouse" },
+    { label: "Commercial",             href: "/projects?type=Commercial" },
+    { label: "Off-Plan Projects",      href: "/projects" },
   ],
   "Communities": [
-    "Downtown Dubai",
-    "Dubai Marina",
-    "Palm Jumeirah",
-    "Business Bay",
-    "JVC",
-    "Dubai Creek Harbour",
+    { label: "Downtown Dubai",         href: "/projects?area=Downtown+Dubai" },
+    { label: "Dubai Marina",           href: "/projects?area=Dubai+Marina" },
+    { label: "Palm Jumeirah",          href: "/projects?area=Palm+Jumeirah" },
+    { label: "Business Bay",           href: "/projects?area=Business+Bay" },
+    { label: "JVC",                    href: "/projects?area=JVC" },
+    { label: "Dubai Creek Harbour",    href: "/projects?area=Dubai+Creek+Harbour" },
   ],
   "Developers": [
-    "Emaar Properties",
-    "Damac Properties",
-    "Nakheel",
-    "Meraas",
-    "Sobha Realty",
-    "Aldar Properties",
+    { label: "Emaar Properties",       href: "/developers/emaar-properties" },
+    { label: "Damac Properties",       href: "/developers/damac-properties" },
+    { label: "Nakheel",                href: "/developers/nakheel" },
+    { label: "Meraas",                 href: "/developers/meraas" },
+    { label: "Sobha Realty",           href: "/developers/sobha-realty" },
+    { label: "Aldar Properties",       href: "/developers/aldar-properties" },
   ],
-  "Company": [
-    "About Elysian",
-    "Our Team",
-    "Careers",
-    "Blog & News",
-    "Testimonials",
-    "Contact Us",
+  "By Emirates": [
+    { label: "Dubai",                  href: "/projects?emirate=Dubai" },
+    { label: "Ras Al Khaimah",         href: "/projects?emirate=Ras+Al+Khaimah" },
+    { label: "Sharjah",                href: "/projects?emirate=Sharjah" },
+    { label: "Ajman",                  href: "/projects?emirate=Ajman" },
+    { label: "Abu Dhabi",              href: "/projects?emirate=Abu+Dhabi" },
+    { label: "Fujairah",               href: "/projects?emirate=Fujairah" },
   ],
 };
 
@@ -154,9 +155,9 @@ export default function Footer() {
               </div>
               <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 10 }}>
                 {links.map((link) => (
-                  <li key={link}>
+                  <li key={link.label}>
                     <a
-                      href="#"
+                      href={link.href}
                       style={{
                         fontFamily: "Verdana",
                         fontSize: 12,
@@ -168,7 +169,7 @@ export default function Footer() {
                       onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "#7fe2e3"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.45)"; }}
                     >
-                      {link}
+                      {link.label}
                     </a>
                   </li>
                 ))}

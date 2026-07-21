@@ -174,13 +174,11 @@ export default function PropertyTypes() {
           }}
         >
           {types.map((type) => (
-            <button
+            <a
               key={type.id}
+              href={`/projects?type=${encodeURIComponent(type.label)}`}
               className="pt-card"
               style={{
-                /* reset */
-                appearance: "none",
-                WebkitAppearance: "none",
                 /* layout */
                 display: "flex",
                 flexDirection: "column",
@@ -193,19 +191,20 @@ export default function PropertyTypes() {
                 border: "1.5px solid rgba(255,255,255,0.1)",
                 borderRadius: 20,
                 cursor: "pointer",
+                textDecoration: "none",
                 /* transition */
                 transition: "border-color 0.25s, background 0.25s, transform 0.2s",
                 /* text reset */
                 textAlign: "center",
               }}
               onMouseEnter={(e) => {
-                const el = e.currentTarget as HTMLButtonElement;
+                const el = e.currentTarget as HTMLAnchorElement;
                 el.style.borderColor = "#7fe2e3";
                 el.style.background = "rgba(127,226,227,0.07)";
                 el.style.transform = "translateY(-4px)";
               }}
               onMouseLeave={(e) => {
-                const el = e.currentTarget as HTMLButtonElement;
+                const el = e.currentTarget as HTMLAnchorElement;
                 el.style.borderColor = "rgba(255,255,255,0.1)";
                 el.style.background = "rgba(255,255,255,0.03)";
                 el.style.transform = "translateY(0)";
@@ -256,7 +255,7 @@ export default function PropertyTypes() {
               >
                 {type.count} Properties
               </span>
-            </button>
+            </a>
           ))}
         </div>
       </div>

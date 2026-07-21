@@ -1,40 +1,17 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import FilterBar, { FilterState, DEFAULT_FILTERS } from "@/app/components/filter";
-import ProjectResults, { Project } from "@/app/components/ProjectResults";
+import { Project } from "@/app/components/ProjectResults";
 
 const rotatingWords = ["Dream Home", "Investment", "Future", "Lifestyle"];
 
-function applyFilters(projects: Project[], filters: FilterState): Project[] {
-  return projects.filter(p => {
-    if (filters.projectSearch && !p.name.toLowerCase().includes(filters.projectSearch.toLowerCase())) return false;
-    if (filters.areas.length && !filters.areas.some(a => p.area?.toLowerCase().includes(a.toLowerCase()))) return false;
-    if (filters.developers.length && !filters.developers.some(d => p.developer?.toLowerCase().includes(d.toLowerCase()))) return false;
-    if (filters.propertyTypes.length && !filters.propertyTypes.some(t => (p.propertyTypes ?? []).some(pt => pt.toLowerCase() === t.toLowerCase()))) return false;
-    if (p.priceFrom < filters.priceFrom || p.priceFrom > filters.priceTo) return false;
-    if (filters.handover.length) {
-      const yr = p.handoverYear ?? 0;
-      const matches = filters.handover.some(h => {
-        if (h === "Ready Now") return p.tag === "Ready" || yr === 0;
-        if (h === "2028+")    return yr >= 2028;
-        return p.handover?.includes(h);
-      });
-      if (!matches) return false;
-    }
-    if (filters.lifestyle.length && !filters.lifestyle.some(l => (p.lifestyle ?? []).some(pl => pl.toLowerCase() === l.toLowerCase()))) return false;
-    return true;
-  });
-}
-
 export default function HeroSection({ projects }: { projects: Project[] }) {
+  const router = useRouter();
   const [wordIndex, setWordIndex] = useState(0);
   const [visible, setVisible] = useState(true);
   const [heroFilters, setHeroFilters] = useState<FilterState>(DEFAULT_FILTERS);
-  const [activeFilters, setActiveFilters] = useState<FilterState | null>(null);
-  const [results, setResults] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(false);
-  const resultsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -62,13 +39,16 @@ export default function HeroSection({ projects }: { projects: Project[] }) {
   })();
 
   function handleSearch(filters: FilterState) {
-    setLoading(true);
-    setActiveFilters(filters);
-    setTimeout(() => {
-      setResults(applyFilters(projects, filters));
-      setLoading(false);
-      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-    }, 400);
+    const p = new URLSearchParams();
+    if (filters.projectSearch)           p.set("q",    filters.projectSearch);
+    if (filters.priceFrom > 0)           p.set("pf",   String(filters.priceFrom));
+    if (filters.priceTo < 100_000_000)   p.set("pt",   String(filters.priceTo));
+    if (filters.propertyTypes.length)    p.set("type", filters.propertyTypes.join(","));
+    if (filters.areas.length)            p.set("area", filters.areas.join(","));
+    if (filters.developers.length)       p.set("dev",  filters.developers.join(","));
+    if (filters.handover.length)         p.set("ho",   filters.handover.join(","));
+    if (filters.lifestyle.length)        p.set("life", filters.lifestyle.join(","));
+    router.push(`/projects?${p.toString()}`);
   }
 
   return (
@@ -197,11 +177,6 @@ export default function HeroSection({ projects }: { projects: Project[] }) {
         </button>
       </section>
 
-      {(activeFilters !== null || loading) && (
-        <div ref={resultsRef}>
-          <ProjectResults projects={results} filters={activeFilters ?? undefined} loading={loading} />
-        </div>
-      )}
     </>
   );
 }

@@ -199,6 +199,20 @@ export default function ProjectsClientGrid({ projects }: { projects: Project[] }
     setFiltersState(filtersFromParams(searchParams));
   }, [searchParams]);
 
+  // Persist search context whenever filters change (including initial load from URL params)
+  useEffect(() => {
+    saveSearchContext({
+      areas:          filters.areas.length          ? filters.areas          : undefined,
+      developers:     filters.developers.length     ? filters.developers     : undefined,
+      property_types: filters.propertyTypes.length  ? filters.propertyTypes  : undefined,
+      lifestyle:      filters.lifestyle.length      ? filters.lifestyle      : undefined,
+      handover:       filters.handover.length       ? filters.handover       : undefined,
+      price_from:     filters.priceFrom > 0         ? filters.priceFrom      : undefined,
+      price_to:       filters.priceTo < 100_000_000 ? filters.priceTo        : undefined,
+      query:          filters.projectSearch         || undefined,
+    });
+  }, [filters]);
+
   const setFilters = useCallback((f: FilterState) => {
     setFiltersState(f);
     const qs = filtersToParams(f).toString();
