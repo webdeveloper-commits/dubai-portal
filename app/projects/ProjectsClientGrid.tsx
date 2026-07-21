@@ -179,10 +179,29 @@ function SortDropdown({ value, onChange }: { value: SortKey; onChange: (v: SortK
   );
 }
 
-export default function ProjectsClientGrid({ projects }: { projects: Project[] }) {
+export default function ProjectsClientGrid({
+  projects,
+  areasByEmirate = {},
+}: {
+  projects: Project[];
+  areasByEmirate?: Record<string, string[]>;
+}) {
   const searchParams = useSearchParams();
   const router       = useRouter();
   const pathname     = usePathname();
+
+  // Emirate pre-filter: uses areas table data; falls back to geo_summary text match
+  const emirateParam = searchParams.get("emirate") ?? "";
+  const baseProjects = useMemo(() => {
+    if (!emirateParam) return projects;
+    const areaNames = areasByEmirate[emirateParam] ?? [];
+    return projects.filter(p => {
+      if (areaNames.length > 0)
+        return areaNames.some(n => p.area.toLowerCase().includes(n.toLowerCase()));
+      // Fallback: emirate name appears anywhere in geo_summary (e.g. "Al Hamra, Ras Al Khaimah")
+      return p.area.toLowerCase().includes(emirateParam.toLowerCase());
+    });
+  }, [projects, emirateParam, areasByEmirate]);
 
   // Track if we triggered a navigation to avoid double-set from URL sync
   const selfNavRef = useRef(false);
@@ -199,7 +218,7 @@ export default function ProjectsClientGrid({ projects }: { projects: Project[] }
     setFiltersState(filtersFromParams(searchParams));
   }, [searchParams]);
 
-  // Persist search context whenever filters change (including initial load from URL params)
+  // Persist search context whenever filters or emirate change (including initial load from URL params)
   useEffect(() => {
     saveSearchContext({
       areas:          filters.areas.length          ? filters.areas          : undefined,
@@ -210,8 +229,9 @@ export default function ProjectsClientGrid({ projects }: { projects: Project[] }
       price_from:     filters.priceFrom > 0         ? filters.priceFrom      : undefined,
       price_to:       filters.priceTo < 100_000_000 ? filters.priceTo        : undefined,
       query:          filters.projectSearch         || undefined,
+      emirate:        emirateParam                  || undefined,
     });
-  }, [filters]);
+  }, [filters, emirateParam]);
 
   const setFilters = useCallback((f: FilterState) => {
     setFiltersState(f);
@@ -238,44 +258,44 @@ export default function ProjectsClientGrid({ projects }: { projects: Project[] }
   // Areas: first segment of geo_summary ("Dubai Marina, Dubai" → "Dubai Marina")
   const areaOptions = useMemo(() => {
     const set = new Set<string>();
-    projects.forEach(p => {
+    baseProjects.forEach(p => {
       const area = p.area.split(",")[0]?.trim();
       if (area) set.add(area);
     });
     return Array.from(set).sort();
-  }, [projects]);
+  }, [baseProjects]);
 
   // Developers: title-cased from developer_slug — same as p.developer in the card
   const developerOptions = useMemo(() => {
     const set = new Set<string>();
-    projects.forEach(p => { if (p.developer) set.add(p.developer); });
+    baseProjects.forEach(p => { if (p.developer) set.add(p.developer); });
     return Array.from(set).sort();
-  }, [projects]);
+  }, [baseProjects]);
 
   // Property types: exact values stored in DB ("Apartment", "Villa", etc.)
   const propertyTypeOptions = useMemo(() => {
     const set = new Set<string>();
-    projects.forEach(p => p.propertyTypes.forEach(t => { if (t) set.add(t); }));
+    baseProjects.forEach(p => p.propertyTypes.forEach(t => { if (t) set.add(t); }));
     return Array.from(set).sort();
-  }, [projects]);
+  }, [baseProjects]);
 
   // Lifestyle: deduplicate case-insensitively then title-case for display
   const lifestyleOptions = useMemo(() => {
     const map = new Map<string, string>();
-    projects.forEach(p => p.lifestyle.forEach(t => {
+    baseProjects.forEach(p => p.lifestyle.forEach(t => {
       if (!t) return;
       const key = t.trim().toLowerCase();
       if (!map.has(key)) map.set(key, key.charAt(0).toUpperCase() + key.slice(1));
     }));
     return Array.from(map.values()).sort();
-  }, [projects]);
+  }, [baseProjects]);
 
   // Project names for autocomplete suggestions
-  const projectNames = useMemo(() => [...new Set(projects.map(p => p.name))], [projects]);
+  const projectNames = useMemo(() => [...new Set(baseProjects.map(p => p.name))], [baseProjects]);
 
   const displayed = useMemo(() => {
-    return sortProjects(applyFilters(projects, filters), sort);
-  }, [projects, filters, sort]);
+    return sortProjects(applyFilters(baseProjects, filters), sort);
+  }, [baseProjects, filters, sort]);
 
   const isFiltered = hasActiveFilters(filters);
 
@@ -311,6 +331,12 @@ export default function ProjectsClientGrid({ projects }: { projects: Project[] }
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 36, flexWrap: "wrap", gap: 12 }}>
             <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#7a8a9e", margin: 0 }}>
               Showing <strong style={{ fontFamily: "Montserrat, sans-serif", color: "#192537" }}>{displayed.length}</strong> project{displayed.length !== 1 ? "s" : ""}
+              {emirateParam && (
+                <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(127,226,227,0.15)", color: "#192537", fontFamily: "Verdana", fontSize: 11, padding: "3px 10px", borderRadius: 999, fontWeight: 600 }}>
+                  {emirateParam}
+                  <a href="/projects" style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#7a8a9e", fontSize: 14, marginLeft: 2, textDecoration: "none" }}>×</a>
+                </span>
+              )}
               {activeFilterCount > 0 && (
                 <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(127,226,227,0.12)", color: "#192537", fontFamily: "Verdana", fontSize: 11, padding: "3px 10px", borderRadius: 999 }}>
                   {activeFilterCount} filter{activeFilterCount !== 1 ? "s" : ""} active

@@ -26,6 +26,7 @@ export interface SearchContext {
   price_from?:     number;
   price_to?:       number;
   query?:          string;
+  emirate?:        string;
   source_page?:    string; // URL of the listing page they searched on
   updated_at?:     string;
 }

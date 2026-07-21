@@ -44,11 +44,12 @@ export async function POST(req: NextRequest) {
     if (search_context && Object.keys(search_context).length > 0) {
       const sc = search_context;
       const searchParts = [
-        sc.areas?.length          ? `areas=${sc.areas.join(",")}` : null,
-        sc.developers?.length     ? `devs=${sc.developers.join(",")}`  : null,
+        sc.emirate                ? `emirate=${sc.emirate}`                : null,
+        sc.areas?.length          ? `areas=${sc.areas.join(",")}`          : null,
+        sc.developers?.length     ? `devs=${sc.developers.join(",")}`      : null,
         sc.property_types?.length ? `types=${sc.property_types.join(",")}` : null,
         sc.handover?.length       ? `ho=${sc.handover.join(",")}`          : null,
-        sc.lifestyle?.length      ? `lifestyle=${sc.lifestyle.join(",")}` : null,
+        sc.lifestyle?.length      ? `lifestyle=${sc.lifestyle.join(",")}`  : null,
         sc.price_from             ? `from=AED ${sc.price_from.toLocaleString()}` : null,
         sc.price_to < 100_000_000 ? `to=AED ${sc.price_to?.toLocaleString()}` : null,
         sc.query                  ? `q="${sc.query}"` : null,

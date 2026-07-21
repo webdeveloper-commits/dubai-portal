@@ -43,13 +43,27 @@ function mapRow(r: Record<string, unknown>) {
 }
 
 export default async function ProjectsPage() {
-  const { data } = await supabase
-    .from("projects")
-    .select("id,name,slug,status,price_from,handover_quarter,handover_year,bedroom_min,bedroom_max,property_types,lifestyle_tags,image_main,images_all,geo_summary,developer_slug")
-    .eq("is_published", true)
-    .order("created_at", { ascending: false });
+  const [{ data }, { data: areasRaw }] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("id,name,slug,status,price_from,handover_quarter,handover_year,bedroom_min,bedroom_max,property_types,lifestyle_tags,image_main,images_all,geo_summary,developer_slug")
+      .eq("is_published", true)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("areas")
+      .select("name, emirate")
+      .eq("is_published", true),
+  ]);
 
   const projects = (data ?? []).map(mapRow);
+
+  // Build emirate → area names map from the areas table
+  const areasByEmirate: Record<string, string[]> = {};
+  for (const a of areasRaw ?? []) {
+    if (!a.emirate || !a.name) continue;
+    const em = a.emirate as string;
+    (areasByEmirate[em] ??= []).push(a.name as string);
+  }
 
   return (
     <main>
@@ -87,7 +101,7 @@ export default async function ProjectsPage() {
 
       {/* Filter bar + grid — wrapped in Suspense for useSearchParams */}
       <Suspense fallback={<div style={{ minHeight: 400, background: "#f9f9f9" }} />}>
-        <ProjectsClientGrid projects={projects} />
+        <ProjectsClientGrid projects={projects} areasByEmirate={areasByEmirate} />
       </Suspense>
 
       {/* CTA — client for enquiry modal */}
