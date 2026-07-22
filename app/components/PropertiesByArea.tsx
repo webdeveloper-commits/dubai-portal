@@ -81,14 +81,14 @@ export default function PropertiesByArea({ counts = {} }: { counts?: Record<stri
   const [selected,     setSelected]     = useState<Area | null>(null);
   const [searchVal,    setSearchVal]    = useState("");
   const [mapLoaded,    setMapLoaded]    = useState(false);
-  const [activeFilter, setActiveFilter] = useState("All");
+  const [activeFilter, setActiveFilter] = useState("Has Projects");
 
-  const filters = ["All", "High ROI (8%+)", "Has Projects"];
+  const filters = ["Has Projects", "All", "High ROI (8%+)"];
 
   const filteredAreas = areasWithCounts.filter((a) => {
-    if (activeFilter === "High ROI (8%+)") return parseFloat(a.roi) >= 8;
-    if (activeFilter === "Has Projects")   return a.listings > 0;
-    return true;
+    if (activeFilter === "High ROI (8%+)") return parseFloat(a.roi) >= 8 && a.listings > 0;
+    if (activeFilter === "All")            return a.listings > 0;
+    return a.listings > 0; // "Has Projects" — only areas with real projects
   });
 
   /* ── Close tooltip ── */

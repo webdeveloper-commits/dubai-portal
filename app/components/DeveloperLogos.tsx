@@ -96,7 +96,7 @@ export default function DeveloperLogos({ developers }: { developers: Dev[] }) {
 
             <div className="dl-track">
               {items.map((dev, i) => (
-                <Link key={`${dev.slug}-${i}`} href={`/developers/${dev.slug}`} className="dl-logo"
+                <Link key={`${dev.slug}-${i}`} href={`/projects?dev=${encodeURIComponent(dev.name)}`} className="dl-logo"
                   style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", width: 150, height: 64, borderRadius: 12, border: "1.5px solid #edf0f3", background: "white", textDecoration: "none", transition: "all 0.25s", margin: "0 8px" }}
                 >
                   {dev.logo_url ? (
@@ -124,7 +124,7 @@ export default function DeveloperLogos({ developers }: { developers: Dev[] }) {
         .dl-track {
           display: flex;
           width: max-content;
-          animation: dl-scroll 80s linear infinite;
+          animation: dl-scroll 120s linear infinite;
         }
         .dl-track:hover { animation-play-state: paused; }
         .dl-logo:hover { border-color: rgba(127,226,227,0.55) !important; box-shadow: 0 3px 14px rgba(127,226,227,0.1); }
