@@ -83,15 +83,15 @@ function mapRow(r: any): ProjectData {
     sqft_min: f.sqft_min ?? 0, sqft_max: f.sqft_max ?? 0, price_from: f.price_from,
   }));
   const mainImg = (r.image_main as string) || null;
-  const allImgs = (r.images_all ?? []) as string[];
+  // Skip images_all[0] — it's always the UK flag scraped from the phone-input widget
+  const allImgs = ((r.images_all ?? []) as string[]).slice(1);
   const isPhoto = (url: string) => {
     if (!url) return false;
     const l = url.toLowerCase();
-    // Filter out icons, flags, logos, sprites — anything that isn't a real property photo
-    if (/icon|check|tick|badge|verified|logo|svg|amenity[-_]?icon|flag|emoji|sprite|country|tel[-_]?flag|phone[-_]?flag/i.test(l)) return false;
+    if (/icon|check|tick|badge|verified|logo|svg|amenity[-_]?icon/i.test(l)) return false;
     return true;
   };
-  // Always put image_main first (verified real thumbnail), then other images deduped
+  // Always put image_main first (verified real thumbnail), then remaining images deduped
   const filteredAll = allImgs.filter(u => isPhoto(u) && u !== mainImg);
   const images = mainImg ? [mainImg, ...filteredAll] : filteredAll;
 
