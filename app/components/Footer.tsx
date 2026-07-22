@@ -275,9 +275,9 @@ export default function Footer() {
           }}
         >
           © {new Date().getFullYear()} Elysian Real Estate. All rights reserved. ·{" "}
-          <a href="#" style={{ color: "rgba(255,255,255,0.4)", textDecoration: "none" }}>Privacy Policy</a>{" "}
+          <a href="/privacy-policy" style={{ color: "rgba(255,255,255,0.4)", textDecoration: "none" }}>Privacy Policy</a>{" "}
           ·{" "}
-          <a href="#" style={{ color: "rgba(255,255,255,0.4)", textDecoration: "none" }}>Terms of Use</a>{" "}
+          <a href="/terms-and-conditions" style={{ color: "rgba(255,255,255,0.4)", textDecoration: "none" }}>Terms of Use</a>{" "}
           · RERA Certified
         </p>
 
