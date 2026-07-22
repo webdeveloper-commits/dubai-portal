@@ -91,9 +91,9 @@ function mapRow(r: any): ProjectData {
     if (/icon|check|tick|badge|verified|logo|svg|amenity[-_]?icon/i.test(l)) return false;
     return true;
   };
-  // Always put image_main first (verified real thumbnail), then remaining images deduped
   const filteredAll = allImgs.filter(u => isPhoto(u) && u !== mainImg);
-  const images = mainImg ? [mainImg, ...filteredAll] : filteredAll;
+  // Use images_all[1+] if available; only fall back to image_main when nothing else exists
+  const images = filteredAll.length > 0 ? filteredAll : (mainImg ? [mainImg] : []);
 
   return {
     id: r.id, name: r.name ?? "Project", tagline: r.tagline ?? "",
