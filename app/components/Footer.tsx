@@ -1,6 +1,78 @@
 "use client";
 import { useState } from "react";
-import { ArrowUp, Phone, Mail, MapPin, Camera, Briefcase, Globe, MessageCircle, Play } from "lucide-react";
+import { ArrowUp, Phone, Mail, MapPin } from "lucide-react";
+
+const SOCIALS = [
+  {
+    label: "Facebook",
+    href: "https://www.facebook.com/elysianrealestate",
+    icon: (
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+        <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+      </svg>
+    ),
+  },
+  {
+    label: "Instagram",
+    href: "https://www.instagram.com/elysiangroup",
+    icon: (
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+        <circle cx="12" cy="12" r="4" />
+        <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+      </svg>
+    ),
+  },
+  {
+    label: "LinkedIn",
+    href: "https://www.linkedin.com/company/elysian-real-estate/?viewAsMember=true",
+    icon: (
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+        <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+        <rect x="2" y="9" width="4" height="12" /><circle cx="4" cy="4" r="2" />
+      </svg>
+    ),
+  },
+  {
+    label: "YouTube",
+    href: "https://www.youtube.com/@elysianrealestate_",
+    icon: (
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+        <path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z" />
+        <polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white" />
+      </svg>
+    ),
+  },
+  {
+    label: "X / Twitter",
+    href: "https://x.com/elysianGroup",
+    icon: (
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.912-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+      </svg>
+    ),
+  },
+  {
+    label: "Elysian Website",
+    href: "https://elysian.com/",
+    icon: (
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="2" y1="12" x2="22" y2="12" />
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+      </svg>
+    ),
+  },
+  {
+    label: "Reviews",
+    href: "https://elysianrealestatereviews.com/",
+    icon: (
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+      </svg>
+    ),
+  },
+];
 
 type FooterCol = { label: string; href: string };
 const footerLinks: Record<string, FooterCol[]> = {
@@ -84,56 +156,55 @@ export default function Footer() {
 
             {/* Contact */}
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
-              {[
-                { Icon: Phone, text: "+971 4 000 0000" },
-                { Icon: Mail, text: "hello@elysian.ae" },
-                { Icon: MapPin, text: "DIFC, Dubai, UAE" },
-              ].map(({ Icon, text }) => (
-                <div
-                  key={text}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    fontFamily: "Verdana",
-                    fontSize: 12,
-                    color: "rgba(255,255,255,0.5)",
-                  }}
-                >
-                  <Icon size={13} color="#7fe2e3" />
-                  {text}
-                </div>
-              ))}
+              <a href="tel:+971547786800" style={{ display: "flex", alignItems: "center", gap: 10, fontFamily: "Verdana", fontSize: 12, color: "rgba(255,255,255,0.5)", textDecoration: "none" }}>
+                <Phone size={13} color="#7fe2e3" style={{ flexShrink: 0 }} />
+                +971 54 778 6800
+              </a>
+              <a href="mailto:info@elysian.com" style={{ display: "flex", alignItems: "center", gap: 10, fontFamily: "Verdana", fontSize: 12, color: "rgba(255,255,255,0.5)", textDecoration: "none" }}>
+                <Mail size={13} color="#7fe2e3" style={{ flexShrink: 0 }} />
+                info@elysian.com
+              </a>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <MapPin size={13} color="#7fe2e3" style={{ flexShrink: 0, marginTop: 2 }} />
+                <span style={{ fontFamily: "Verdana", fontSize: 12, color: "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>
+                  Elysian Sales Center<br />Umm Al Sheif, SZR, Dubai, UAE
+                </span>
+              </div>
             </div>
 
             {/* Social */}
-            <div style={{ display: "flex", gap: 10 }}>
-              {[Camera, Briefcase, Globe, MessageCircle, Play].map((Icon, i) => (
-                <button
-                  key={i}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {SOCIALS.map(({ label, href, icon }) => (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={label}
+                  title={label}
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: "50%",
+                    width: 36, height: 36, borderRadius: "50%",
                     border: "1px solid rgba(255,255,255,0.12)",
-                    background: "transparent",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    background: "transparent", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "rgba(255,255,255,0.6)", textDecoration: "none",
                     transition: "all 0.2s",
                   }}
                   onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = "#7fe2e3";
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "#7fe2e3";
+                    const el = e.currentTarget as HTMLAnchorElement;
+                    el.style.background = "#7fe2e3";
+                    el.style.borderColor = "#7fe2e3";
+                    el.style.color = "#192537";
                   }}
                   onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.12)";
+                    const el = e.currentTarget as HTMLAnchorElement;
+                    el.style.background = "transparent";
+                    el.style.borderColor = "rgba(255,255,255,0.12)";
+                    el.style.color = "rgba(255,255,255,0.6)";
                   }}
                 >
-                  <Icon size={14} color="white" />
-                </button>
+                  {icon}
+                </a>
               ))}
             </div>
           </div>
