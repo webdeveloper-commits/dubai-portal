@@ -110,6 +110,40 @@ const footerLinks: Record<string, FooterCol[]> = {
   ],
 };
 
+function SocialIcon({ label, href, icon }: { label: string; href: string; icon: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
+      title={label}
+      style={{
+        width: 36, height: 36, borderRadius: "50%",
+        border: "1px solid rgba(255,255,255,0.12)",
+        background: "transparent", cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: "rgba(255,255,255,0.6)", textDecoration: "none",
+        transition: "all 0.2s", flexShrink: 0,
+      }}
+      onMouseEnter={(e) => {
+        const el = e.currentTarget as HTMLAnchorElement;
+        el.style.background = "#7fe2e3";
+        el.style.borderColor = "#7fe2e3";
+        el.style.color = "#192537";
+      }}
+      onMouseLeave={(e) => {
+        const el = e.currentTarget as HTMLAnchorElement;
+        el.style.background = "transparent";
+        el.style.borderColor = "rgba(255,255,255,0.12)";
+        el.style.color = "rgba(255,255,255,0.6)";
+      }}
+    >
+      {icon}
+    </a>
+  );
+}
+
 export default function Footer() {
   const [email, setEmail] = useState("");
 
@@ -173,39 +207,19 @@ export default function Footer() {
             </div>
 
             {/* Social */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {SOCIALS.map(({ label, href, icon }) => (
-                <a
-                  key={label}
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={label}
-                  title={label}
-                  style={{
-                    width: 36, height: 36, borderRadius: "50%",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "transparent", cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "rgba(255,255,255,0.6)", textDecoration: "none",
-                    transition: "all 0.2s",
-                  }}
-                  onMouseEnter={(e) => {
-                    const el = e.currentTarget as HTMLAnchorElement;
-                    el.style.background = "#7fe2e3";
-                    el.style.borderColor = "#7fe2e3";
-                    el.style.color = "#192537";
-                  }}
-                  onMouseLeave={(e) => {
-                    const el = e.currentTarget as HTMLAnchorElement;
-                    el.style.background = "transparent";
-                    el.style.borderColor = "rgba(255,255,255,0.12)";
-                    el.style.color = "rgba(255,255,255,0.6)";
-                  }}
-                >
-                  {icon}
-                </a>
-              ))}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              {/* Left: 5 social networks */}
+              <div style={{ display: "flex", gap: 8 }}>
+                {SOCIALS.slice(0, 5).map(({ label, href, icon }) => (
+                  <SocialIcon key={label} label={label} href={href} icon={icon} />
+                ))}
+              </div>
+              {/* Right: website + reviews */}
+              <div style={{ display: "flex", gap: 8 }}>
+                {SOCIALS.slice(5).map(({ label, href, icon }) => (
+                  <SocialIcon key={label} label={label} href={href} icon={icon} />
+                ))}
+              </div>
             </div>
           </div>
 
