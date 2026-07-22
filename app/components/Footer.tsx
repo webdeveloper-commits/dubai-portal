@@ -206,21 +206,6 @@ export default function Footer() {
               </div>
             </div>
 
-            {/* Social */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              {/* Left: 5 social networks */}
-              <div style={{ display: "flex", gap: 8 }}>
-                {SOCIALS.slice(0, 5).map(({ label, href, icon }) => (
-                  <SocialIcon key={label} label={label} href={href} icon={icon} />
-                ))}
-              </div>
-              {/* Right: website + reviews */}
-              <div style={{ display: "flex", gap: 8 }}>
-                {SOCIALS.slice(5).map(({ label, href, icon }) => (
-                  <SocialIcon key={label} label={label} href={href} icon={icon} />
-                ))}
-              </div>
-            </div>
           </div>
 
           {/* Link cols */}
@@ -261,6 +246,24 @@ export default function Footer() {
               </ul>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Social icons — full-width strip */}
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 24px 40px" }}>
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 28, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          {/* Left: social networks */}
+          <div style={{ display: "flex", gap: 8 }}>
+            {SOCIALS.slice(0, 5).map(({ label, href, icon }) => (
+              <SocialIcon key={label} label={label} href={href} icon={icon} />
+            ))}
+          </div>
+          {/* Right: website + reviews */}
+          <div style={{ display: "flex", gap: 8 }}>
+            {SOCIALS.slice(5).map(({ label, href, icon }) => (
+              <SocialIcon key={label} label={label} href={href} icon={icon} />
+            ))}
+          </div>
         </div>
       </div>
 
