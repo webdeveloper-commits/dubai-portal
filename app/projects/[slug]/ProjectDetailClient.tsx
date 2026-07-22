@@ -82,15 +82,18 @@ function mapRow(r: any): ProjectData {
     type: f.type ?? `${f.beds}BR`, beds: f.beds ?? 0,
     sqft_min: f.sqft_min ?? 0, sqft_max: f.sqft_max ?? 0, price_from: f.price_from,
   }));
+  const mainImg = (r.image_main as string) || null;
   const allImgs = (r.images_all ?? []) as string[];
   const isPhoto = (url: string) => {
     if (!url) return false;
     const l = url.toLowerCase();
-    if (/icon|check|tick|badge|verified|logo|svg|amenity[-_]?icon/i.test(l)) return false;
+    // Filter out icons, flags, logos, sprites — anything that isn't a real property photo
+    if (/icon|check|tick|badge|verified|logo|svg|amenity[-_]?icon|flag|emoji|sprite|country|tel[-_]?flag|phone[-_]?flag/i.test(l)) return false;
     return true;
   };
-  const filteredImgs = allImgs.filter(isPhoto);
-  const images = filteredImgs.length > 0 ? filteredImgs : [r.image_main].filter(Boolean);
+  // Always put image_main first (verified real thumbnail), then other images deduped
+  const filteredAll = allImgs.filter(u => isPhoto(u) && u !== mainImg);
+  const images = mainImg ? [mainImg, ...filteredAll] : filteredAll;
 
   return {
     id: r.id, name: r.name ?? "Project", tagline: r.tagline ?? "",
@@ -237,7 +240,9 @@ function Gallery({ images, exterior, interior, amenities }: {
       <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", aspectRatio: "16/9", background: "#0d1e2e" }}>
         {imgs[idx] && (
           <img key={`${tab}-${idx}`} src={imgs[idx]} alt=""
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", animation: "fadeIn 0.3s ease" }} />
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", animation: "fadeIn 0.3s ease" }}
+            onLoad={e => { const el = e.currentTarget as HTMLImageElement; markBad(imgs[idx], el.naturalWidth, el.naturalHeight); }}
+          />
         )}
         {imgs.length > 1 && (
           <>
