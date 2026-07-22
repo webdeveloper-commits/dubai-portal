@@ -72,21 +72,25 @@ export default async function DeveloperPage({ params }: Props) {
   const allParas = (d.about || "").split(/\n\n+/).filter(Boolean).map(decodeEntities);
   const aboutParas = allParas.slice(0, 4);
 
-  // For each area the developer operates in, find its real area-guide slug.
-  // We query only the relevant rows (one ilike per area) — nothing extra is shown.
-  const areaSlugMap: Record<string, string> = {};
-  await Promise.all(
-    areas.map(async (areaName: string) => {
-      const { data } = await supabase
-        .from("areas")
-        .select("slug")
-        .ilike("name", `%${areaName.split(" ")[0]}%`)
-        .eq("is_published", true)
-        .limit(1)
-        .single();
-      if (data?.slug) areaSlugMap[areaName] = data.slug as string;
-    })
+  // Single query for all published areas; match developer's area names locally
+  const { data: publishedAreasData } = await supabase
+    .from("areas")
+    .select("name, slug")
+    .eq("is_published", true);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const publishedAreaLookup = new Map<string, string>(
+    (publishedAreasData ?? []).map((a: any) => [
+      (a.name as string).toLowerCase().trim(),
+      a.slug as string,
+    ])
   );
+
+  const areaSlugMap: Record<string, string> = {};
+  for (const areaName of areas) {
+    const slug = publishedAreaLookup.get(areaName.toLowerCase().trim()) ?? null;
+    if (slug) areaSlugMap[areaName] = slug;
+  }
 
   // Investment chart data — built from keyProjects status distribution
   const statusCounts: Record<string, number> = {};

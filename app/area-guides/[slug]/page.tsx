@@ -118,12 +118,27 @@ export default async function AreaDetailPage({ params }: Props) {
 
   const aboutParas: string[] = (area.about as string || "").split(/\n\n+/).filter(Boolean);
 
-  // Fetch projects in this area
-  const { data: areaProjects } = await supabase
-    .from("projects")
-    .select("name,slug,image_main,status,price_from,geo_summary,handover_quarter,handover_year,bedroom_min,bedroom_max")
-    .ilike("geo_summary", `%${area.name}%`)
-    .limit(6);
+  // Fetch projects in this area + all published area slugs (for nearby-areas linking)
+  const [{ data: areaProjects }, { data: publishedAreasData }] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("name,slug,image_main,status,price_from,geo_summary,handover_quarter,handover_year,bedroom_min,bedroom_max")
+      .ilike("geo_summary", `%${area.name}%`)
+      .limit(6),
+    supabase
+      .from("areas")
+      .select("name, slug")
+      .eq("is_published", true),
+  ]);
+
+  // Map: lowercase area name → slug (for nearby areas lookup)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const publishedAreaLookup = new Map<string, string>(
+    (publishedAreasData ?? []).map((a: any) => [
+      (a.name as string).toLowerCase().trim(),
+      a.slug as string,
+    ])
+  );
 
   function statusLabel(s: string): string {
     if (s === "ready" || s === "completed") return "Ready";
@@ -687,8 +702,8 @@ export default async function AreaDetailPage({ params }: Props) {
                 {nearbyAsChips ? (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                     {nearbyAreas.map((name: string) => {
-                      const nearbySlug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-                      return (
+                      const nearbySlug = publishedAreaLookup.get(name.toLowerCase().trim()) ?? null;
+                      return nearbySlug ? (
                         <Link
                           key={name}
                           href={`/area-guides/${nearbySlug}`}
@@ -697,6 +712,13 @@ export default async function AreaDetailPage({ params }: Props) {
                         >
                           {name} →
                         </Link>
+                      ) : (
+                        <span
+                          key={name}
+                          style={{ display: "inline-block", background: "#f4f6f9", border: "1.5px solid #e8ecf0", color: "#c0c8d0", fontFamily: "Verdana, sans-serif", fontSize: 12, padding: "8px 18px", borderRadius: 999, cursor: "default" }}
+                        >
+                          {name}
+                        </span>
                       );
                     })}
                   </div>
