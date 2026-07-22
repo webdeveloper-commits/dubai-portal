@@ -5,6 +5,9 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import FilterBar, { FilterState, DEFAULT_FILTERS } from "@/app/components/filter";
 import { MapPin, Bed, Calendar, ArrowUpRight, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { saveSearchContext } from "@/lib/tracking";
+import Pagination from "@/app/components/Pagination";
+
+const PAGE_SIZE = 15;
 
 interface Project {
   id: string;
@@ -208,6 +211,7 @@ export default function ProjectsClientGrid({
 
   const [filters, setFiltersState] = useState<FilterState>(() => filtersFromParams(searchParams));
   const [sort, setSort]            = useState<SortKey>("default");
+  const [page, setPage]            = useState(1);
 
   // Sync filter state when URL changes from browser back/forward
   useEffect(() => {
@@ -297,6 +301,14 @@ export default function ProjectsClientGrid({
     return sortProjects(applyFilters(baseProjects, filters), sort);
   }, [baseProjects, filters, sort]);
 
+  // Reset to page 1 whenever filters, sort, or emirate change
+  useEffect(() => { setPage(1); }, [filters, sort, emirateParam]);
+
+  const paginated = useMemo(
+    () => displayed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [displayed, page]
+  );
+
   const isFiltered = hasActiveFilters(filters);
 
   const activeFilterCount =
@@ -330,7 +342,11 @@ export default function ProjectsClientGrid({
           {/* Toolbar */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 36, flexWrap: "wrap", gap: 12 }}>
             <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#7a8a9e", margin: 0 }}>
-              Showing <strong style={{ fontFamily: "Montserrat, sans-serif", color: "#192537" }}>{displayed.length}</strong> project{displayed.length !== 1 ? "s" : ""}
+              Showing{" "}
+              <strong style={{ fontFamily: "Montserrat, sans-serif", color: "#192537" }}>
+                {displayed.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, displayed.length)}
+              </strong>{" "}
+              of <strong style={{ fontFamily: "Montserrat, sans-serif", color: "#192537" }}>{displayed.length}</strong> project{displayed.length !== 1 ? "s" : ""}
               {emirateParam && (
                 <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(127,226,227,0.15)", color: "#192537", fontFamily: "Verdana", fontSize: 11, padding: "3px 10px", borderRadius: 999, fontWeight: 600 }}>
                   {emirateParam}
@@ -359,9 +375,17 @@ export default function ProjectsClientGrid({
               )}
             </div>
           ) : (
-            <div className="proj-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 28 }}>
-              {displayed.map(p => <ProjectCard key={p.id} p={p} />)}
-            </div>
+            <>
+              <div className="proj-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 28 }}>
+                {paginated.map(p => <ProjectCard key={p.id} p={p} />)}
+              </div>
+              <Pagination
+                page={page}
+                totalItems={displayed.length}
+                pageSize={PAGE_SIZE}
+                onChange={p => { setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              />
+            </>
           )}
         </div>
       </section>

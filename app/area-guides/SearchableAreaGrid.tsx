@@ -1,7 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Search, ArrowUpRight } from "lucide-react";
+import Pagination from "@/app/components/Pagination";
+
+const PAGE_SIZE = 15;
 
 interface AreaSummary {
   id: string;
@@ -55,12 +58,17 @@ function AreaCard({ area }: { area: AreaSummary }) {
 
 export default function SearchableAreaGrid({ areas }: { areas: AreaSummary[] }) {
   const [query, setQuery] = useState("");
+  const [page, setPage]   = useState(1);
+
+  useEffect(() => { setPage(1); }, [query]);
 
   const filtered = areas.filter(a =>
     a.name.toLowerCase().includes(query.toLowerCase()) ||
     (a.tagline ?? "").toLowerCase().includes(query.toLowerCase()) ||
     (a.best_for ?? "").toLowerCase().includes(query.toLowerCase())
   );
+
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <>
@@ -85,6 +93,7 @@ export default function SearchableAreaGrid({ areas }: { areas: AreaSummary[] }) 
         {query && (
           <p style={{ fontFamily: "Verdana,sans-serif", fontSize: 12, color: "#aaa", marginTop: 10, paddingLeft: 4 }}>
             {filtered.length} result{filtered.length !== 1 ? "s" : ""} for &ldquo;{query}&rdquo;
+            {filtered.length > PAGE_SIZE && ` — page ${page} of ${Math.ceil(filtered.length / PAGE_SIZE)}`}
           </p>
         )}
       </div>
@@ -96,9 +105,17 @@ export default function SearchableAreaGrid({ areas }: { areas: AreaSummary[] }) 
           <p style={{ fontFamily: "Verdana,sans-serif", fontSize: 13, color: "#7a8a9e" }}>Try a different search term.</p>
         </div>
       ) : (
-        <div className="areas-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 28 }}>
-          {filtered.map(area => <AreaCard key={area.id} area={area} />)}
-        </div>
+        <>
+          <div className="areas-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 28 }}>
+            {paginated.map(area => <AreaCard key={area.id} area={area} />)}
+          </div>
+          <Pagination
+            page={page}
+            totalItems={filtered.length}
+            pageSize={PAGE_SIZE}
+            onChange={p => { setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+          />
+        </>
       )}
 
       <style>{`

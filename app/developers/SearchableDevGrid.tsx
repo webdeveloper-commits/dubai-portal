@@ -1,7 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Search, ArrowUpRight, Building2 } from "lucide-react";
+import Pagination from "@/app/components/Pagination";
+
+const PAGE_SIZE = 15;
 
 interface Developer {
   id: string;
@@ -84,10 +87,15 @@ function DevCard({ dev }: { dev: Developer }) {
 
 export default function SearchableDevGrid({ devs }: { devs: Developer[] }) {
   const [search, setSearch] = useState("");
+  const [page, setPage]     = useState(1);
+
+  useEffect(() => { setPage(1); }, [search]);
 
   const filtered = devs.filter(d =>
     d.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <>
@@ -109,6 +117,7 @@ export default function SearchableDevGrid({ devs }: { devs: Developer[] }) {
         {search && (
           <p style={{ fontFamily: "Verdana,sans-serif", fontSize: 12, color: "#aaa", marginTop: 10, paddingLeft: 4 }}>
             {filtered.length} result{filtered.length !== 1 ? "s" : ""} for &ldquo;{search}&rdquo;
+            {filtered.length > PAGE_SIZE && ` — page ${page} of ${Math.ceil(filtered.length / PAGE_SIZE)}`}
           </p>
         )}
       </div>
@@ -120,9 +129,17 @@ export default function SearchableDevGrid({ devs }: { devs: Developer[] }) {
           <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#7a8a9e" }}>Try a different search term.</p>
         </div>
       ) : (
-        <div className="dev-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 28 }}>
-          {filtered.map(d => <DevCard key={d.id} dev={d} />)}
-        </div>
+        <>
+          <div className="dev-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 28 }}>
+            {paginated.map(d => <DevCard key={d.id} dev={d} />)}
+          </div>
+          <Pagination
+            page={page}
+            totalItems={filtered.length}
+            pageSize={PAGE_SIZE}
+            onChange={p => { setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+          />
+        </>
       )}
 
       <style>{`
