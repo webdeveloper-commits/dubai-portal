@@ -42,6 +42,31 @@ def get_existing_slugs() -> set[str]:
         return set()
 
 
+def get_max_opr_id() -> int | None:
+    """Return the highest opr_id stored in DB, or None if column is unpopulated."""
+    try:
+        res = db().table("projects").select("opr_id").order("opr_id", desc=True).limit(1).execute()
+        if res.data and res.data[0].get("opr_id") is not None:
+            return int(res.data[0]["opr_id"])
+        return None
+    except Exception as e:
+        logger.error(f"get_max_opr_id failed: {e}")
+        return None
+
+
+def get_existing_projects_index() -> list[dict]:
+    """
+    Return name + developer + area for all projects in DB.
+    Used for cross-source duplicate detection (opr.ae vs PF etc.)
+    """
+    try:
+        res = db().table("projects").select("name, developer_slug, geo_summary").execute()
+        return res.data or []
+    except Exception as e:
+        logger.error(f"get_existing_projects_index failed: {e}")
+        return []
+
+
 def get_unindexed_projects() -> list[dict]:
     """Return published projects not yet submitted to Google."""
     try:

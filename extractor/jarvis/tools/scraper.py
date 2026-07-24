@@ -162,7 +162,7 @@ def _parse_href_url(href: str) -> str | None:
 
 # ── Step 1: Scan listing via opr-search Strapi API (no browser needed) ────────
 
-OPR_SEARCH_API = "https://opr-search.mpp.agency/api/projects?populate=*&pagination[pageSize]=1500&sort=id:desc"
+OPR_SEARCH_API_BASE = "https://opr-search.mpp.agency/api/projects"
 
 NON_UAE = {
     "bali", "indonesia", "egypt", "cairo", "istanbul", "turkey",
@@ -179,8 +179,13 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
     """
     Fetch project listings from the opr-search Strapi API directly.
     No browser / consent handling needed.
+
+    When the DB has a max opr_id (after backfill), uses filters[id][$gt] to fetch
+    only projects newer than what we already have — much faster than scanning 1500 items.
+    Falls back to full scan + slug check when opr_id is not yet populated.
     """
     import requests as _requests
+    from .storage import get_max_opr_id
 
     new_projects: list[dict] = []
 
@@ -190,19 +195,40 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
             "Referer": "https://opr.ae/projects",
             "Origin": "https://opr.ae",
         }
-        logger.info(f"Fetching project list from {OPR_SEARCH_API}")
-        resp = _requests.get(OPR_SEARCH_API, headers=headers, timeout=30)
+
+        max_opr_id = get_max_opr_id()
+
+        if max_opr_id:
+            # Efficient path: only fetch projects newer than our highest known opr_id
+            params = {
+                "populate": "*",
+                "pagination[pageSize]": "50",
+                "sort": "id:desc",
+                "filters[id][$gt]": str(max_opr_id),
+            }
+            logger.info(f"Incremental scan — fetching projects with opr_id > {max_opr_id}")
+        else:
+            # First-run / pre-backfill path: fetch all and rely on slug check
+            params = {
+                "populate": "*",
+                "pagination[pageSize]": "1500",
+                "sort": "id:desc",
+            }
+            logger.info("Full scan — no max opr_id found, checking all projects via slug")
+
+        resp = _requests.get(OPR_SEARCH_API_BASE, params=params, headers=headers, timeout=30)
         resp.raise_for_status()
         projects = resp.json().get("data", [])
-        logger.info(f"API returned {len(projects)} total projects")
+        logger.info(f"API returned {len(projects)} projects to check")
 
         for item in projects:
             if len(new_projects) >= max_new:
                 logger.info(f"Reached max_new limit ({max_new})")
                 break
 
-            attrs = item.get("attributes", {})
-            link  = attrs.get("Link", "")
+            opr_id = item.get("id")
+            attrs  = item.get("attributes", {})
+            link   = attrs.get("Link", "")
             if not link:
                 continue
 
@@ -223,8 +249,8 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
                 logger.info(f"Pre-filter skipped non-UAE: {slug}")
                 continue
 
-            name      = attrs.get("ProjectName") or slug.replace("-", " ").title()
-            price_raw = attrs.get("StartingPrice")
+            name       = attrs.get("ProjectName") or slug.replace("-", " ").title()
+            price_raw  = attrs.get("StartingPrice")
             price_text = f"AED {int(price_raw):,}" if price_raw else ""
             thumbnail  = attrs.get("ImageLink") or ""
 
@@ -235,8 +261,9 @@ async def scan_new_projects(existing_slugs: set[str], max_new: int = 10) -> list
                 "price_text":   price_text,
                 "thumbnail":    thumbnail,
                 "brochure_url": attrs.get("PDF") or "",
+                "opr_id":       opr_id,
             })
-            logger.info(f"Queued: {name} ({slug})")
+            logger.info(f"Queued: {name} ({slug}) [opr_id={opr_id}]")
 
     except Exception as e:
         logger.error(f"scan_new_projects failed: {e}")

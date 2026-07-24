@@ -115,6 +115,10 @@ async def run_tuesday():
                 skipped.append(f"{name} (non-UAE)")
                 continue
 
+            # ── Carry opr_id from scan stub into the parsed payload ──
+            if stub.get("opr_id"):
+                parsed["opr_id"] = stub["opr_id"]
+
             # ── Duplicate check (slug may differ from URL slug) ──
             if parsed["slug"] in existing_slugs:
                 skipped.append(parsed["name"])
