@@ -313,11 +313,37 @@ def _assemble_result(structured: dict, humanized: dict, raw: dict) -> dict:
     }
 
 
+PF_INFER_PROMPT = """You are a UAE real estate data analyst. Given project info below, return ONLY valid JSON with these exact keys:
+
+"lifestyle_tags": Choose from this list ONLY — use each ONLY if clearly evidenced:
+  waterfront (canal/creek/lagoon/river — NOT sea/ocean), golf (golf course within community),
+  luxury (price > AED 3M avg, hotel-grade finishes, sky villas), branded (hotel-branded residences),
+  beachfront (oceanfront / sea beach access), community (gated family community: villas, parks, schools on-site)
+  Return [] if none clearly apply.
+
+"investment_potential": 3-4 specific bullets. Mention actual price, location advantages, ROI signals if available.
+  Example: ["Strong rental demand in Business Bay — 7–9% gross yields", "Freehold ownership for all nationalities"]
+  Never generic filler like "great investment opportunity".
+
+Return ONLY the JSON object. No markdown fences.
+
+Project: {name}
+Developer: {developer}
+Location: {location}
+Price from: {price}
+Handover: {handover}
+Ownership: {ownership}
+Payment plan: {payment_plan}
+
+Description:
+{text}"""
+
+
 async def parse_and_humanize_pf(raw: dict) -> dict | None:
     """
     PF variant of parse_and_humanize.
     Skips the Claude extraction step — raw['_pf_structured'] has clean data already.
-    Only runs the humanization step (copy, SEO, FAQ).
+    Runs: (1) humanization, (2) inference of lifestyle_tags + investment_potential.
     """
     structured = raw.get("_pf_structured")
     if not structured:
@@ -337,7 +363,9 @@ async def parse_and_humanize_pf(raw: dict) -> dict | None:
     bedrooms = f"{bmin}–{bmax} BR" if bmin and bmax else (f"{bmin} BR" if bmin else "Various")
     payment  = structured.get("payment_plan_summary") or "Flexible"
     slug     = _make_slug(name)
+    desc_text = raw.get("description_raw") or raw.get("body_text") or ""
 
+    # ── Step 1: Humanize — copy, SEO, FAQ ────────────────────────────────────
     humanized: dict = {}
     for attempt in range(3):
         try:
@@ -347,7 +375,7 @@ async def parse_and_humanize_pf(raw: dict) -> dict | None:
                 messages=[{
                     "role": "user",
                     "content": HUMANIZE_PROMPT.format(
-                        text=raw.get("description_raw", raw.get("body_text", ""))[:3000],
+                        text=desc_text[:3000],
                         name=name,
                         developer=dev_name,
                         location=location,
@@ -371,17 +399,64 @@ async def parse_and_humanize_pf(raw: dict) -> dict | None:
         except Exception as e:
             logger.warning(f"PF humanize attempt {attempt + 1} failed: {e}")
             if attempt == 2:
-                fallback = raw.get("description_raw", "")[:500]
                 humanized = {
                     "tagline":            name,
-                    "short":              fallback[:120],
-                    "long":               fallback,
+                    "short":              desc_text[:120],
+                    "long":               desc_text[:500],
                     "seo_title":          name[:60],
-                    "seo_description":    fallback[:155],
+                    "seo_description":    desc_text[:155],
                     "seo_keywords":       [],
                     "aeo_faq":            [],
                     "whatsapp_share_text": f"{name} by {dev_name}\n{location}\n{price}\ndubai-portal.vercel.app/projects/{slug}",
                 }
+
+    # ── Step 2: Infer lifestyle tags + investment potential from description ──
+    inferred: dict = {}
+    ownership = ""
+    # Check if ownership is already known (set by merge_pf_detail from ownershipType)
+    inv = structured.get("investment_potential") or []
+    for item in inv:
+        if "freehold" in item.lower():
+            ownership = "Freehold"
+            break
+
+    if desc_text:
+        for attempt in range(2):
+            try:
+                resp = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=600,
+                    messages=[{
+                        "role": "user",
+                        "content": PF_INFER_PROMPT.format(
+                            name=name,
+                            developer=dev_name,
+                            location=location,
+                            price=price,
+                            handover=handover,
+                            ownership=ownership or "Unknown",
+                            payment_plan=payment,
+                            text=desc_text[:2500],
+                        )
+                    }],
+                )
+                text = _clean_json(resp.content[0].text)
+                inferred = json.loads(text)
+                break
+            except Exception as e:
+                logger.warning(f"PF infer attempt {attempt + 1} failed: {e}")
+
+    # Merge inferred fields into structured (only if not already populated)
+    if inferred.get("lifestyle_tags") and not structured.get("lifestyle_tags"):
+        structured["lifestyle_tags"] = inferred["lifestyle_tags"]
+    if inferred.get("investment_potential") and not structured.get("investment_potential"):
+        structured["investment_potential"] = inferred["investment_potential"]
+    elif inferred.get("investment_potential") and structured.get("investment_potential"):
+        # Merge: keep existing (freehold) + add Claude's bullets
+        existing = structured["investment_potential"]
+        for bullet in inferred["investment_potential"]:
+            if bullet not in existing:
+                existing.append(bullet)
 
     return _assemble_result(structured, humanized, raw)
 

@@ -116,19 +116,209 @@ def fetch_pf_listing_page(page: int = 1, sort: str = "mr") -> list[dict]:
 
 def fetch_pf_detail(share_url: str) -> dict | None:
     """
-    Fetch the __NEXT_DATA__ from an individual project page.
-    Returns the project detail dict, or None on failure.
+    Fetch the PF project detail page and return the detailResult dict.
+    Contains: units (with sqft), description, faqs, brochureUrl,
+    masterPlan (has commute times), paymentPlans (structured), images.
     """
+    if share_url and not share_url.startswith("http"):
+        share_url = PF_BASE + share_url
     data = _fetch_next_data(share_url)
     if not data:
         return None
     page_props = data.get("props", {}).get("pageProps", {})
-    for key in ("project", "propertyDevelopment", "data", "development"):
+    # Primary path confirmed 2026-07-24: pageProps.detailResult
+    for key in ("detailResult", "project", "propertyDevelopment", "data", "development"):
         val = page_props.get(key)
         if isinstance(val, dict):
             return val
-    logger.warning(f"PF detail page — no project found in pageProps. Keys: {list(page_props.keys())}")
+    logger.warning(f"PF detail — no project found. Keys: {list(page_props.keys())}")
     return None
+
+
+def merge_pf_detail(raw: dict, detail: dict) -> None:
+    """
+    Enrich a raw dict (from pf_to_raw) with detail-page data in-place.
+    Adds: floor plans with sqft, commute times, structured payment plan,
+    stripped FAQs, brochure URL, master plan image, better images.
+    """
+    s = raw.get("_pf_structured", {})
+
+    # ── Floor plans from nested units ──
+    floor_plans = _extract_floor_plans(detail.get("units") or [])
+    if floor_plans:
+        s["floor_plans"] = floor_plans
+        # Backfill bedroom_min/max if listing page had empty bedrooms[]
+        if s.get("bedroom_min") is None:
+            beds = [fp["beds"] for fp in floor_plans if fp.get("beds") is not None]
+            if beds:
+                s["bedroom_min"] = min(beds)
+                s["bedroom_max"] = max(beds)
+                s["bedroom_types"] = list(dict.fromkeys(
+                    "Studio" if b == 0 else f"{b}BR" for b in sorted(set(beds))
+                ))
+        # Backfill sqft
+        sqfts_min = [fp["sqft_min"] for fp in floor_plans if fp.get("sqft_min")]
+        sqfts_max = [fp["sqft_max"] for fp in floor_plans if fp.get("sqft_max")]
+        if sqfts_min:
+            s["size_sqft_min"] = min(sqfts_min)
+        if sqfts_max:
+            s["size_sqft_max"] = max(sqfts_max)
+
+    # ── Ownership type (freehold / leasehold) ──
+    ownership = (detail.get("ownershipType") or "").lower()
+    if "freehold" in ownership:
+        s.setdefault("investment_potential", [])
+        if "Freehold ownership" not in s["investment_potential"]:
+            s["investment_potential"].append("Freehold ownership")
+
+    # ── Structured payment plan ──
+    pf_plans = detail.get("paymentPlans") or []
+    pd = _parse_pf_payment_plan(pf_plans)
+    if pd:
+        s["payment_plan_detail"] = pd
+        # Also set summary from first plan
+        if not s.get("payment_plan_summary") and pf_plans:
+            phases = pf_plans[0].get("phases", [])
+            s["payment_plan_summary"] = "/".join(str(p.get("value", 0)) for p in phases)
+
+    # ── Full description (HTML → plain text, richer than listing) ──
+    desc_html = detail.get("description") or ""
+    desc_plain = _strip_html(desc_html)
+    if desc_plain and len(desc_plain) > len(raw.get("description_raw", "")):
+        raw["description_raw"] = desc_plain
+
+    # ── Commute times from masterPlan.description ──
+    master = detail.get("masterPlan") or {}
+    master_html = master.get("description") or ""
+    if master_html:
+        commute = _extract_commute_times(master_html)
+        if commute:
+            s["commute_times"] = commute
+        # Master plan image
+        if master.get("image"):
+            raw.setdefault("master_plan_image", master["image"])
+
+    # ── Better images from detail (objects with source/variants) ──
+    detail_images = detail.get("images") or []
+    detail_urls = []
+    for img in detail_images:
+        if isinstance(img, dict):
+            url = img.get("source") or img.get("url") or ""
+            if url:
+                detail_urls.append(url)
+        elif isinstance(img, str):
+            detail_urls.append(img)
+    if detail_urls:
+        raw["images_all"] = detail_urls
+        raw["image_main"] = detail_urls[0]
+
+    # ── Brochure URL ──
+    if detail.get("brochureUrl"):
+        raw["brochure_url"] = detail["brochureUrl"]
+
+    # ── FAQs (strip HTML from answers) ──
+    detail_faqs = detail.get("faqs") or []
+    clean_faqs = []
+    for faq in detail_faqs:
+        if isinstance(faq, dict):
+            q = _strip_html(faq.get("question") or "")
+            a = _strip_html(faq.get("answer") or "")
+            if q:
+                clean_faqs.append({"question": q, "answer": a})
+    if clean_faqs:
+        raw["scraped_faqs"] = clean_faqs
+
+    # ── Location tree — canonical area slug from PF ──
+    location_tree = detail.get("locationTree") or []
+    for node in location_tree:
+        if isinstance(node, dict) and node.get("type") == "COMMUNITY":
+            community_slug = node.get("slug") or ""
+            if community_slug:
+                s["area_slug"] = community_slug
+                break
+
+    # ── Update body_text with richer description ──
+    amenities = s.get("amenities") or []
+    commute_lines = "\n".join(s.get("commute_times") or [])
+    body_parts = [
+        f"Project: {s.get('name', '')}",
+        f"Developer: {s.get('developer_name', '')}",
+        f"Location: {s.get('geo_summary', '')}",
+        f"Price from: AED {s['price_from']:,}" if s.get("price_from") else "",
+        f"Delivery: {raw.get('_pf_delivery_date', '')}",
+        f"Payment plan: {s.get('payment_plan_summary', '')}",
+        f"Ownership: {ownership.title()}" if ownership else "",
+        "",
+        raw.get("description_raw", ""),
+        "",
+        f"Nearby:\n{commute_lines}" if commute_lines else "",
+        "",
+        f"Amenities: {', '.join(amenities)}" if amenities else "",
+    ]
+    raw["body_text"] = "\n".join(p for p in body_parts if p)
+
+
+# ── Detail-page helpers ─────────────────────────────────────────────────────────
+
+def _strip_html(html: str) -> str:
+    """Remove HTML tags and normalise whitespace."""
+    import html as html_module
+    text = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
+    text = re.sub(r"</(?:p|li|h[1-6]|div|tr)>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html_module.unescape(text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _extract_commute_times(html: str) -> list[str]:
+    """
+    Parse commute times from masterPlan description HTML.
+    PF uses list items like: "Downtown Dubai – ~7 min"
+    """
+    plain = _strip_html(html)
+    times = []
+    for line in plain.splitlines():
+        line = line.strip()
+        # Match lines that look like "Place – Xmin" or "Place — X min"
+        if re.search(r"\d+\s*min", line, re.IGNORECASE) and len(line) < 80:
+            times.append(line)
+    return times[:10]
+
+
+def _extract_floor_plans(units_raw: list) -> list[dict]:
+    """
+    Flatten PF's nested units structure into our floor_plans format.
+    PF: units[building].units[group].list[item] → {bedrooms, areaFrom, areaTo, bathroomsFrom}
+    """
+    plans = []
+    seen_beds = set()
+    for building in units_raw:
+        for group in (building.get("units") or []):
+            for item in (group.get("list") or []):
+                beds = item.get("bedrooms")
+                if beds is None:
+                    continue
+                beds = int(beds)
+                if beds in seen_beds:
+                    # Already have this bedroom count — update sqft range if wider
+                    for p in plans:
+                        if p["beds"] == beds:
+                            area_from = item.get("areaFrom") or 0
+                            area_to   = item.get("areaTo") or 0
+                            if area_from and area_from < (p["sqft_min"] or 9999):
+                                p["sqft_min"] = area_from
+                            if area_to and area_to > (p["sqft_max"] or 0):
+                                p["sqft_max"] = area_to
+                    continue
+                seen_beds.add(beds)
+                plans.append({
+                    "type":     "Studio" if beds == 0 else f"{beds}BR",
+                    "beds":     beds,
+                    "baths":    item.get("bathroomsFrom"),
+                    "sqft_min": item.get("areaFrom"),
+                    "sqft_max": item.get("areaTo"),
+                })
+    return sorted(plans, key=lambda p: p["beds"])
 
 
 # ── Incremental scan ────────────────────────────────────────────────────────────
@@ -413,6 +603,30 @@ def _make_slug(name: str) -> str:
     slug = re.sub(r"[^\w\s-]", "", slug)
     slug = re.sub(r"[\s_]+", "-", slug)
     return slug.strip("-")
+
+
+def _parse_pf_payment_plan(plans: list) -> list[dict]:
+    """
+    Convert PF's paymentPlans structure to our [{stage, percentage}] format.
+    PF: [{phases: [{label: "down_payment", value: 10}, ...], title: "Standard"}]
+    """
+    _LABELS = {
+        "down_payment":          "On Booking",
+        "during_construction":   "During Construction",
+        "handover":              "On Handover",
+        "post_handover":         "Post Handover",
+    }
+    if not plans:
+        return []
+    first = plans[0]
+    phases = first.get("phases") or []
+    result = []
+    for phase in phases:
+        label = _LABELS.get(phase.get("label", ""), phase.get("label", "").replace("_", " ").title())
+        value = phase.get("value")
+        if value is not None:
+            result.append({"stage": label, "percentage": value})
+    return result
 
 
 def _parse_year(date_str: str | None) -> int | None:

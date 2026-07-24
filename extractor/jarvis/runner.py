@@ -19,6 +19,7 @@ from .tools.storage import (
 )
 from .tools.pf_scraper import (
     scan_pf_new_projects, iter_pf_all_pages, pf_to_raw, compute_pf_created_at,
+    fetch_pf_detail, merge_pf_detail,
 )
 from .tools.dedup import check_duplicate
 from .tools.enricher import run_enrichment, test_area_scrape
@@ -696,6 +697,18 @@ async def run_pf_import(auto: bool = False) -> bool:
                 return "skip"  # already imported
 
             raw = pf_to_raw(pf_item)
+
+            # ── Fetch detail page: floor plans, commute times, full FAQs, etc. ──
+            share_url = pf_item.get("shareUrl") or ""
+            if share_url:
+                try:
+                    detail = await asyncio.get_event_loop().run_in_executor(
+                        None, fetch_pf_detail, share_url
+                    )
+                    if detail:
+                        merge_pf_detail(raw, detail)
+                except Exception as e:
+                    logger.warning(f"PF detail fetch failed for '{title}': {e} — continuing with listing data")
 
             # ── Three-tier dedup against all existing projects ──
             structured = raw.get("_pf_structured", {})
