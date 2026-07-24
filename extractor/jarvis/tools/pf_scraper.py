@@ -34,6 +34,14 @@ _HEADERS = {
 
 def _fetch_next_data(url: str) -> dict | None:
     """GET a PF page and extract the __NEXT_DATA__ JSON blob."""
+    # Encode non-ASCII characters in the URL path (e.g. accented slugs)
+    try:
+        from urllib.parse import quote
+        parts = url.split("propertyfinder.ae", 1)
+        if len(parts) == 2:
+            url = parts[0] + "propertyfinder.ae" + quote(parts[1], safe="/?=&%")
+    except Exception:
+        pass
     req = urllib.request.Request(url, headers=_HEADERS)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -157,8 +165,8 @@ def merge_pf_detail(raw: dict, detail: dict) -> None:
                     "Studio" if b == 0 else f"{b}BR" for b in sorted(set(beds))
                 ))
         # Backfill sqft
-        sqfts_min = [fp["sqft_min"] for fp in floor_plans if fp.get("sqft_min")]
-        sqfts_max = [fp["sqft_max"] for fp in floor_plans if fp.get("sqft_max")]
+        sqfts_min = [fp["sqft_min"] for fp in floor_plans if fp.get("sqft_min") and fp["sqft_min"] > 0]
+        sqfts_max = [fp["sqft_max"] for fp in floor_plans if fp.get("sqft_max") and fp["sqft_max"] > 0]
         if sqfts_min:
             s["size_sqft_min"] = min(sqfts_min)
         if sqfts_max:
@@ -311,12 +319,14 @@ def _extract_floor_plans(units_raw: list) -> list[dict]:
                                 p["sqft_max"] = area_to
                     continue
                 seen_beds.add(beds)
+                area_from = item.get("areaFrom") or 0
+                area_to   = item.get("areaTo") or 0
                 plans.append({
                     "type":     "Studio" if beds == 0 else f"{beds}BR",
                     "beds":     beds,
-                    "baths":    item.get("bathroomsFrom"),
-                    "sqft_min": item.get("areaFrom"),
-                    "sqft_max": item.get("areaTo"),
+                    "baths":    item.get("bathroomsFrom") or None,
+                    "sqft_min": area_from if area_from > 0 else None,
+                    "sqft_max": area_to if area_to > 0 else None,
                 })
     return sorted(plans, key=lambda p: p["beds"])
 
