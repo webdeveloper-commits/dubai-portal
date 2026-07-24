@@ -67,6 +67,21 @@ def get_existing_projects_index() -> list[dict]:
         return []
 
 
+def get_existing_pf_ids() -> set[str]:
+    """Return all known pf_id values for incremental PF scan dedup."""
+    try:
+        res = (
+            db().table("projects")
+            .select("pf_id")
+            .not_.is_("pf_id", "null")
+            .execute()
+        )
+        return {str(r["pf_id"]) for r in (res.data or []) if r.get("pf_id")}
+    except Exception as e:
+        logger.error(f"get_existing_pf_ids failed: {e}")
+        return set()
+
+
 def get_unindexed_projects() -> list[dict]:
     """Return published projects not yet submitted to Google."""
     try:
@@ -94,6 +109,10 @@ def publish_project(data: dict) -> str | None:
         if "opr_url" in payload:
             payload["data_source_url"] = payload.pop("opr_url")
             payload.setdefault("data_source", "opr.ae")
+        # pf_url → data_source_url
+        if "pf_url" in payload:
+            payload["data_source_url"] = payload.pop("pf_url")
+            payload.setdefault("data_source", "propertyfinder.ae")
         res = db().table("projects").insert(payload).execute()
         row_id = res.data[0]["id"] if res.data else None
         logger.info(f"Published project '{data.get('name')}' id={row_id}")

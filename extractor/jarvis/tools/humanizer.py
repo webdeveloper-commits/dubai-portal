@@ -224,6 +224,168 @@ def _generate_entity_seo(entity_type: str, name: str, extra_context: str = "") -
     return {}
 
 
+def _assemble_result(structured: dict, humanized: dict, raw: dict) -> dict:
+    """
+    Build the final dict ready for Supabase from extracted + humanized dicts.
+    Shared between opr.ae and PF paths.
+    """
+    name     = structured.get("name") or raw.get("name", "Unnamed Project")
+    slug     = _make_slug(name)
+    dev_name = structured.get("developer_name", "")
+
+    developer_slug = structured.get("developer_slug") or _make_slug(dev_name)
+    area_slug      = structured.get("area_slug") or _make_slug(structured.get("area_name", ""))
+    area_name      = structured.get("area_name", "")
+
+    area_nearby = (
+        raw.get("nearby_attractions_raw") or
+        structured.get("nearby_attractions") or []
+    )
+    area_seo = _generate_entity_seo(
+        "area",
+        area_name,
+        f"Emirate: {structured.get('emirate', 'Dubai')}\n"
+        f"Description: {raw.get('area_description', '')}\n"
+        f"Nearby landmarks: {', '.join(area_nearby[:5])}"
+    ) if area_name else {}
+
+    dev_seo = _generate_entity_seo(
+        "developer",
+        dev_name,
+        f"About: {structured.get('developer_about', '')}\n"
+        f"Projects in UAE: apartments, villas, mixed-use"
+    ) if dev_name else {}
+
+    return {
+        "slug":                  slug,
+        "name":                  name,
+        "tagline":               humanized.get("tagline", ""),
+        "geo_summary":           structured.get("geo_summary", ""),
+        "area_slug":             area_slug,
+        "developer_slug":        developer_slug,
+        "price_from":            int(structured.get("price_from") or 0),
+        "price_to":              structured.get("price_to"),
+        "handover_quarter":      structured.get("handover_quarter"),
+        "handover_year":         structured.get("handover_year"),
+        "bedroom_min":           structured.get("bedroom_min"),
+        "bedroom_max":           structured.get("bedroom_max"),
+        "bedroom_types":         structured.get("bedroom_types") or [],
+        "size_sqft_min":         structured.get("size_sqft_min"),
+        "size_sqft_max":         structured.get("size_sqft_max"),
+        "property_types":        structured.get("property_types") or [],
+        "lifestyle_tags":        structured.get("lifestyle_tags") or [],
+        "status":                structured.get("status") or "off_plan",
+        "amenities":             structured.get("amenities") or [],
+        "payment_plan_summary":  structured.get("payment_plan_summary"),
+        "payment_plan_detail":   structured.get("payment_plan_detail"),
+        "investment_potential":  structured.get("investment_potential") or [],
+        "floor_plans":           structured.get("floor_plans"),
+        "commute_times":         structured.get("commute_times") or [],
+        "latitude":              raw.get("latitude"),
+        "longitude":             raw.get("longitude"),
+        "description_short":     humanized.get("short", ""),
+        "description_long":      humanized.get("long", ""),
+        "seo_title":             humanized.get("seo_title", ""),
+        "seo_description":       humanized.get("seo_description", ""),
+        "seo_keywords":          humanized.get("seo_keywords") or [],
+        "aeo_faq":               humanized.get("aeo_faq") or [],
+        "whatsapp_share_text":   humanized.get("whatsapp_share_text", ""),
+        "opr_url":               raw.get("opr_url", ""),
+        "_developer": {
+            "name":           dev_name,
+            "slug":           developer_slug,
+            "intro_short":    structured.get("developer_about") or "",
+            "logo_url":       raw.get("developer_logo") or None,
+            **dev_seo,
+        },
+        "_area": {
+            "name":               area_name,
+            "slug":               area_slug,
+            "emirate":            structured.get("emirate", "Dubai"),
+            "description_short":  raw.get("area_description") or "",
+            "image_url":          raw.get("area_image"),
+            "cover_image_url":    raw.get("area_image"),
+            "nearby_attractions": raw.get("nearby_attractions_raw") or structured.get("nearby_attractions") or [],
+            "nearby_hospitals":   raw.get("nearby_hospitals_raw") or structured.get("nearby_hospitals") or [],
+            "nearby_schools":     raw.get("nearby_schools_raw") or structured.get("nearby_schools") or [],
+            **area_seo,
+        },
+    }
+
+
+async def parse_and_humanize_pf(raw: dict) -> dict | None:
+    """
+    PF variant of parse_and_humanize.
+    Skips the Claude extraction step — raw['_pf_structured'] has clean data already.
+    Only runs the humanization step (copy, SEO, FAQ).
+    """
+    structured = raw.get("_pf_structured")
+    if not structured:
+        logger.warning("parse_and_humanize_pf: no _pf_structured — falling back to full pipeline")
+        return await parse_and_humanize(raw)
+
+    name     = structured.get("name") or ""
+    dev_name = structured.get("developer_name", "")
+    location = structured.get("geo_summary", "")
+    handover = (
+        f"{structured.get('handover_quarter') or ''} "
+        f"{structured.get('handover_year') or ''}"
+    ).strip() or "TBA"
+    price    = f"AED {structured['price_from']:,}" if structured.get("price_from") else "Price on request"
+    bmin     = structured.get("bedroom_min")
+    bmax     = structured.get("bedroom_max")
+    bedrooms = f"{bmin}–{bmax} BR" if bmin and bmax else (f"{bmin} BR" if bmin else "Various")
+    payment  = structured.get("payment_plan_summary") or "Flexible"
+    slug     = _make_slug(name)
+
+    humanized: dict = {}
+    for attempt in range(3):
+        try:
+            resp = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=4000,
+                messages=[{
+                    "role": "user",
+                    "content": HUMANIZE_PROMPT.format(
+                        text=raw.get("description_raw", raw.get("body_text", ""))[:3000],
+                        name=name,
+                        developer=dev_name,
+                        location=location,
+                        price=price,
+                        handover=handover,
+                        bedrooms=bedrooms,
+                        status=structured.get("status", "off_plan"),
+                        payment_plan=payment,
+                        slug=slug,
+                        scraped_faqs=(
+                            json.dumps(raw.get("scraped_faqs", []), ensure_ascii=False)
+                            if raw.get("scraped_faqs")
+                            else "None — generate from project data"
+                        ),
+                    )
+                }],
+            )
+            text = _clean_json(resp.content[0].text)
+            humanized = json.loads(text)
+            break
+        except Exception as e:
+            logger.warning(f"PF humanize attempt {attempt + 1} failed: {e}")
+            if attempt == 2:
+                fallback = raw.get("description_raw", "")[:500]
+                humanized = {
+                    "tagline":            name,
+                    "short":              fallback[:120],
+                    "long":               fallback,
+                    "seo_title":          name[:60],
+                    "seo_description":    fallback[:155],
+                    "seo_keywords":       [],
+                    "aeo_faq":            [],
+                    "whatsapp_share_text": f"{name} by {dev_name}\n{location}\n{price}\ndubai-portal.vercel.app/projects/{slug}",
+                }
+
+    return _assemble_result(structured, humanized, raw)
+
+
 async def parse_and_humanize(raw: dict) -> dict | None:
     """
     Takes raw scraped dict, returns full structured + humanized dict ready for Supabase.

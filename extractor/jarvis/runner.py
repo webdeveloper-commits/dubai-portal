@@ -9,13 +9,18 @@ import logging
 import os
 import httpx
 from .tools.scraper import scan_new_projects, scrape_project_detail
-from .tools.humanizer import parse_and_humanize
+from .tools.humanizer import parse_and_humanize, parse_and_humanize_pf
 from .tools.images import upload_project_images
 from .tools.storage import (
     get_existing_slugs, publish_project,
     get_unindexed_projects, mark_google_indexed, log_error,
     upsert_developer, upsert_area,
+    get_existing_projects_index, get_existing_pf_ids,
 )
+from .tools.pf_scraper import (
+    scan_pf_new_projects, iter_pf_all_pages, pf_to_raw, compute_pf_created_at,
+)
+from .tools.dedup import check_duplicate
 from .tools.enricher import run_enrichment, test_area_scrape
 
 logger = logging.getLogger(__name__)
@@ -642,4 +647,211 @@ async def run_backfill(auto: bool = False) -> bool:
     except Exception as e:
         logger.error(f"run_backfill error: {e}")
         await notify(f"Backfill error: {e}")
+        return False
+
+
+# ── Property Finder bulk import ────────────────────────────────────────────────
+
+_PF_BATCH_SIZE = 30  # projects per IMPORT PF run
+
+
+async def run_pf_import(auto: bool = False) -> bool:
+    """
+    Bulk import Property Finder projects.
+    Paginates PF listing, applies three-tier dedup, humanizes + publishes.
+
+    Processes up to _PF_BATCH_SIZE per call — send IMPORT PF again for next batch.
+
+    Returns True when all pages have been scanned (no more new projects found).
+    """
+    global _active_task
+    _active_task = asyncio.current_task()
+
+    if not auto:
+        await notify(
+            f"JARVIS — Property Finder import started\n"
+            f"Will process up to {_PF_BATCH_SIZE} new projects per batch.\n"
+            f"Applying three-tier dedup against {len(get_existing_slugs())} existing projects.\n"
+            f"This will take 20–40 minutes per batch."
+        )
+
+    try:
+        existing_slugs   = get_existing_slugs()
+        existing_pf_ids  = get_existing_pf_ids()
+        existing_index   = get_existing_projects_index()
+
+        published:     list[dict] = []
+        skipped_exact: list[str]  = []   # Tier 1 — definite dups
+        near_matches:  list[str]  = []   # Tier 2 — phase variants, need user review
+        errors:        list[str]  = []
+        pages_scanned: int        = 0
+        all_done:      bool       = False
+
+        async def _process_pf_item(pf_item: dict) -> str:
+            """Process one PF project. Returns 'published', 'exact', 'near', 'skip', or 'error'."""
+            pf_id = str(pf_item.get("id") or pf_item.get("uuid") or "")
+            title = pf_item.get("title", "?")
+
+            if pf_id and pf_id in existing_pf_ids:
+                return "skip"  # already imported
+
+            raw = pf_to_raw(pf_item)
+
+            # ── Three-tier dedup against all existing projects ──
+            structured = raw.get("_pf_structured", {})
+            tier, match = check_duplicate(
+                name=structured.get("name", title),
+                developer_slug=structured.get("developer_slug", ""),
+                area_name=structured.get("area_name", ""),
+                existing_index=existing_index,
+            )
+            if tier == "exact":
+                logger.info(f"PF import: exact dup '{title}' — skipping")
+                return "exact"
+            if tier == "near":
+                db_name = (match or {}).get("name", "?")
+                logger.info(f"PF import: near match '{title}' ~ '{db_name}' — flagging for review")
+                return "near"
+
+            # ── Also slug-check in case the name mapping produces same slug ──
+            slug = structured.get("name", title).lower().strip()
+            import re as _re
+            slug = _re.sub(r"[^\w\s-]", "", slug)
+            slug = _re.sub(r"[\s_]+", "-", slug).strip("-")
+            if slug in existing_slugs:
+                return "exact"
+
+            # ── Humanize via Claude (skip extraction since data is structured) ──
+            parsed = await parse_and_humanize_pf(raw)
+            if not parsed:
+                return "error"
+
+            if parsed["slug"] in existing_slugs:
+                return "exact"
+
+            # ── Upsert developer and area ──
+            dev_data  = parsed.pop("_developer", {})
+            area_data = parsed.pop("_area", {})
+            dev_id  = upsert_developer(dev_data)
+            area_id = upsert_area(area_data)
+            if dev_id:
+                parsed["developer_id"] = dev_id
+            if area_id:
+                parsed["area_id"] = area_id
+
+            # ── Upload images to Cloudinary ──
+            main_cloud, gallery_cloud = await upload_project_images(
+                slug=parsed["slug"],
+                main_url=raw.get("image_main"),
+                gallery_urls=raw.get("images_all", []),
+                max_gallery=10,
+            )
+            parsed["image_main"] = main_cloud or (gallery_cloud[0] if gallery_cloud else None)
+            parsed["images_all"] = gallery_cloud
+
+            # ── Set pf_id and synthetic created_at ──
+            parsed["pf_id"]      = pf_id
+            parsed["created_at"] = compute_pf_created_at(raw)
+
+            # Publish (storage.py maps pf_url → data_source_url)
+            row_id = publish_project(parsed)
+            if row_id:
+                existing_slugs.add(parsed["slug"])
+                if pf_id:
+                    existing_pf_ids.add(pf_id)
+                existing_index.append({
+                    "name":           parsed["name"],
+                    "developer_slug": parsed["developer_slug"],
+                    "geo_summary":    parsed["geo_summary"],
+                })
+                return "published"
+            return "error"
+
+        # ── Paginate through PF until batch full or all pages done ──
+        processed = 0
+        for pf_item in iter_pf_all_pages(max_pages=130):
+            if processed >= _PF_BATCH_SIZE:
+                break
+
+            title = pf_item.get("title", "?")
+            pages_scanned += 1
+
+            try:
+                result = await _process_pf_item(pf_item)
+                processed += 1
+
+                if result == "published":
+                    name    = pf_item.get("title", "?")
+                    price   = pf_item.get("startingPrice")
+                    price_s = f"AED {price:,}" if price else "Price on request"
+                    published.append({"name": name, "price": price_s})
+                elif result == "exact":
+                    skipped_exact.append(title)
+                elif result == "near":
+                    near_matches.append(title)
+                elif result == "error":
+                    errors.append(title)
+
+                if processed % 10 == 0 and not auto:
+                    await notify(
+                        f"PF import progress: {processed} processed "
+                        f"({len(published)} published, {len(skipped_exact)} dups, "
+                        f"{len(near_matches)} near, {len(errors)} errors)"
+                    )
+
+                await asyncio.sleep(random.uniform(4, 8))
+
+            except asyncio.CancelledError:
+                await notify(
+                    f"PF import stopped by user.\n"
+                    f"Published: {len(published)}, dups: {len(skipped_exact)}, "
+                    f"near: {len(near_matches)}, errors: {len(errors)}"
+                )
+                raise
+            except Exception as e:
+                logger.error(f"PF import error for '{title}': {e}")
+                errors.append(title)
+
+        else:
+            all_done = True  # for-loop completed without break → no more pages
+
+        # ── Summary ──
+        lines = [f"Property Finder import batch complete\n"]
+        lines.append(f"Published:   {len(published)} new projects")
+        lines.append(f"Duplicates:  {len(skipped_exact)} (exact match, skipped)")
+        lines.append(f"Near-match:  {len(near_matches)} (possible phases — need your review)")
+        lines.append(f"Errors:      {len(errors)}")
+
+        if published:
+            lines.append("\nNewly published:")
+            for p in published[:15]:
+                lines.append(f"  • {p['name']} — {p['price']}")
+            if len(published) > 15:
+                lines.append(f"  ... and {len(published) - 15} more")
+
+        if near_matches:
+            lines.append(
+                f"\nNear-matches (skipped — same base name, different phase):\n"
+                + "\n".join(f"  ? {n}" for n in near_matches[:10])
+            )
+            lines.append("To publish any of these, use: ADD PROJECT [pf-url]")
+
+        if all_done:
+            lines.append("\nAll PF pages scanned — import complete!")
+        else:
+            lines.append(f"\nSend IMPORT PF again to process the next batch.")
+
+        if published:
+            lines.append("\nSend APPROVE ALL to submit new projects to Google.")
+
+        await notify("\n".join(lines))
+
+        await _revalidate_vercel()
+        return all_done
+
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.error(f"run_pf_import error: {e}")
+        await notify(f"PF import error: {e}")
         return False

@@ -55,7 +55,8 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "SET HANDPICKED [slug] — add to Handpicked for You\n"
         "REMOVE HANDPICKED [slug] — remove from Handpicked\n"
         "APPROVE ALL — submit all pending to Google\n"
-        "BACKFILL PROJECTS — run one backfill batch now\n"
+        "BACKFILL PROJECTS — run one opr.ae backfill batch now\n"
+        "IMPORT PF — import one batch from Property Finder (30 projects)\n"
         "RUN NOW — run Tuesday pipeline now\n"
         "STOP — stop current run"
     )
@@ -173,6 +174,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 "not yet in our DB.\nWill take 10–30 minutes depending on how many are missing."
             )
             asyncio.create_task(runner.run_backfill())
+            return
+
+        if upper in ("IMPORT PF", "RUN PF", "IMPORT PROPERTY FINDER", "PF IMPORT"):
+            if runner.is_running():
+                await update.message.reply_text("A run is already in progress. Send STOP to cancel it first.")
+                return
+            await update.message.reply_text(
+                "Starting Property Finder import...\n"
+                "Scanning PF listing pages, applying three-tier dedup, "
+                "humanizing + publishing new projects.\n"
+                "Will process up to 30 per batch — send IMPORT PF again for the next batch."
+            )
+            asyncio.create_task(runner.run_pf_import())
             return
 
         if upper.startswith("SET HANDPICKED"):
