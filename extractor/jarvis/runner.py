@@ -707,11 +707,14 @@ async def run_pf_import(auto: bool = False) -> bool:
             share_url = pf_item.get("shareUrl") or ""
             if share_url:
                 try:
-                    detail = await asyncio.get_event_loop().run_in_executor(
-                        None, fetch_pf_detail, share_url
+                    detail = await asyncio.wait_for(
+                        asyncio.get_event_loop().run_in_executor(None, fetch_pf_detail, share_url),
+                        timeout=60,
                     )
                     if detail:
                         merge_pf_detail(raw, detail)
+                except asyncio.TimeoutError:
+                    logger.warning(f"PF detail fetch timed out (60s) for '{title}' — continuing with listing data")
                 except Exception as e:
                     logger.warning(f"PF detail fetch failed for '{title}': {e} — continuing with listing data")
 
