@@ -592,6 +592,10 @@ async def run_backfill(auto: bool = False) -> bool:
                 parsed["images_all"]   = gallery_cloud
                 parsed["brochure_url"] = stub.get("brochure_url") or ""
 
+                # Save opr_id so backfill projects get correct ordering
+                if stub.get("opr_id"):
+                    parsed["opr_id"] = stub["opr_id"]
+
                 row_id = publish_project(parsed)
                 if row_id:
                     published.append({
