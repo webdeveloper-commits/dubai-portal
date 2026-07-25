@@ -272,7 +272,17 @@ async def _scheduled_backfill():
         logger.info("Auto-backfill skipped — a run is already active")
         return
     logger.info("Auto-backfill starting...")
-    all_done = await runner.run_backfill(auto=True)
+    try:
+        all_done = await asyncio.wait_for(runner.run_backfill(auto=True), timeout=90 * 60)
+    except asyncio.TimeoutError:
+        logger.error("Auto-backfill hit 90-minute safety timeout — stopping and resetting for next cycle")
+        runner.stop_run()
+        await notify(
+            "Auto-backfill timed out (90 min limit).\n"
+            "A page scrape likely hung — the job has been reset.\n"
+            "Next auto-backfill slot will start fresh."
+        )
+        return
     if all_done and _backfill_job:
         _backfill_job.remove()
         _backfill_job = None

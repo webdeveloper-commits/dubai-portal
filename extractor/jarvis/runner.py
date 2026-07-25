@@ -551,7 +551,12 @@ async def run_backfill(auto: bool = False) -> bool:
         for i, stub in enumerate(stubs):
             name = stub.get("name", stub["slug"])
             try:
-                raw = await scrape_project_detail(stub["url"])
+                try:
+                    raw = await asyncio.wait_for(scrape_project_detail(stub["url"]), timeout=120)
+                except asyncio.TimeoutError:
+                    logger.error(f"Scrape timed out (120s) for '{name}' — skipping")
+                    errors.append(name)
+                    continue
                 if not raw:
                     errors.append(name)
                     continue
