@@ -23,8 +23,25 @@ from .tools.pf_scraper import (
 )
 from .tools.dedup import check_duplicate
 from .tools.enricher import run_enrichment, test_area_scrape
+from datetime import datetime, timezone, timedelta
 
 logger = logging.getLogger(__name__)
+
+# Known anchor points from the corrected opr.ae ordering backfill
+_OPR_ID_MIN  = 7436
+_OPR_ID_MAX  = 8004
+_OPR_DATE_MIN = datetime(2023, 9, 2,  tzinfo=timezone.utc)
+_OPR_DATE_MAX = datetime(2026, 1, 26, tzinfo=timezone.utc)
+_OPR_SLOPE = (_OPR_DATE_MAX - _OPR_DATE_MIN).total_seconds() / (_OPR_ID_MAX - _OPR_ID_MIN)
+
+
+def _compute_opr_created_at(opr_id: int) -> str:
+    """Return an ISO timestamp for an OPR project based on its opr_id,
+    so projects slot into the correct position instead of defaulting to NOW()."""
+    delta_secs = (opr_id - _OPR_ID_MIN) * _OPR_SLOPE
+    dt = _OPR_DATE_MIN + timedelta(seconds=delta_secs)
+    dt = min(dt, datetime.now(timezone.utc))  # never in the future
+    return dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
 # Notify function is injected at startup to avoid circular imports
 _notify = None
@@ -592,9 +609,12 @@ async def run_backfill(auto: bool = False) -> bool:
                 parsed["images_all"]   = gallery_cloud
                 parsed["brochure_url"] = stub.get("brochure_url") or ""
 
-                # Save opr_id so backfill projects get correct ordering
+                # Save opr_id and compute created_at from it so backfill
+                # projects slot into the correct position in the timeline
+                # instead of defaulting to NOW() and floating to the top.
                 if stub.get("opr_id"):
                     parsed["opr_id"] = stub["opr_id"]
+                    parsed["created_at"] = _compute_opr_created_at(stub["opr_id"])
 
                 row_id = publish_project(parsed)
                 if row_id:
