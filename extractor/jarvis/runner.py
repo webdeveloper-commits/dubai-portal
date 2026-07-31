@@ -717,7 +717,7 @@ async def run_pf_import(auto: bool = False) -> bool:
         pages_scanned: int        = 0
         all_done:      bool       = False
 
-        async def _process_pf_item(pf_item: dict, page_num: int = 1) -> str:
+        async def _process_pf_item(pf_item: dict, page_num: int = 1, item_index: int = 0) -> str:
             """Process one PF project. Returns 'published', 'exact', 'near', 'skip', or 'error'."""
             pf_id = str(pf_item.get("id") or pf_item.get("uuid") or "")
             title = pf_item.get("title", "?")
@@ -796,7 +796,7 @@ async def run_pf_import(auto: bool = False) -> bool:
 
             # ── Set pf_id and page-based created_at ──
             parsed["pf_id"]      = pf_id
-            parsed["created_at"] = compute_pf_created_at(raw, page=page_num, max_pages=130)
+            parsed["created_at"] = compute_pf_created_at(raw, page=page_num, item_index=item_index, max_pages=130)
 
             # Publish (storage.py maps pf_url → data_source_url)
             row_id = publish_project(parsed)
@@ -814,7 +814,7 @@ async def run_pf_import(auto: bool = False) -> bool:
 
         # ── Paginate through PF until batch full or all pages done ──
         processed = 0
-        for pf_item, page_num in iter_pf_all_pages(max_pages=130):
+        for pf_item, page_num, item_index in iter_pf_all_pages(max_pages=130):
             if processed >= _PF_BATCH_SIZE:
                 break
 
@@ -822,7 +822,7 @@ async def run_pf_import(auto: bool = False) -> bool:
             pages_scanned += 1
 
             try:
-                result = await _process_pf_item(pf_item, page_num)
+                result = await _process_pf_item(pf_item, page_num, item_index)
                 processed += 1
 
                 if result == "published":

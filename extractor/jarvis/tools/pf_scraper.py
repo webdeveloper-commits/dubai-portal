@@ -374,8 +374,9 @@ def scan_pf_new_projects(existing_pf_ids: set[str], max_new: int = 20) -> list[d
 
 def iter_pf_all_pages(max_pages: int = 130, delay: float = 0.6):
     """
-    Generator: yield (project_dict, page_number) tuples across all listing pages.
-    PF is sorted most-recent first, so page number is used to compute created_at.
+    Generator: yield (project_dict, page_number, item_index) tuples across all listing pages.
+    PF is sorted most-recent first; item_index is 0-based position within the page.
+    Both values feed compute_pf_created_at so every project gets a unique timestamp.
     """
     for page in range(1, max_pages + 1):
         projects = fetch_pf_listing_page(page, sort="mr")
@@ -383,8 +384,8 @@ def iter_pf_all_pages(max_pages: int = 130, delay: float = 0.6):
             logger.info(f"PF bulk iter: empty page {page} — done")
             break
         logger.info(f"PF bulk iter: page {page} — {len(projects)} projects")
-        for project in projects:
-            yield project, page
+        for idx, project in enumerate(projects):
+            yield project, page, idx
         time.sleep(delay)
 
 
@@ -576,35 +577,45 @@ def pf_to_raw(pf_item: dict) -> dict:
     }
 
 
-def compute_pf_created_at(pf_raw: dict, page: int = 1, max_pages: int = 130) -> str:
+_PF_ITEMS_PER_PAGE = 28  # PF shows 28 projects per listing page
+
+
+def compute_pf_created_at(
+    pf_raw: dict,
+    page: int = 1,
+    item_index: int = 0,
+    max_pages: int = 130,
+    items_per_page: int = _PF_ITEMS_PER_PAGE,
+) -> str:
     """
     Return a synthetic ISO created_at for display ordering.
 
     Priority:
     1. salesStartDate — exact date PF says the project went on sale (rare but accurate).
-       If recent, the project IS new and should appear near the top.
-    2. Page-based interpolation — PF listing is sorted most-recent first (sort=mr),
-       so page number is a reliable recency proxy:
-         page 1  → today       (newest projects on PF)
-         page 130 → 3 years ago (oldest projects on PF)
+    2. Position-based interpolation — PF is sorted most-recent first (sort=mr).
+       Both page AND item_index within the page are used so every project gets a
+       unique timestamp that matches PF's exact order:
+         page 1, index 0  → today          (first project on PF)
+         page 130, index 27 → 3 years ago  (last project on PF)
     """
     now   = datetime.now(timezone.utc)
     floor = now - timedelta(days=365 * 5)
 
-    # Priority 1: salesStartDate — use directly, no artificial cap
+    # Priority 1: salesStartDate
     sales_start = pf_raw.get("_pf_sales_start")
     if sales_start:
         try:
             dt = datetime.fromisoformat(str(sales_start).replace("Z", "+00:00"))
-            dt = min(dt, now)    # never future
-            dt = max(dt, floor)  # never older than 5 years
+            dt = min(dt, now)
+            dt = max(dt, floor)
             return dt.isoformat()
         except Exception:
             pass
 
-    # Priority 2: interpolate from page number
-    # page 1 = 0 days back (today), page max_pages = 3 years back
-    days_back = (page - 1) / max(max_pages - 1, 1) * (3 * 365)
+    # Priority 2: position within the full listing (page + item slot)
+    total_slots = (max_pages - 1) * items_per_page + (items_per_page - 1)
+    position    = (page - 1) * items_per_page + item_index
+    days_back   = position / max(total_slots, 1) * (3 * 365)
     dt = now - timedelta(days=days_back)
     dt = max(dt, floor)
     return dt.isoformat()
