@@ -584,26 +584,20 @@ def compute_pf_created_at(pf_raw: dict) -> str:
     now   = datetime.now(timezone.utc)
     floor = now - timedelta(days=365 * 5)
 
-    # PF deliveries are typically 3-5 years out. Subtracting 4 years gives
-    # a reasonable proxy for launch date. Cap at 6 months ago so bulk-imported
-    # projects never float to the top of the listing.
-    cap = now - timedelta(days=180)
-
-    for field, offset_days in [("_pf_sales_start", 0), ("_pf_delivery_date", 4 * 365)]:
-        raw_date = pf_raw.get(field)
-        if not raw_date:
-            continue
+    # Bulk PF imports should never compete with fresh weekly discoveries.
+    # Use salesStartDate if available (rare but accurate).
+    # Otherwise default to 2 years ago so the project sits below new finds.
+    sales_start = pf_raw.get("_pf_sales_start")
+    if sales_start:
         try:
-            dt = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
-            dt = dt - timedelta(days=offset_days)
-            dt = min(dt, cap)   # never appear as recent
-            if dt < floor:
-                dt = floor
+            dt = datetime.fromisoformat(str(sales_start).replace("Z", "+00:00"))
+            dt = min(dt, now - timedelta(days=180))  # cap: never appear as recent
+            dt = max(dt, floor)
             return dt.isoformat()
         except Exception:
-            continue
+            pass
 
-    return (now - timedelta(days=2 * 365)).isoformat()  # fallback: 2 years ago
+    return (now - timedelta(days=2 * 365)).isoformat()
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
