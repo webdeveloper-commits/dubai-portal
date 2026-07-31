@@ -374,8 +374,8 @@ def scan_pf_new_projects(existing_pf_ids: set[str], max_new: int = 20) -> list[d
 
 def iter_pf_all_pages(max_pages: int = 130, delay: float = 0.6):
     """
-    Generator: yield each PF project dict across all listing pages.
-    Use for the one-time bulk import.
+    Generator: yield (project_dict, page_number) tuples across all listing pages.
+    PF is sorted most-recent first, so page number is used to compute created_at.
     """
     for page in range(1, max_pages + 1):
         projects = fetch_pf_listing_page(page, sort="mr")
@@ -383,7 +383,8 @@ def iter_pf_all_pages(max_pages: int = 130, delay: float = 0.6):
             logger.info(f"PF bulk iter: empty page {page} — done")
             break
         logger.info(f"PF bulk iter: page {page} — {len(projects)} projects")
-        yield from projects
+        for project in projects:
+            yield project, page
         time.sleep(delay)
 
 
@@ -575,29 +576,38 @@ def pf_to_raw(pf_item: dict) -> dict:
     }
 
 
-def compute_pf_created_at(pf_raw: dict) -> str:
+def compute_pf_created_at(pf_raw: dict, page: int = 1, max_pages: int = 130) -> str:
     """
-    Return a synthetic ISO created_at string for ordering:
-    salesStartDate → deliveryDate−18months → now
-    Capped at now(), floored at 5 years ago.
+    Return a synthetic ISO created_at for display ordering.
+
+    Priority:
+    1. salesStartDate — exact date PF says the project went on sale (rare but accurate).
+       If recent, the project IS new and should appear near the top.
+    2. Page-based interpolation — PF listing is sorted most-recent first (sort=mr),
+       so page number is a reliable recency proxy:
+         page 1  → today       (newest projects on PF)
+         page 130 → 3 years ago (oldest projects on PF)
     """
     now   = datetime.now(timezone.utc)
     floor = now - timedelta(days=365 * 5)
 
-    # Bulk PF imports should never compete with fresh weekly discoveries.
-    # Use salesStartDate if available (rare but accurate).
-    # Otherwise default to 2 years ago so the project sits below new finds.
+    # Priority 1: salesStartDate — use directly, no artificial cap
     sales_start = pf_raw.get("_pf_sales_start")
     if sales_start:
         try:
             dt = datetime.fromisoformat(str(sales_start).replace("Z", "+00:00"))
-            dt = min(dt, now - timedelta(days=180))  # cap: never appear as recent
-            dt = max(dt, floor)
+            dt = min(dt, now)    # never future
+            dt = max(dt, floor)  # never older than 5 years
             return dt.isoformat()
         except Exception:
             pass
 
-    return (now - timedelta(days=2 * 365)).isoformat()
+    # Priority 2: interpolate from page number
+    # page 1 = 0 days back (today), page max_pages = 3 years back
+    days_back = (page - 1) / max(max_pages - 1, 1) * (3 * 365)
+    dt = now - timedelta(days=days_back)
+    dt = max(dt, floor)
+    return dt.isoformat()
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
