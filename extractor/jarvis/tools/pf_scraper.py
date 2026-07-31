@@ -584,22 +584,26 @@ def compute_pf_created_at(pf_raw: dict) -> str:
     now   = datetime.now(timezone.utc)
     floor = now - timedelta(days=365 * 5)
 
-    for field, offset_days in [("_pf_sales_start", 0), ("_pf_delivery_date", 548)]:
+    # PF deliveries are typically 3-5 years out. Subtracting 4 years gives
+    # a reasonable proxy for launch date. Cap at 6 months ago so bulk-imported
+    # projects never float to the top of the listing.
+    cap = now - timedelta(days=180)
+
+    for field, offset_days in [("_pf_sales_start", 0), ("_pf_delivery_date", 4 * 365)]:
         raw_date = pf_raw.get(field)
         if not raw_date:
             continue
         try:
             dt = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
             dt = dt - timedelta(days=offset_days)
-            if dt > now:
-                dt = now - timedelta(hours=1)
+            dt = min(dt, cap)   # never appear as recent
             if dt < floor:
                 dt = floor
             return dt.isoformat()
         except Exception:
             continue
 
-    return (now - timedelta(hours=1)).isoformat()
+    return (now - timedelta(days=2 * 365)).isoformat()  # fallback: 2 years ago
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
