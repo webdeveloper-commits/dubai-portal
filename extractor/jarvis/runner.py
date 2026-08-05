@@ -609,15 +609,12 @@ async def run_backfill(auto: bool = False) -> bool:
                 parsed["images_all"]   = gallery_cloud
                 parsed["brochure_url"] = stub.get("brochure_url") or ""
 
-                # Save opr_id. For projects within the known historical range
-                # (opr_id ≤ _OPR_ID_MAX), slot them into the correct position
-                # so they don't float to the top past genuinely new projects.
-                # Projects with higher opr_ids are new launches — leave created_at
-                # unset so Supabase defaults to NOW() and they appear first.
+                # Save opr_id for reference. Never set created_at here —
+                # any project discovered by the scraper is new to our site
+                # and should show first. Historical ordering was a one-time
+                # fix applied via backfill_created_at.py.
                 if stub.get("opr_id"):
                     parsed["opr_id"] = stub["opr_id"]
-                    if stub["opr_id"] <= _OPR_ID_MAX:
-                        parsed["created_at"] = _compute_opr_created_at(stub["opr_id"])
 
                 row_id = publish_project(parsed)
                 if row_id:
