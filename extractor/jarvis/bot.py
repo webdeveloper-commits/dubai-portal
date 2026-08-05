@@ -293,9 +293,43 @@ async def _scheduled_backfill():
         )
 
 
+async def _fix_misplaced_opr_projects() -> None:
+    """
+    On startup: find any OPR project whose opr_id is beyond the historical
+    backfill range but was given an old created_at (bug: run_backfill used to
+    call _compute_opr_created_at for all projects, including new ones).
+    Reset their created_at to NOW() so they appear at the top of the listing.
+    """
+    from .tools.storage import db as get_db
+    from .runner import _OPR_ID_MAX
+    from datetime import datetime, timezone, timedelta
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    try:
+        res = get_db().table("projects") \
+            .select("id, name, opr_id, created_at") \
+            .gt("opr_id", _OPR_ID_MAX) \
+            .lt("created_at", cutoff) \
+            .execute()
+        affected = res.data or []
+        for p in affected:
+            get_db().table("projects") \
+                .update({"created_at": datetime.now(timezone.utc).isoformat()}) \
+                .eq("id", p["id"]) \
+                .execute()
+            logger.info(f"Auto-fixed created_at for new OPR project: {p['name']} (opr_id {p['opr_id']})")
+        if affected:
+            logger.info(f"Startup fix: corrected {len(affected)} misplaced OPR project(s)")
+    except Exception as e:
+        logger.warning(f"Startup created_at fix failed (non-fatal): {e}")
+
+
 async def _post_init(app: Application) -> None:
     """Start the scheduler after the event loop is running."""
     global _backfill_job
+
+    await _fix_misplaced_opr_projects()
+
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(
         _scheduled_tuesday,
