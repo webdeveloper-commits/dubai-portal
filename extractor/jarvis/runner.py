@@ -609,12 +609,14 @@ async def run_backfill(auto: bool = False) -> bool:
                 parsed["images_all"]   = gallery_cloud
                 parsed["brochure_url"] = stub.get("brochure_url") or ""
 
-                # Save opr_id for reference. Never set created_at here —
-                # any project discovered by the scraper is new to our site
-                # and should show first. Historical ordering was a one-time
-                # fix applied via backfill_created_at.py.
+                # Save opr_id. Historical projects (opr_id ≤ _OPR_ID_MAX) get a
+                # synthetic created_at so they slot into the correct timeline
+                # position and don't float above genuinely new projects.
+                # New projects (opr_id > _OPR_ID_MAX) default to NOW().
                 if stub.get("opr_id"):
                     parsed["opr_id"] = stub["opr_id"]
+                    if stub["opr_id"] <= _OPR_ID_MAX:
+                        parsed["created_at"] = _compute_opr_created_at(stub["opr_id"])
 
                 row_id = publish_project(parsed)
                 if row_id:

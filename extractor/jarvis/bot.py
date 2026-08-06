@@ -326,8 +326,6 @@ async def _fix_misplaced_opr_projects() -> None:
 
 async def _post_init(app: Application) -> None:
     """Start the scheduler after the event loop is running."""
-    global _backfill_job
-
     await _fix_misplaced_opr_projects()
 
     scheduler = AsyncIOScheduler(timezone="UTC")
@@ -335,13 +333,10 @@ async def _post_init(app: Application) -> None:
         _scheduled_tuesday,
         CronTrigger(day_of_week="tue,fri", hour=RUN_HOUR_UTC, minute=0),
     )
-    # Auto-backfill at 07:00, 15:00, 23:00 UTC (clear of the 05:00 Tuesday run)
-    _backfill_job = scheduler.add_job(
-        _scheduled_backfill,
-        CronTrigger(hour="7,15,23", minute=0),
-    )
+    # Auto-backfill disabled — DB is fully caught up.
+    # Trigger manually via "BACKFILL PROJECTS" in Telegram if needed.
     scheduler.start()
-    logger.info(f"Scheduler started — Tuesday/Friday at {RUN_HOUR_UTC}:00 UTC, backfill at 07:00/15:00/23:00 UTC")
+    logger.info(f"Scheduler started — Tuesday/Friday at {RUN_HOUR_UTC}:00 UTC")
 
 
 def run() -> None:
