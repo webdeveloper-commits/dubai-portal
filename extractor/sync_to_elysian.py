@@ -118,6 +118,9 @@ def sync_project(p: dict) -> dict:
     types_list = p.get("property_types") or []
     prop_type_str = ",".join(t.title() for t in types_list) if types_list else None
 
+    amenities_list = p.get("amenities") or []
+    amenities_str  = ",".join(str(a) for a in amenities_list) if amenities_list else None
+
     payload = {
         "opr_id":            p["opr_id"],
         "name":              p["name"],
@@ -130,9 +133,10 @@ def sync_project(p: dict) -> dict:
         "price_from":        format_price(p.get("price_from")),
         "bedrooms":          format_bedrooms(p.get("bedroom_min"), p.get("bedroom_max")),
         "image_main":        p.get("image_main"),
+        "og_image":          p.get("image_main"),
         "gallery":           format_gallery(p.get("images_all")),
         "handover":          format_handover(p.get("handover_quarter"), p.get("handover_year")),
-        "content":           p.get("seo_description") or p.get("description"),
+        "content":           p.get("seo_description"),
         "header_heading":    build_header_heading(p),
         "header_subheading": f"Luxury living in {geo}" if geo else None,
         "meta_title":        p.get("seo_title") or p["name"],
@@ -140,6 +144,7 @@ def sync_project(p: dict) -> dict:
         "focus_keyword":     f"{p['name']} {extract_area_name(geo)}".strip(),
         "schema_faq":        format_faq_schema(p.get("aeo_faq")),
         "payment_plan":      p.get("payment_plan_summary"),
+        "amenities":         amenities_str,
         "units":             str(p["total_units"]) if p.get("total_units") else None,
         "size":              (
             f"{p['size_sqft_min']:,}-{p['size_sqft_max']:,} sqft"
@@ -166,7 +171,7 @@ def main():
             "opr_id, name, slug, developer_slug, geo_summary, property_types, "
             "price_from, bedroom_min, bedroom_max, image_main, images_all, "
             "handover_quarter, handover_year, seo_description, seo_title, "
-            "aeo_faq, payment_plan_summary, total_units, size_sqft_min, size_sqft_max"
+            "aeo_faq, payment_plan_summary, amenities, total_units, size_sqft_min, size_sqft_max"
         ) \
         .gt("opr_id", OPR_ID_CUTOFF) \
         .not_.is_("opr_id", "null") \
