@@ -159,7 +159,11 @@ def sync_project(p: dict) -> dict:
         headers={"X-Sync-Secret": ELYSIAN_SYNC_SECRET},
         timeout=30,
     )
-    return {"status_code": resp.status_code, "body": resp.json()}
+    try:
+        body = resp.json()
+    except Exception:
+        body = {"_raw": resp.text[:500]}
+    return {"status_code": resp.status_code, "body": body}
 
 
 def main():
