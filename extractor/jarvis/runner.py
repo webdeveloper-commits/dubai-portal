@@ -221,7 +221,7 @@ def _build_project_summary(published: list, errors: list, skipped: list) -> str:
         for i, p in enumerate(published, 1):
             price = f"AED {p['price']:,}" if p["price"] else "Price on request"
             lines.append(f"  {i}. {p['name']} — {price}")
-            lines.append(f"     dubai-portal.vercel.app/projects/{p['slug']}")
+            lines.append(f"     offplansearchuae.com/projects/{p['slug']}")
 
     if skipped:
         lines.append(f"\nSkipped {len(skipped)} duplicates: {', '.join(skipped)}")
@@ -288,7 +288,7 @@ async def _ping_google(projects: list[dict]) -> bool:
     # TODO: implement Google Indexing API OAuth flow
     # For now, log the URLs that would be submitted
     for p in projects:
-        logger.info(f"[GOOGLE INDEX] Would ping: dubai-portal.vercel.app/projects/{p['slug']}")
+        logger.info(f"[GOOGLE INDEX] Would ping: offplansearchuae.com/projects/{p['slug']}")
     return True  # Return True so indexing flag is set
 
 
@@ -323,7 +323,7 @@ async def run_set_featured(slug: str):
             await notify(
                 f"Featured project updated!\n\n"
                 f"{name}\n"
-                f"dubai-portal.vercel.app/projects/{slug}\n\n"
+                f"offplansearchuae.com/projects/{slug}\n\n"
                 f"This project will now appear in the home page popup and Featured carousel."
             )
         else:
@@ -348,7 +348,7 @@ async def run_set_handpicked(slug: str, state: bool = True):
             await notify(
                 f"Project {action} Handpicked for You!\n\n"
                 f"{name}\n"
-                f"dubai-portal.vercel.app/projects/{slug}"
+                f"offplansearchuae.com/projects/{slug}"
             )
         else:
             await notify(f"Project '{slug}' not found. Check the slug and try again.")
@@ -360,7 +360,7 @@ async def run_set_handpicked(slug: str, state: bool = True):
 async def run_get_project(slug_or_url: str):
     """
     Fetch and display project details from the database by slug or portal URL.
-    Triggered by: GET PROJECT [slug or dubai-portal.vercel.app/projects/slug]
+    Triggered by: GET PROJECT [slug or offplansearchuae.com/projects/slug]
     """
     try:
         from .tools.storage import db
@@ -407,7 +407,7 @@ async def run_get_project(slug_or_url: str):
             f"FAQ entries: {faqs}",
             f"Flags: {', '.join(flags) if flags else 'None'}",
             f"Source: {p.get('data_source_url', 'N/A')}",
-            f"URL: dubai-portal.vercel.app/projects/{slug}",
+            f"URL: offplansearchuae.com/projects/{slug}",
         ]
         await notify("\n".join(lines))
     except Exception as e:
@@ -499,7 +499,7 @@ async def run_add_project(url: str):
             f"Project added successfully!\n\n"
             f"{parsed['name']}\n"
             f"{price}\n"
-            f"dubai-portal.vercel.app/projects/{parsed['slug']}\n\n"
+            f"offplansearchuae.com/projects/{parsed['slug']}\n\n"
             f"Reply APPROVE ALL to submit to Google."
         )
 
@@ -658,7 +658,7 @@ async def run_backfill(auto: bool = False) -> bool:
             for p in published:
                 price = f"AED {p['price']:,}" if p["price"] else "Price on request"
                 lines.append(f"  • {p['name']} — {price}")
-                lines.append(f"    dubai-portal.vercel.app/projects/{p['slug']}")
+                lines.append(f"    offplansearchuae.com/projects/{p['slug']}")
         if not auto:
             lines.append("\nSend BACKFILL PROJECTS again to process the next batch.")
             if published:
