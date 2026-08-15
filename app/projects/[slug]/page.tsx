@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       ? [data.seo_keywords as string]
       : undefined;
   const imageUrl = data.image_main as string | null;
-  const pageUrl  = `https://dubai-portal.vercel.app/projects/${slug}`;
+  const pageUrl  = `https://offplansearchuae.com/projects/${slug}`;
 
   return {
     title,
@@ -96,7 +96,7 @@ export default async function ProjectDetailPage({ params }: Props) {
     },
     ...(lat && lon ? { geo: { "@type": "GeoCoordinates", latitude: lat, longitude: lon } } : {}),
     ...(data.price_from ? { offers: { "@type": "Offer", priceCurrency: "AED", price: data.price_from, availability: "https://schema.org/PreOrder" } } : {}),
-    url: `https://dubai-portal.vercel.app/projects/${slug}`,
+    url: `https://offplansearchuae.com/projects/${slug}`,
   }) : null;
 
   // ── BreadcrumbList schema ─────────────────────────────────────────────────
@@ -104,9 +104,9 @@ export default async function ProjectDetailPage({ params }: Props) {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home",     item: "https://dubai-portal.vercel.app" },
-      { "@type": "ListItem", position: 2, name: "Projects", item: "https://dubai-portal.vercel.app/projects" },
-      { "@type": "ListItem", position: 3, name: data?.name ?? slug, item: `https://dubai-portal.vercel.app/projects/${slug}` },
+      { "@type": "ListItem", position: 1, name: "Home",     item: "https://offplansearchuae.com" },
+      { "@type": "ListItem", position: 2, name: "Projects", item: "https://offplansearchuae.com/projects" },
+      { "@type": "ListItem", position: 3, name: data?.name ?? slug, item: `https://offplansearchuae.com/projects/${slug}` },
     ],
   });
 
