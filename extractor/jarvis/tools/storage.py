@@ -1,11 +1,40 @@
 """
 Supabase read/write helpers for JARVIS.
 """
+import re
 import logging
 from supabase import create_client, Client
 from ..config import SUPABASE_URL, SUPABASE_KEY
 
 logger = logging.getLogger(__name__)
+
+# ── JV / variant developer name normalisation ──────────────────────────────────
+# Matches names like "A & B", "A x B", "A, B & C", "A/B", "BRAND (Parent)"
+_JV_SEP  = re.compile(r'\s+(?:&|x)\s+|\s*,\s+', re.I)
+_JV_SLASH = re.compile(r'(?<=[A-Za-z])/(?=[A-Z])')
+_JV_PAREN = re.compile(r'\s*\([^)]+\)\s*$')
+# Legal-entity suffixes in parens that are NOT a parent company
+_LEGAL_PAREN = re.compile(
+    r'\s*\((?:FZ-?LLC|FZCO|LLC|Ltd\.?|Limited|PJSC|Pvt\.?|Inc\.?|Co\.?)\)\s*$', re.I
+)
+
+
+def _is_jv_name(name: str) -> bool:
+    if _JV_SEP.search(name):   return True
+    if _JV_SLASH.search(name): return True
+    if _JV_PAREN.search(name) and not _LEGAL_PAREN.search(name): return True
+    return False
+
+
+def _primary_dev_name(name: str) -> str:
+    """Strip JV partners and parent-company parentheticals — keep just the primary brand."""
+    clean = _JV_PAREN.sub('', name).strip()
+    m = _JV_SEP.search(clean) or _JV_SLASH.search(clean)
+    return clean[:m.start()].strip() if m else clean
+
+
+def _make_dev_slug(name: str) -> str:
+    return re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
 
 _client: Client | None = None
 
@@ -128,8 +157,27 @@ def upsert_developer(data: dict) -> str | None:
     """
     Find existing developer by slug or create new one.
     Returns the developer id, or None on failure.
+
+    Joint-venture names ("A & B", "A x B", "BRAND (Parent)") are automatically
+    reduced to the primary company so we never create a JV developer record.
     """
-    slug = data.get("slug", "").strip()
+    name = (data.get("name") or "").strip()
+    slug = (data.get("slug") or "").strip()
+
+    # Normalise JV names to their primary company
+    if name and _is_jv_name(name):
+        primary = _primary_dev_name(name)
+        primary_slug = _make_dev_slug(primary)
+        logger.info(f"JV developer '{name}' → normalised to '{primary}' (slug={primary_slug})")
+        data = {**data, "name": primary, "slug": primary_slug}
+        slug = primary_slug
+    elif slug and _is_jv_name(slug.replace('-', ' ')):
+        # Slug-only path: also normalise
+        primary_slug = _make_dev_slug(_primary_dev_name(slug.replace('-', ' ')))
+        logger.info(f"JV slug '{slug}' → normalised to '{primary_slug}'")
+        data = {**data, "slug": primary_slug}
+        slug = primary_slug
+
     if not slug:
         return None
     try:

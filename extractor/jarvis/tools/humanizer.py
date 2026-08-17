@@ -5,6 +5,7 @@ Uses Claude to:
 """
 import json
 import re
+import unicodedata
 import logging
 import anthropic
 from ..config import ANTHROPIC_KEY
@@ -49,10 +50,33 @@ def _clean_json(text: str) -> str:
 
 
 def _make_slug(name: str) -> str:
-    slug = name.lower().strip()
+    # Transliterate accented characters to ASCII (é→e, ø→o, â→a, etc.)
+    slug = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode('ascii')
+    slug = slug.lower().strip()
     slug = re.sub(r"[^\w\s-]", "", slug)
     slug = re.sub(r"[\s_]+", "-", slug)
     return slug.strip("-")
+
+
+# ── JV developer normalisation ─────────────────────────────────────────────────
+_JV_SEP   = re.compile(r'\s+(?:&|x)\s+|\s*,\s+', re.I)
+_JV_SLASH = re.compile(r'(?<=[A-Za-z])/(?=[A-Z])')
+_JV_PAREN = re.compile(r'\s*\([^)]+\)\s*$')
+_LEGAL_P  = re.compile(
+    r'\s*\((?:FZ-?LLC|FZCO|LLC|Ltd\.?|Limited|PJSC|Pvt\.?|Inc\.?|Co\.?)\)\s*$', re.I
+)
+
+
+def _primary_dev_name(name: str) -> str:
+    """Return just the primary company from a JV or parenthetical developer name."""
+    if not name:
+        return name
+    # Strip non-JV parentheticals like "(OMNIYAT Group)" but keep legal suffixes like "(FZ-LLC)"
+    clean = name
+    if _JV_PAREN.search(clean) and not _LEGAL_P.search(clean):
+        clean = _JV_PAREN.sub('', clean).strip()
+    m = _JV_SEP.search(clean) or _JV_SLASH.search(clean)
+    return clean[:m.start()].strip() if m else clean
 
 
 EXTRACT_PROMPT = """You are a real estate data extractor. Given raw scraped text from a UAE property page, extract structured data and return ONLY valid JSON.
@@ -148,7 +172,7 @@ Return a JSON object with exactly these keys:
 
 "aeo_faq": Rewrite and expand the SOURCE FAQs below into 8 polished Q&A pairs. If source FAQs are empty, generate from project data. Each object: {{"question": "ends with ?", "answer": "2-3 sentences with SPECIFIC facts — price, location, developer, sizes, handover. Never say 'Please contact us' or generic filler."}}
 
-"whatsapp_share_text": 4 short lines someone would forward to a friend. Use developer exact name (not slug). Last line: dubai-portal.vercel.app/projects/{slug}
+"whatsapp_share_text": 4 short lines someone would forward to a friend. Use developer exact name (not slug). Last line: offplansearchuae.com/projects/{slug}
 
 CRITICAL: Return ONLY a single valid JSON object. Use \\n for line breaks inside strings — never literal newlines. No markdown fences.
 
@@ -407,7 +431,7 @@ async def parse_and_humanize_pf(raw: dict) -> dict | None:
                     "seo_description":    desc_text[:155],
                     "seo_keywords":       [],
                     "aeo_faq":            [],
-                    "whatsapp_share_text": f"{name} by {dev_name}\n{location}\n{price}\ndubai-portal.vercel.app/projects/{slug}",
+                    "whatsapp_share_text": f"{name} by {dev_name}\n{location}\n{price}\noffplansearchuae.com/projects/{slug}",
                 }
 
     # ── Step 2: Infer lifestyle tags + investment potential from description ──
@@ -548,7 +572,7 @@ async def parse_and_humanize(raw: dict) -> dict | None:
                     "seo_description":    fallback[:155],
                     "seo_keywords":       [],
                     "aeo_faq":            [],
-                    "whatsapp_share_text": f"{name} by {dev_name}\n{location}\n{price}\ndubai-portal.vercel.app/projects/{slug}",
+                    "whatsapp_share_text": f"{name} by {dev_name}\n{location}\n{price}\noffplansearchuae.com/projects/{slug}",
                 }
 
     # ── Assemble slugs ────────────────────────────────────────────────────────
