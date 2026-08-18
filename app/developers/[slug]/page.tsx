@@ -175,8 +175,8 @@ export default async function DeveloperPage({ params }: Props) {
             {/* Name + logo + tagline */}
             <div>
               {d.logo_url && (
-                <div style={{ marginBottom: 20, background: "rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 20px", display: "inline-block" }}>
-                  <img src={d.logo_url} alt={d.name} style={{ height: 44, maxWidth: 180, objectFit: "contain", filter: "brightness(0) invert(1)", opacity: 0.9 }} />
+                <div style={{ marginBottom: 20, background: "white", borderRadius: 12, padding: "10px 18px", display: "inline-block" }}>
+                  <img src={d.logo_url} alt={d.name} style={{ height: 44, maxWidth: 180, objectFit: "contain" }} />
                 </div>
               )}
               <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#7fe2e3", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 12, opacity: 0.8 }}>Developer Profile</div>
