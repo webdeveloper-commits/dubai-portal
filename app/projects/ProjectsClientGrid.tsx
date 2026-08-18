@@ -55,7 +55,7 @@ function fmt(n: number) {
 function applyFilters(projects: Project[], f: FilterState): Project[] {
   return projects.filter(p => {
     if (f.projectSearch && !p.name.toLowerCase().includes(f.projectSearch.toLowerCase())) return false;
-    if (f.areas.length         && !f.areas.some(a => p.area.toLowerCase().includes(a.toLowerCase())))             return false;
+    if (f.areas.length         && !f.areas.some(a => p.area.split(",")[0]?.trim().toLowerCase() === a.toLowerCase())) return false;
     if (f.developers.length    && !f.developers.some(d => p.developer.toLowerCase().includes(d.toLowerCase())))   return false;
     if (f.propertyTypes.length && !f.propertyTypes.some(t => p.propertyTypes.map(x => x.toLowerCase()).includes(t.toLowerCase()))) return false;
     if (f.lifestyle.length     && !f.lifestyle.some(l => p.lifestyle.some(x => x.toLowerCase().includes(l.toLowerCase())))) return false;

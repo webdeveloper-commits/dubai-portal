@@ -123,7 +123,8 @@ export default async function AreaDetailPage({ params }: Props) {
     supabase
       .from("projects")
       .select("name,slug,image_main,status,price_from,geo_summary,handover_quarter,handover_year,bedroom_min,bedroom_max")
-      .ilike("geo_summary", `%${area.name}%`)
+      .eq("area_slug", slug)
+      .eq("is_published", true)
       .limit(6),
     supabase
       .from("areas")
