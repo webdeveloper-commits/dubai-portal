@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
+import { useCurrency } from "@/app/contexts/CurrencyContext";
 import { supabase } from "@/lib/supabase";
 import {
   MapPin, Bed, Calendar, ChevronLeft, ChevronRight,
@@ -150,7 +151,7 @@ function mapRow(r: any): ProjectData {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmt(n: number) {
+function formatPrice(n: number) {
   if (n >= 1_000_000) return "AED " + (n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1) + "M";
   return "AED " + n.toLocaleString();
 }
@@ -457,6 +458,7 @@ function LoadingSkeleton() {
 
 export default function ProjectDetailClient({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
+  const { formatPrice } = useCurrency();
   const [project, setProject] = useState<ProjectData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -582,10 +584,10 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                 <div className="pd-price-box" style={{ background: "rgba(255,255,255,0.09)", backdropFilter: "blur(14px)", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 20, flexShrink: 0 }}>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "rgba(255,255,255,0.45)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>Starting from</div>
                   <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: "clamp(20px,3vw,32px)", color: "white", letterSpacing: "-0.03em" }}>
-                    {fmt(project.priceFrom)}
+                    {formatPrice(project.priceFrom)}
                   </div>
                   {project.priceTo > 0 && (
-                    <div style={{ fontFamily: "Verdana", fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>up to {fmt(project.priceTo)}</div>
+                    <div style={{ fontFamily: "Verdana", fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>up to {formatPrice(project.priceTo)}</div>
                   )}
                 </div>
               )}
@@ -758,7 +760,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                               {fp.price_from ? (
                                 <>
                                   <div style={{ fontFamily: "Verdana,sans-serif", fontSize: 8, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>From</div>
-                                  <div style={{ fontFamily: "Montserrat,sans-serif", fontWeight: 700, fontSize: 12, color: "#7fe2e3" }}>{fmt(fp.price_from)}</div>
+                                  <div style={{ fontFamily: "Montserrat,sans-serif", fontWeight: 700, fontSize: 12, color: "#7fe2e3" }}>{formatPrice(fp.price_from)}</div>
                                 </>
                               ) : (
                                 <div style={{ fontFamily: "Verdana,sans-serif", fontSize: 10, color: "#aaa", fontStyle: "italic" }}>On request</div>
@@ -795,7 +797,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                               {fp.price_from ? (
                                 <>
                                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#c0c8d4", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 5 }}>From</div>
-                                  <div className="fp-price">{fmt(fp.price_from)}</div>
+                                  <div className="fp-price">{formatPrice(fp.price_from)}</div>
                                 </>
                               ) : (
                                 <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#c8cdd5", fontStyle: "italic", textAlign: "right" }}>Price on<br />request</div>
@@ -916,7 +918,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
                 <div style={{ marginBottom: 16, position: "relative" }}>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#aaa", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>Price range</div>
                   <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: 24, color: "#192537", letterSpacing: "-0.03em" }}>
-                    {fmt(project.priceFrom)}{project.priceTo > 0 ? ` – ${fmt(project.priceTo)}` : "+"}
+                    {formatPrice(project.priceFrom)}{project.priceTo > 0 ? ` – ${formatPrice(project.priceTo)}` : "+"}
                   </div>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#ccc", marginTop: 3 }}>All prices in AED · subject to availability</div>
                 </div>
@@ -998,7 +1000,7 @@ export default function ProjectDetailClient({ params }: { params: Promise<{ slug
           {project.priceFrom > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#aaa" }}>Starting from</span>
-              <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: 17, color: "#192537", letterSpacing: "-0.02em" }}>{fmt(project.priceFrom)}</span>
+              <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: 17, color: "#192537", letterSpacing: "-0.02em" }}>{formatPrice(project.priceFrom)}</span>
             </div>
           )}
         </div>

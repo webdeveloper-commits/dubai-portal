@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import React from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { FaqAccordion, LeadForm, PrimeLocationMap, EnquireButton } from "./ClientComponents";
+import { ClientPrice } from "@/app/components/ClientPrice";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -156,7 +158,13 @@ export default async function AreaDetailPage({ params }: Props) {
     status:    statusLabel(p.status),
     priceFrom: p.price_from as number | null,
     handover:  [p.handover_quarter, p.handover_year].filter(Boolean).join(" ") || null,
-    bedrooms:  p.bedroom_min != null && p.bedroom_max != null ? `${p.bedroom_min}–${p.bedroom_max} BR` : null,
+    bedrooms:  p.bedroom_min != null && p.bedroom_max != null
+      ? p.bedroom_min === 0 && p.bedroom_max === 0
+        ? "Studio"
+        : p.bedroom_min === 0
+          ? `Studio–${p.bedroom_max} BR`
+          : `${p.bedroom_min}–${p.bedroom_max} BR`
+      : null,
   }));
 
   const hasPriceData = [
@@ -335,7 +343,7 @@ export default async function AreaDetailPage({ params }: Props) {
                   Starting from
                 </div>
                 <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 800, fontSize: "clamp(18px,2.5vw,28px)", color: "white", letterSpacing: "-0.02em" }}>
-                  {fmt(heroStartPrice)}
+                  <ClientPrice aed={heroStartPrice} />
                 </div>
                 <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 3 }}>
                   avg. sale price
@@ -540,9 +548,9 @@ export default async function AreaDetailPage({ params }: Props) {
                           <td style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 13, color: "#192537", padding: "14px 12px", borderBottom: "1px solid #f8f8f8", background: i % 2 === 0 ? "white" : "#fafafa" }}>
                             {row.label}
                           </td>
-                          <PriceCell value={row.price ? fmt(row.price) : "—"} highlight={false} even={i % 2 === 0} />
-                          <PriceCell value={row.rent  ? fmt(row.rent)  : "—"} highlight={false} even={i % 2 === 0} />
-                          <PriceCell value={row.ppsf  ? `AED ${row.ppsf.toLocaleString()}` : "—"} highlight={false} even={i % 2 === 0} />
+                          <PriceCell value={row.price ? <ClientPrice aed={row.price} /> : "—"} highlight={false} even={i % 2 === 0} />
+                          <PriceCell value={row.rent  ? <ClientPrice aed={row.rent}  /> : "—"} highlight={false} even={i % 2 === 0} />
+                          <PriceCell value={row.ppsf  ? <ClientPrice aed={row.ppsf}  /> : "—"} highlight={false} even={i % 2 === 0} />
                           <PriceCell value={row.roi   ? `${row.roi}%`  : "—"} highlight={row.roi != null} even={i % 2 === 0} />
                         </tr>
                       ))}
@@ -771,7 +779,7 @@ export default async function AreaDetailPage({ params }: Props) {
                             <div style={{ fontFamily: "Montserrat,sans-serif", fontWeight: 700, fontSize: 12, color: "#192537", lineHeight: 1.3, marginBottom: 5 }}>{p.name}</div>
                             {p.bedrooms && <div style={{ fontFamily: "Verdana,sans-serif", fontSize: 10, color: "#7a8a9e", marginBottom: 3 }}>{p.bedrooms}</div>}
                             {p.handover && <div style={{ fontFamily: "Verdana,sans-serif", fontSize: 10, color: "#7a8a9e", marginBottom: 3 }}>Handover {p.handover}</div>}
-                            {p.priceFrom && <div style={{ fontFamily: "Verdana,sans-serif", fontSize: 10, color: "#7fe2e3", fontWeight: 700 }}>From AED {Number(p.priceFrom).toLocaleString()}</div>}
+                            {p.priceFrom && <div style={{ fontFamily: "Verdana,sans-serif", fontSize: 10, color: "#7fe2e3", fontWeight: 700 }}>From <ClientPrice aed={Number(p.priceFrom)} /></div>}
                           </div>
                         </div>
                       </Link>
@@ -932,7 +940,7 @@ function InfoChip({ label, value, highlight = false }: { label: string; value: s
   );
 }
 
-function PriceCell({ value, highlight, even }: { value: string; highlight: boolean; even: boolean }) {
+function PriceCell({ value, highlight, even }: { value: React.ReactNode; highlight: boolean; even: boolean }) {
   return (
     <td
       style={{

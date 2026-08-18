@@ -16,7 +16,7 @@ interface Project {
   tag?: string;
 }
 
-const TYPE_LABELS = ["Apartment", "Villa", "Townhouse", "Penthouse", "Studio"];
+const TYPE_LABELS = ["Apartment", "Villa", "Townhouse", "Penthouse"];
 
 const TAG_STYLE: Record<string, { bg: string; color: string }> = {
   "Off-Plan":   { bg: "#192537",  color: "#7fe2e3" },
@@ -24,12 +24,15 @@ const TAG_STYLE: Record<string, { bg: string; color: string }> = {
   "New Launch": { bg: "#f97316",  color: "white"   },
 };
 
-function ProjectCard({ p }: { p: Project }) {
+function ProjectCard({ p, activeCategory }: { p: Project; activeCategory: string }) {
   const { formatPrice } = useCurrency();
   const tag = p.tag ? (TAG_STYLE[p.tag] ?? TAG_STYLE["Off-Plan"]) : null;
-  const typeLabel = p.propertyTypes[0]
-    ? p.propertyTypes[0].charAt(0).toUpperCase() + p.propertyTypes[0].slice(1)
-    : null;
+  const matchedType = activeCategory !== "All"
+    ? activeCategory
+    : p.propertyTypes[0]
+      ? p.propertyTypes[0].charAt(0).toUpperCase() + p.propertyTypes[0].slice(1)
+      : null;
+  const typeLabel = matchedType;
 
   return (
     <Link href={`/projects/${p.slug}`} style={{ textDecoration: "none", display: "block" }}>
@@ -161,7 +164,7 @@ export default function LuxuryResidences({ projects }: { projects: Project[] }) 
           className="lr-grid"
           style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24, opacity: fading ? 0 : 1, transition: "opacity 0.22s ease" }}
         >
-          {displayed.map(p => <ProjectCard key={p.id} p={p} />)}
+          {displayed.map(p => <ProjectCard key={p.id} p={p} activeCategory={activeCategory} />)}
         </div>
 
         {/* ── View All ── */}
