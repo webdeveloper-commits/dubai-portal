@@ -3,9 +3,9 @@ import { useRef } from "react";
 
 const types = [
   {
-    id: "commercial",
+    id: "office",
     label: "Commercial",
-    count: 83,
+    count: 28,
     icon: (
       <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
         {/* Main tall building */}
@@ -176,7 +176,7 @@ export default function PropertyTypes() {
           {types.map((type) => (
             <a
               key={type.id}
-              href={`/projects?type=${encodeURIComponent(type.label)}`}
+              href={`/projects?type=${encodeURIComponent(type.id)}`}
               className="pt-card"
               style={{
                 /* layout */

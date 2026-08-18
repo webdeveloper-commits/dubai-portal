@@ -2,6 +2,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useCurrency } from "@/app/contexts/CurrencyContext";
 import FilterBar, { FilterState, DEFAULT_FILTERS } from "@/app/components/filter";
 import { MapPin, Bed, Calendar, ArrowUpRight, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { saveSearchContext } from "@/lib/tracking";
@@ -45,12 +46,6 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "price_desc",   label: "Price: High → Low" },
   { key: "handover_asc", label: "Earliest Handover" },
 ];
-
-function fmt(n: number) {
-  if (n >= 1_000_000) return "AED " + (n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1) + "M";
-  if (n >= 1_000)     return "AED " + (n / 1_000).toFixed(0) + "K";
-  return "AED " + n;
-}
 
 function applyFilters(projects: Project[], f: FilterState): Project[] {
   return projects.filter(p => {
@@ -114,6 +109,7 @@ function filtersToParams(f: FilterState): URLSearchParams {
 }
 
 function ProjectCard({ p }: { p: Project }) {
+  const { formatPrice } = useCurrency();
   const tag = p.tag ? (TAG_COLORS[p.tag] ?? TAG_COLORS["Off-Plan"]) : null;
   return (
     <Link href={`/projects/${p.slug}`} style={{ textDecoration: "none", display: "block", height: "100%" }}>
@@ -146,7 +142,7 @@ function ProjectCard({ p }: { p: Project }) {
             <div>
               {p.priceFrom > 0 && <>
                 <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#bbb", marginBottom: 2 }}>from</div>
-                <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 18, color: "#192537" }}>{fmt(p.priceFrom)}</div>
+                <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 18, color: "#192537" }}>{formatPrice(p.priceFrom)}</div>
               </>}
             </div>
             <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#192537", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>

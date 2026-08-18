@@ -3,6 +3,9 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ChevronDown, Menu, X } from "lucide-react";
 import EnquiryModal from "@/app/components/EnquiryModal";
+import { useCurrency, type Currency } from "@/app/contexts/CurrencyContext";
+
+const CURRENCIES: Currency[] = ["AED", "USD", "EUR", "GBP"];
 
 const navLinks = [
   { label: "Properties", href: "/projects" },
@@ -11,6 +14,7 @@ const navLinks = [
 ];
 
 export default function Navbar({ developers = [] }: { developers?: { name: string; slug: string }[] }) {
+  const { currency, setCurrency } = useCurrency();
   const [devOpen, setDevOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -200,6 +204,21 @@ export default function Navbar({ developers = [] }: { developers?: { name: strin
             >
               FAQ
             </Link>
+
+            {/* Currency selector */}
+            <div style={{ display: "flex", alignItems: "center", gap: 2, background: "rgba(255,255,255,0.08)", borderRadius: 999, padding: "3px 4px", marginLeft: 4 }}>
+              {CURRENCIES.map(c => (
+                <button key={c} onClick={() => setCurrency(c)}
+                  style={{
+                    fontFamily: "Verdana, sans-serif", fontSize: 10, fontWeight: c === currency ? 700 : 400,
+                    color: c === currency ? "#192537" : "rgba(255,255,255,0.5)",
+                    background: c === currency ? "#7fe2e3" : "transparent",
+                    border: "none", cursor: "pointer", padding: "4px 8px", borderRadius: 999,
+                    transition: "all 0.18s", letterSpacing: "0.03em",
+                  }}
+                >{c}</button>
+              ))}
+            </div>
 
             <button
               onClick={() => setEnquiryOpen(true)}

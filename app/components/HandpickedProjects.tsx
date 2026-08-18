@@ -1,12 +1,8 @@
+"use client";
 import Link from "next/link";
 import { MapPin, ArrowUpRight } from "lucide-react";
 import type { Project } from "@/app/components/ProjectResults";
-
-function fmt(n: number) {
-  if (n >= 1_000_000) return "AED " + (n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1) + "M";
-  if (n >= 1_000)     return "AED " + (n / 1_000).toFixed(0) + "K";
-  return "AED " + n.toLocaleString();
-}
+import { useCurrency } from "@/app/contexts/CurrencyContext";
 
 const TAG_STYLE: Record<string, { bg: string; color: string }> = {
   "Off-Plan":   { bg: "#192537", color: "#7fe2e3" },
@@ -15,6 +11,7 @@ const TAG_STYLE: Record<string, { bg: string; color: string }> = {
 };
 
 function HandpickedCard({ p }: { p: Project }) {
+  const { formatPrice } = useCurrency();
   const tag = p.tag ? (TAG_STYLE[p.tag] ?? TAG_STYLE["Off-Plan"]) : null;
 
   return (
@@ -55,7 +52,7 @@ function HandpickedCard({ p }: { p: Project }) {
               {p.priceFrom > 0 ? (
                 <>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#bbb", marginBottom: 2, letterSpacing: "0.05em", textTransform: "uppercase" }}>from</div>
-                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 17, color: "#192537" }}>{fmt(p.priceFrom)}</div>
+                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 17, color: "#192537" }}>{formatPrice(p.priceFrom)}</div>
                 </>
               ) : (
                 <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#bbb" }}>Price on request</div>

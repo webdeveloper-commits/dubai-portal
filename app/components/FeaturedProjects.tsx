@@ -2,6 +2,7 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, ArrowUpRight } from "lucide-react";
+import { useCurrency } from "@/app/contexts/CurrencyContext";
 
 export interface FeaturedProject {
   id:        string;
@@ -16,15 +17,10 @@ export interface FeaturedProject {
   paymentPlan?: string;
 }
 
-function fmt(n: number) {
-  if (n >= 1_000_000) return "AED " + (n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1) + "M";
-  if (n >= 1_000)     return "AED " + (n / 1_000).toFixed(0) + "K";
-  return "AED " + n.toLocaleString();
-}
-
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=900&q=80";
 
 export default function FeaturedProjects({ projects }: { projects: FeaturedProject[] }) {
+  const { formatPrice } = useCurrency();
   const [current, setCurrent] = useState(0);
   const [animating, setAnimating] = useState(false);
   const [dir, setDir] = useState<"left" | "right">("right");
@@ -56,7 +52,7 @@ export default function FeaturedProjects({ projects }: { projects: FeaturedProje
   const p = projects[current];
 
   const details = [
-    { label: "Starting Price",  value: p.priceFrom > 0 ? fmt(p.priceFrom) : "Price on request" },
+    { label: "Starting Price",  value: p.priceFrom > 0 ? formatPrice(p.priceFrom) : "Price on request" },
     { label: "Payment Plan",    value: p.paymentPlan || "Contact us" },
     { label: "Handover",        value: p.handover    || "TBA" },
     { label: "Location",        value: p.area        || "Dubai, UAE" },
@@ -102,7 +98,7 @@ export default function FeaturedProjects({ projects }: { projects: FeaturedProje
               {p.developer}{p.area ? ` · ${p.area}` : ""}
             </p>
             <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 13, color: "#7a8a9e", lineHeight: 1.85, marginBottom: 36 }}>
-              {p.priceFrom > 0 ? `Exclusive off-plan project starting from ${fmt(p.priceFrom)}.` : "Exclusive off-plan project. Contact us for pricing."}
+              {p.priceFrom > 0 ? `Exclusive off-plan project starting from ${formatPrice(p.priceFrom)}.` : "Exclusive off-plan project. Contact us for pricing."}
               {p.handover ? ` Handover ${p.handover}.` : ""}
             </p>
             <Link

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { MapPin, ArrowUpRight } from "lucide-react";
+import { useCurrency } from "@/app/contexts/CurrencyContext";
 
 interface Project {
   id: string;
@@ -15,13 +16,7 @@ interface Project {
   tag?: string;
 }
 
-function fmt(n: number) {
-  if (n >= 1_000_000) return "AED " + (n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1) + "M";
-  if (n >= 1_000)     return "AED " + (n / 1_000).toFixed(0) + "K";
-  return "AED " + n;
-}
-
-const TYPE_LABELS = ["Apartment", "Villa", "Townhouse", "Penthouse"];
+const TYPE_LABELS = ["Apartment", "Villa", "Townhouse", "Penthouse", "Studio"];
 
 const TAG_STYLE: Record<string, { bg: string; color: string }> = {
   "Off-Plan":   { bg: "#192537",  color: "#7fe2e3" },
@@ -30,6 +25,7 @@ const TAG_STYLE: Record<string, { bg: string; color: string }> = {
 };
 
 function ProjectCard({ p }: { p: Project }) {
+  const { formatPrice } = useCurrency();
   const tag = p.tag ? (TAG_STYLE[p.tag] ?? TAG_STYLE["Off-Plan"]) : null;
   const typeLabel = p.propertyTypes[0]
     ? p.propertyTypes[0].charAt(0).toUpperCase() + p.propertyTypes[0].slice(1)
@@ -74,7 +70,7 @@ function ProjectCard({ p }: { p: Project }) {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
             {p.bedrooms && (
               <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#555", background: "#f4f6f9", borderRadius: 999, padding: "3px 10px" }}>
-                {p.bedrooms} BR
+                {p.bedrooms}
               </span>
             )}
             {typeLabel && (
@@ -90,10 +86,10 @@ function ProjectCard({ p }: { p: Project }) {
               {p.priceFrom > 0 ? (
                 <>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#bbb", marginBottom: 2, letterSpacing: "0.05em", textTransform: "uppercase" }}>from</div>
-                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 17, color: "#192537" }}>{fmt(p.priceFrom)}</div>
+                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 17, color: "#192537" }}>{formatPrice(p.priceFrom)}</div>
                 </>
               ) : (
-                <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#bbb" }}>Price on request</div>
+                <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#bbb" }}>Contact us</div>
               )}
             </div>
             <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#192537", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.2s" }}

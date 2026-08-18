@@ -34,8 +34,12 @@ const WHY_STATS = [
   },
 ];
 
+const FEATURED_SLUGS = ["emaar-properties", "damac-properties", "nakheel-properties", "meraas-holding", "beyond"];
+
 export default function DeveloperLogos({ developers }: { developers: Dev[] }) {
-  const items = developers.length > 0 ? [...developers, ...developers] : [];
+  const featured = FEATURED_SLUGS
+    .map(slug => developers.find(d => d.slug === slug))
+    .filter(Boolean) as Dev[];
 
   return (
     <section style={{ background: "white", borderTop: "1px solid #f0f2f5" }}>
@@ -83,35 +87,28 @@ export default function DeveloperLogos({ developers }: { developers: Dev[] }) {
       </div>
 
       {/* ── Developer logos strip ── */}
-      {items.length > 0 && (
-        <div style={{ borderTop: "1px solid #f0f2f5", padding: "32px 0 36px", overflow: "hidden", background: "#fafbfc" }}>
+      {featured.length > 0 && (
+        <div style={{ borderTop: "1px solid #f0f2f5", padding: "32px 0 36px", background: "#fafbfc" }}>
           <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#bbb", letterSpacing: "0.25em", textTransform: "uppercase", textAlign: "center", margin: "0 0 24px" }}>
             Trusted Developer Partners
           </p>
-
-          {/* Marquee */}
-          <div style={{ position: "relative" }}>
-            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 100, background: "linear-gradient(to right, #fafbfc, transparent)", zIndex: 2, pointerEvents: "none" }} />
-            <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 100, background: "linear-gradient(to left, #fafbfc, transparent)", zIndex: 2, pointerEvents: "none" }} />
-
-            <div className="dl-track">
-              {items.map((dev, i) => (
-                <Link key={`${dev.slug}-${i}`} href={`/projects?dev=${encodeURIComponent(dev.name)}`} className="dl-logo"
-                  style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", width: 150, height: 64, borderRadius: 12, border: "1.5px solid #edf0f3", background: "white", textDecoration: "none", transition: "all 0.25s", margin: "0 8px" }}
-                >
-                  {dev.logo_url ? (
-                    <img src={dev.logo_url} alt={dev.name}
-                      style={{ maxWidth: 100, maxHeight: 36, objectFit: "contain", display: "block", filter: "grayscale(100%)", opacity: 0.45, transition: "filter 0.25s, opacity 0.25s" }}
-                      className="dl-img"
-                    />
-                  ) : (
-                    <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 600, fontSize: 11, color: "#aaa", textAlign: "center", padding: "0 10px", lineHeight: 1.3 }}>
-                      {dev.name}
-                    </span>
-                  )}
-                </Link>
-              ))}
-            </div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 16, flexWrap: "wrap", padding: "0 24px" }}>
+            {featured.map(dev => (
+              <Link key={dev.slug} href={`/projects?dev=${encodeURIComponent(dev.name)}`} className="dl-logo"
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 150, height: 64, borderRadius: 12, border: "1.5px solid #edf0f3", background: "white", textDecoration: "none", transition: "all 0.25s" }}
+              >
+                {dev.logo_url ? (
+                  <img src={dev.logo_url} alt={dev.name}
+                    style={{ maxWidth: 110, maxHeight: 40, objectFit: "contain", display: "block", filter: "grayscale(100%)", opacity: 0.5, transition: "filter 0.25s, opacity 0.25s" }}
+                    className="dl-img"
+                  />
+                ) : (
+                  <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 600, fontSize: 11, color: "#aaa", textAlign: "center", padding: "0 10px", lineHeight: 1.3 }}>
+                    {dev.name}
+                  </span>
+                )}
+              </Link>
+            ))}
           </div>
         </div>
       )}
@@ -121,19 +118,8 @@ export default function DeveloperLogos({ developers }: { developers: Dev[] }) {
         @media (max-width: 900px) { .wi-grid { grid-template-columns: repeat(2, 1fr) !important; } }
         @media (max-width: 480px) { .wi-grid { grid-template-columns: 1fr !important; } }
 
-        .dl-track {
-          display: flex;
-          width: max-content;
-          animation: dl-scroll 120s linear infinite;
-        }
-        .dl-track:hover { animation-play-state: paused; }
         .dl-logo:hover { border-color: rgba(127,226,227,0.55) !important; box-shadow: 0 3px 14px rgba(127,226,227,0.1); }
         .dl-logo:hover .dl-img { filter: grayscale(0%) !important; opacity: 1 !important; }
-
-        @keyframes dl-scroll {
-          0%   { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
       `}</style>
     </section>
   );

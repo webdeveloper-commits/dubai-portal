@@ -26,7 +26,13 @@ function mapRow(r: Record<string, unknown>): Project {
     priceFrom:     (r.price_from as number) ?? 0,
     handover:      [q, yr || ""].filter(Boolean).join(" "),
     handoverYear:  yr,
-    bedrooms:      bMin != null && bMax != null ? `${bMin}–${bMax} BR` : "Contact us",
+    bedrooms:      bMin != null && bMax != null
+      ? bMin === 0 && bMax === 0
+        ? "Studio"
+        : bMin === 0
+          ? `Studio–${bMax} BR`
+          : `${bMin}–${bMax} BR`
+      : "Contact us",
     image:         (r.image_main as string) ?? imgs[0] ?? "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=700&q=80",
     tag:           r.status === "new_launch" ? "New Launch" : r.status === "ready" ? "Ready" : r.status === "off_plan" ? "Off-Plan" : undefined,
     slug:          r.slug as string,

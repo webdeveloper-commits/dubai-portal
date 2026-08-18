@@ -82,6 +82,7 @@ export default function PropertiesByArea({ counts = {} }: { counts?: Record<stri
   const [searchVal,    setSearchVal]    = useState("");
   const [mapLoaded,    setMapLoaded]    = useState(false);
   const [activeFilter, setActiveFilter] = useState("Has Projects");
+  const [mapActive,    setMapActive]    = useState(false);
 
   const filters = ["Has Projects", "All", "High ROI (8%+)"];
 
@@ -166,7 +167,7 @@ export default function PropertiesByArea({ counts = {} }: { counts?: Record<stri
       disableDefaultUI: true,
       zoomControl: true,
       zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_CENTER },
-      gestureHandling: "greedy",
+      gestureHandling: "cooperative",
     });
 
     mapInstance.current = map;
@@ -243,6 +244,22 @@ export default function PropertiesByArea({ counts = {} }: { counts?: Record<stri
 
         {/* Map canvas */}
         <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
+
+        {/* Click-to-activate overlay — prevents scroll trap */}
+        {!mapActive && mapLoaded && (
+          <div
+            onClick={() => {
+              setMapActive(true);
+              if (mapInstance.current) mapInstance.current.setOptions({ gestureHandling: "greedy" });
+            }}
+            style={{ position: "absolute", inset: 0, zIndex: 4, cursor: "pointer", display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 32 }}
+          >
+            <div style={{ background: "rgba(25,37,55,0.82)", backdropFilter: "blur(8px)", borderRadius: 999, padding: "10px 22px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 4px 20px rgba(0,0,0,0.25)" }}>
+              <MapPin size={14} color="#7fe2e3" />
+              <span style={{ fontFamily: "Verdana, sans-serif", fontSize: 12, color: "white" }}>Click to interact with the map</span>
+            </div>
+          </div>
+        )}
 
 
 

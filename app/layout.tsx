@@ -8,6 +8,7 @@ import { Montserrat } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/app/components/Navbar";
 import TrackingInit from "@/app/components/TrackingInit";
+import ClientProviders from "@/app/components/ClientProviders";
 import { supabase } from "@/lib/supabase";
 import Footer from "@/app/components/Footer";
 import { Disclaimer, CookieBanner, FloatingContact } from "@/app/components/GlobalExtras";
@@ -47,13 +48,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" className={montserrat.variable}>
       <body style={{ fontFamily: "var(--font-montserrat), sans-serif", background: "#f9f9f9", color: "#192537" }}>
-        <TrackingInit />
-        <Navbar developers={developers} />
-        {children}
-        <Footer />
-        <Disclaimer />
-        <CookieBanner />
-        <FloatingContact />
+        <ClientProviders>
+          <TrackingInit />
+          <Navbar developers={developers} />
+          {children}
+          <Footer />
+          <Disclaimer />
+          <CookieBanner />
+          <FloatingContact />
+        </ClientProviders>
       </body>
     </html>
   );
