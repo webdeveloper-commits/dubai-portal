@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, ArrowUpRight, Building2 } from "lucide-react";
+import { Search, ArrowUpRight } from "lucide-react";
 import Pagination from "@/app/components/Pagination";
 
 const PAGE_SIZE = 15;
@@ -21,61 +21,76 @@ interface Developer {
 }
 
 function DevCard({ dev }: { dev: Developer }) {
+  const initials = dev.name.split(" ").slice(0, 2).map(w => w[0] ?? "").join("").toUpperCase();
+
   return (
     <Link href={`/developers/${dev.slug}`} style={{ textDecoration: "none", display: "block", height: "100%" }}>
       <article
-        style={{ background: "white", borderRadius: 20, overflow: "hidden", boxShadow: "0 2px 16px rgba(25,37,55,0.06)", border: "1px solid rgba(25,37,55,0.06)", height: "100%", display: "flex", flexDirection: "column", transition: "transform 0.25s, box-shadow 0.25s", cursor: "pointer" }}
-        onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.transform = "translateY(-4px)"; el.style.boxShadow = "0 14px 40px rgba(25,37,55,0.12)"; }}
+        className="dev-card"
+        style={{ background: "white", borderRadius: 20, overflow: "hidden", boxShadow: "0 2px 16px rgba(25,37,55,0.06)", border: "1px solid rgba(25,37,55,0.08)", height: "100%", display: "flex", flexDirection: "column", transition: "transform 0.25s, box-shadow 0.25s", cursor: "pointer" }}
+        onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.transform = "translateY(-4px)"; el.style.boxShadow = "0 16px 48px rgba(25,37,55,0.13)"; }}
         onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.transform = "translateY(0)"; el.style.boxShadow = "0 2px 16px rgba(25,37,55,0.06)"; }}
       >
-        <div style={{ background: "linear-gradient(135deg, #0d1e2e 0%, #192537 100%)", padding: "32px 28px 28px", position: "relative", overflow: "hidden", minHeight: 120, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(127,226,227,0.07) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
-          <div style={{ position: "relative", zIndex: 1 }}>
-            {dev.logo_url
-              ? <img src={dev.logo_url} alt={dev.name} style={{ height: 48, maxWidth: 160, objectFit: "contain", opacity: 0.95 }} />
-              : <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 900, fontSize: 20, color: "white", letterSpacing: "-0.02em" }}>{dev.name}</div>
-            }
-            {dev.tagline && <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "rgba(127,226,227,0.7)", marginTop: 8 }}>{dev.tagline}</div>}
-          </div>
-          <Building2 size={32} color="rgba(127,226,227,0.12)" style={{ flexShrink: 0 }} />
+        {/* ── Logo / identity area — white so all logos are visible ── */}
+        <div style={{ background: "#f8fafc", borderBottom: "1px solid #eef0f4", padding: "28px 28px 22px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", minHeight: 160, justifyContent: "center" }}>
+          {dev.logo_url ? (
+            <div style={{ height: 90, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+              <img src={dev.logo_url} alt={dev.name} style={{ maxHeight: 90, maxWidth: 200, objectFit: "contain" }} />
+            </div>
+          ) : (
+            <div style={{ width: 72, height: 72, borderRadius: 18, background: "linear-gradient(135deg, #192537 0%, #0d3352 100%)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, flexShrink: 0 }}>
+              <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 900, fontSize: 22, color: "white", letterSpacing: "-0.02em" }}>{initials}</span>
+            </div>
+          )}
+          <h3 style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#192537", margin: "0 0 6px", lineHeight: 1.25, letterSpacing: "-0.01em" }}>{dev.name}</h3>
+          {dev.tagline && (
+            <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#7a8a9e", margin: 0, lineHeight: 1.65, maxWidth: 220 }}>{dev.tagline}</p>
+          )}
         </div>
 
-        <div style={{ padding: "22px 24px 24px", flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ display: "flex", gap: 20 }}>
-            {dev.founded_year && (
-              <div>
-                <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 16, color: "#192537" }}>{dev.founded_year}</div>
-                <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#aaa", marginTop: 2 }}>Est.</div>
-              </div>
-            )}
-            {dev.total_units && (
-              <div>
-                <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 16, color: "#192537" }}>{dev.total_units}</div>
-                <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#aaa", marginTop: 2 }}>Units Delivered</div>
-              </div>
-            )}
-            {dev.headquarters && (
-              <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#7a8a9e" }}>{dev.headquarters.split(",")[0]}</div>
-                <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#aaa", marginTop: 2 }}>HQ</div>
-              </div>
-            )}
-          </div>
+        {/* ── Body ── */}
+        <div style={{ padding: "18px 22px 22px", flex: 1, display: "flex", flexDirection: "column", gap: 14 }}>
 
-          {dev.areas?.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {dev.areas.slice(0, 3).map(a => (
-                <span key={a} style={{ display: "inline-block", background: "rgba(127,226,227,0.08)", border: "1px solid rgba(127,226,227,0.2)", borderRadius: 999, padding: "3px 10px", fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#7a8a9e" }}>{a}</span>
-              ))}
-              {dev.areas.length > 3 && (
-                <span style={{ display: "inline-block", background: "#f4f7fa", borderRadius: 999, padding: "3px 10px", fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#aaa" }}>+{dev.areas.length - 3} more</span>
+          {/* Stats */}
+          {(dev.founded_year || dev.total_units || dev.headquarters) && (
+            <div style={{ display: "flex", gap: 0, borderRadius: 12, background: "#f8fafc", border: "1px solid #eef0f4", overflow: "hidden" }}>
+              {dev.founded_year && (
+                <div style={{ flex: 1, padding: "10px 14px", borderRight: "1px solid #eef0f4" }}>
+                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 15, color: "#192537" }}>{dev.founded_year}</div>
+                  <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#aaa", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>Est.</div>
+                </div>
+              )}
+              {dev.total_units && (
+                <div style={{ flex: 1, padding: "10px 14px", borderRight: dev.headquarters ? "1px solid #eef0f4" : undefined }}>
+                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 15, color: "#192537" }}>{dev.total_units}</div>
+                  <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#aaa", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>Units</div>
+                </div>
+              )}
+              {dev.headquarters && (
+                <div style={{ flex: 1, padding: "10px 14px" }}>
+                  <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#192537", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{dev.headquarters.split(",")[0]}</div>
+                  <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#aaa", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>HQ</div>
+                </div>
               )}
             </div>
           )}
 
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto", paddingTop: 14, borderTop: "1px solid #f0f0f0" }}>
-            <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 12, color: "#7fe2e3" }}>View Profile</span>
-            <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#192537", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {/* Area pills */}
+          {dev.areas?.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {dev.areas.slice(0, 3).map(a => (
+                <span key={a} style={{ display: "inline-block", background: "rgba(127,226,227,0.08)", border: "1px solid rgba(127,226,227,0.22)", borderRadius: 999, padding: "4px 11px", fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#5a8a9e" }}>{a}</span>
+              ))}
+              {dev.areas.length > 3 && (
+                <span style={{ display: "inline-block", background: "#f4f7fa", borderRadius: 999, padding: "4px 11px", fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#aaa" }}>+{dev.areas.length - 3} more</span>
+              )}
+            </div>
+          )}
+
+          {/* CTA */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto", paddingTop: 14, borderTop: "1px solid #f0f2f5" }}>
+            <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 12, color: "#7fe2e3", letterSpacing: "0.02em" }}>View Profile</span>
+            <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#192537", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.2s" }} className="dev-arrow">
               <ArrowUpRight size={14} color="white" />
             </div>
           </div>
@@ -145,6 +160,7 @@ export default function SearchableDevGrid({ devs }: { devs: Developer[] }) {
       <style>{`
         @media (max-width: 1024px) { .dev-grid { grid-template-columns: repeat(2,1fr) !important; } }
         @media (max-width: 640px)  { .dev-grid { grid-template-columns: 1fr !important; } }
+        .dev-card:hover .dev-arrow { background: #7fe2e3 !important; }
       `}</style>
     </>
   );
