@@ -31,44 +31,49 @@ function DevCard({ dev }: { dev: Developer }) {
         onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.transform = "translateY(-4px)"; el.style.boxShadow = "0 16px 48px rgba(25,37,55,0.13)"; }}
         onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.transform = "translateY(0)"; el.style.boxShadow = "0 2px 16px rgba(25,37,55,0.06)"; }}
       >
-        {/* ── Logo / identity area — white so all logos are visible ── */}
-        <div style={{ background: "#f8fafc", borderBottom: "1px solid #eef0f4", padding: "28px 28px 22px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", minHeight: 160, justifyContent: "center" }}>
+
+        {/* ── HEADER — dark, logo only ── */}
+        <div style={{ background: "linear-gradient(135deg, #0d1e2e 0%, #192537 100%)", height: 160, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 28px", position: "relative", overflow: "hidden", flexShrink: 0 }}>
+          {/* subtle dot grid */}
+          <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(127,226,227,0.06) 1px, transparent 1px)", backgroundSize: "26px 26px", pointerEvents: "none" }} />
           {dev.logo_url ? (
-            <div style={{ height: 90, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-              <img src={dev.logo_url} alt={dev.name} style={{ maxHeight: 90, maxWidth: 200, objectFit: "contain" }} />
-            </div>
+            <img src={dev.logo_url} alt={dev.name} style={{ maxHeight: 110, maxWidth: 220, objectFit: "contain", position: "relative", zIndex: 1 }} />
           ) : (
-            <div style={{ width: 72, height: 72, borderRadius: 18, background: "linear-gradient(135deg, #192537 0%, #0d3352 100%)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, flexShrink: 0 }}>
-              <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 900, fontSize: 22, color: "white", letterSpacing: "-0.02em" }}>{initials}</span>
+            <div style={{ width: 80, height: 80, borderRadius: 20, background: "rgba(127,226,227,0.12)", border: "1.5px solid rgba(127,226,227,0.25)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", zIndex: 1 }}>
+              <span style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 900, fontSize: 26, color: "#7fe2e3", letterSpacing: "-0.02em" }}>{initials}</span>
             </div>
-          )}
-          <h3 style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#192537", margin: "0 0 6px", lineHeight: 1.25, letterSpacing: "-0.01em" }}>{dev.name}</h3>
-          {dev.tagline && (
-            <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 10, color: "#7a8a9e", margin: 0, lineHeight: 1.65, maxWidth: 220 }}>{dev.tagline}</p>
           )}
         </div>
 
-        {/* ── Body ── */}
-        <div style={{ padding: "18px 22px 22px", flex: 1, display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* ── BODY — all text details ── */}
+        <div style={{ padding: "20px 22px 22px", flex: 1, display: "flex", flexDirection: "column", gap: 14 }}>
 
-          {/* Stats */}
+          {/* Name + tagline */}
+          <div>
+            <h3 style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 15, color: "#192537", margin: "0 0 5px", lineHeight: 1.25, letterSpacing: "-0.01em" }}>{dev.name}</h3>
+            {dev.tagline && (
+              <p style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#7a8a9e", margin: 0, lineHeight: 1.6 }}>{dev.tagline}</p>
+            )}
+          </div>
+
+          {/* Stats row */}
           {(dev.founded_year || dev.total_units || dev.headquarters) && (
-            <div style={{ display: "flex", gap: 0, borderRadius: 12, background: "#f8fafc", border: "1px solid #eef0f4", overflow: "hidden" }}>
+            <div style={{ display: "flex", gap: 0, borderRadius: 10, background: "#f8fafc", border: "1px solid #eef0f4", overflow: "hidden" }}>
               {dev.founded_year && (
-                <div style={{ flex: 1, padding: "10px 14px", borderRight: "1px solid #eef0f4" }}>
-                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 15, color: "#192537" }}>{dev.founded_year}</div>
+                <div style={{ flex: 1, padding: "9px 12px", borderRight: "1px solid #eef0f4" }}>
+                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#192537" }}>{dev.founded_year}</div>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#aaa", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>Est.</div>
                 </div>
               )}
               {dev.total_units && (
-                <div style={{ flex: 1, padding: "10px 14px", borderRight: dev.headquarters ? "1px solid #eef0f4" : undefined }}>
-                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 15, color: "#192537" }}>{dev.total_units}</div>
+                <div style={{ flex: 1, padding: "9px 12px", borderRight: dev.headquarters ? "1px solid #eef0f4" : undefined }}>
+                  <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 700, fontSize: 14, color: "#192537" }}>{dev.total_units}</div>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#aaa", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>Units</div>
                 </div>
               )}
               {dev.headquarters && (
-                <div style={{ flex: 1, padding: "10px 14px" }}>
-                  <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#192537", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{dev.headquarters.split(",")[0]}</div>
+                <div style={{ flex: 1, padding: "9px 12px" }}>
+                  <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 11, color: "#192537", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{dev.headquarters.split(",")[0]}</div>
                   <div style={{ fontFamily: "Verdana, sans-serif", fontSize: 9, color: "#aaa", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>HQ</div>
                 </div>
               )}
