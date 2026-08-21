@@ -278,11 +278,13 @@ async def scrape_project_detail(url: str) -> dict | None:
     """
     Scrape full project detail page.
     Returns raw dict — Claude will parse details + rewrite description.
+    Each retry gets a fresh page so a closed-page error on one attempt
+    doesn't cascade and kill the remaining attempts.
     """
     browser = await get_browser()
-    page = await _new_stealth_page(browser)
 
     for attempt in range(3):
+        page = await _new_stealth_page(browser)
         try:
             logger.info(f"Scraping {url} (attempt {attempt + 1})")
             await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
@@ -586,8 +588,7 @@ async def scrape_project_detail(url: str) -> dict | None:
                 logger.error(f"All attempts failed for {url}")
                 return None
         finally:
-            if attempt == 2 or "data" in locals():
+            try:
                 await page.close()
-
-    await page.close()
-    return None
+            except Exception:
+                pass
