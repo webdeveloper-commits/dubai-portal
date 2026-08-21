@@ -127,8 +127,8 @@ def get_unindexed_projects() -> list[dict]:
         return []
 
 
-def publish_project(data: dict) -> str | None:
-    """Insert project into Supabase. Returns the new row id or None on failure."""
+def publish_project(data: dict) -> tuple[str | None, str | None]:
+    """Insert project into Supabase. Returns (row_id, error_message)."""
     try:
         payload = {**data, "is_published": True, "google_indexed": False}
         # Strip private runner-only keys
@@ -145,10 +145,10 @@ def publish_project(data: dict) -> str | None:
         res = db().table("projects").insert(payload).execute()
         row_id = res.data[0]["id"] if res.data else None
         logger.info(f"Published project '{data.get('name')}' id={row_id}")
-        return row_id
+        return row_id, None
     except Exception as e:
         logger.error(f"publish_project failed: {e}")
-        return None
+        return None, str(e)
 
 
 # ── Developers ─────────────────────────────────────────────────────────────────

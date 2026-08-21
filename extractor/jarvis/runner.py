@@ -170,7 +170,7 @@ async def run_tuesday():
             parsed["brochure_url"] = stub.get("brochure_url") or ""
 
             # ── Publish to Supabase ──
-            row_id = publish_project(parsed)
+            row_id, _err = publish_project(parsed)
             if row_id:
                 published.append({
                     "id":    row_id,
@@ -489,9 +489,9 @@ async def run_add_project(url: str):
         parsed["images_all"] = gallery_cloud
 
         # Publish
-        row_id = publish_project(parsed)
+        row_id, db_err = publish_project(parsed)
         if not row_id:
-            await notify(f"Failed to save project '{parsed['name']}' to database.")
+            await notify(f"Failed to save project '{parsed['name']}' to database.\n\nError: {db_err}")
             return
 
         price = f"AED {parsed['price_from']:,}" if parsed.get("price_from") else "Price on request"
@@ -618,7 +618,7 @@ async def run_backfill(auto: bool = False) -> bool:
                     if stub["opr_id"] <= _OPR_ID_MAX:
                         parsed["created_at"] = _compute_opr_created_at(stub["opr_id"])
 
-                row_id = publish_project(parsed)
+                row_id, _err = publish_project(parsed)
                 if row_id:
                     published.append({
                         "id":    row_id,
@@ -801,7 +801,7 @@ async def run_pf_import(auto: bool = False) -> bool:
             parsed["created_at"] = compute_pf_created_at(raw, page=page_num, item_index=item_index, max_pages=130)
 
             # Publish (storage.py maps pf_url → data_source_url)
-            row_id = publish_project(parsed)
+            row_id, _err = publish_project(parsed)
             if row_id:
                 existing_slugs.add(parsed["slug"])
                 if pf_id:
