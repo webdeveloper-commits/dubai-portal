@@ -217,7 +217,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await update.message.reply_text(
                     "Usage: GET PROJECT [slug or URL]\n"
                     "Example: GET PROJECT sobha-orbis\n"
-                    "Example: GET PROJECT dubai-portal.vercel.app/projects/sobha-orbis"
+                    "Example: GET PROJECT offplansearchuae.com/projects/sobha-orbis"
                 )
                 return
             asyncio.create_task(runner.run_get_project(target))

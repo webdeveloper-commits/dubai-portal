@@ -1665,12 +1665,12 @@ async def run_enrichment() -> str:
         parts.append(f"Areas enriched ({len(area_records)}):")
         for r in area_records:
             parts.append(f"  • {r['name']}")
-            parts.append(f"    dubai-portal.vercel.app/area-guides/{r['slug']}")
+            parts.append(f"    offplansearchuae.com/area-guides/{r['slug']}")
     if dev_records:
         parts.append(f"Developers enriched ({len(dev_records)}):")
         for r in dev_records:
             parts.append(f"  • {r['name']}")
-            parts.append(f"    dubai-portal.vercel.app/developers/{r['slug']}")
+            parts.append(f"    offplansearchuae.com/developers/{r['slug']}")
     if not parts:
         parts.append("No areas or developers pending enrichment.")
 
