@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Image from "next/image";
 import { ArrowUp, Phone, Mail, MapPin } from "lucide-react";
 
 const SOCIALS = [
@@ -158,21 +159,7 @@ export default function Footer() {
           <div>
             {/* Logo */}
             <div style={{ marginBottom: 20 }}>
-              <div
-                style={{
-                  fontFamily: "Montserrat, sans-serif",
-                  fontWeight: 900,
-                  fontSize: 24,
-                  color: "white",
-                  letterSpacing: "-0.02em",
-                  marginBottom: 4,
-                }}
-              >
-                ELYSIAN
-                <span style={{ color: "#7fe2e3", fontSize: 10, fontWeight: 400, letterSpacing: "0.2em", display: "block", marginTop: 2 }}>
-                  REAL ESTATE
-                </span>
-              </div>
+              <Image src="/logo.png" alt="Offplan Search UAE" width={160} height={53} style={{ objectFit: "contain" }} />
             </div>
 
             <p
