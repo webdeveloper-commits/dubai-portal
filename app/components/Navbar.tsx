@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { ChevronDown, Menu, X } from "lucide-react";
 import EnquiryModal from "@/app/components/EnquiryModal";
 import { useCurrency, type Currency } from "@/app/contexts/CurrencyContext";
@@ -60,13 +61,8 @@ export default function Navbar({ developers = [] }: { developers?: { name: strin
         <div style={{ maxWidth: 1280, width: "100%", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
 
           {/* Logo */}
-          <Link href="/" style={{ textDecoration: "none" }}>
-            <div style={{ fontFamily: "Montserrat, sans-serif", fontWeight: 900, fontSize: 20, color: "white", letterSpacing: "-0.02em", lineHeight: 1 }}>
-              ELYSIAN
-              <span style={{ color: "#7fe2e3", fontSize: 8, fontWeight: 400, letterSpacing: "0.22em", display: "block", marginTop: 2, textTransform: "uppercase" }}>
-                Real Estate
-              </span>
-            </div>
+          <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center" }}>
+            <Image src="/logo.png" alt="Offplan Search UAE" width={132} height={44} style={{ objectFit: "contain" }} priority />
           </Link>
 
           {/* Desktop nav */}
