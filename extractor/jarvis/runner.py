@@ -125,14 +125,16 @@ async def run_tuesday():
             if not raw:
                 errors.append(f"{name} (scrape failed)")
                 log_error("opr.ae", "scrape_failed", "returned None", False)
+                await notify(f"FAIL [{name}]: scrape returned None (3 attempts exhausted or page blocked)")
                 continue
             logger.info(f"Scraped {name}: {len(raw.get('description_raw',''))} chars, {raw.get('image_count',0)} images")
 
             # ── Parse + humanize via Claude ──
             parsed = await parse_and_humanize(raw)
             if not parsed:
-                errors.append(f"{name} (scrape/parse error)")
+                errors.append(f"{name} (parse failed)")
                 log_error("opr.ae", "parse_failed", "returned None after scrape", False)
+                await notify(f"FAIL [{name}]: Claude parse returned None (bad JSON or API error)")
                 continue
             if parsed.get("_skip"):
                 skipped.append(f"{name} (non-UAE)")
@@ -200,6 +202,7 @@ async def run_tuesday():
             logger.error(f"Error processing '{name}': {e}")
             errors.append(name)
             log_error("opr.ae", "unexpected", str(e), False)
+            await notify(f"FAIL [{name}]: {type(e).__name__}: {e}")
 
     # ── Send summary + approval request ──
     await notify(_build_project_summary(published, errors, skipped))
