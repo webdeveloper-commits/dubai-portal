@@ -183,6 +183,7 @@ async def run_tuesday():
                 existing_slugs.add(parsed["slug"])
             else:
                 errors.append(parsed["name"])
+                await notify(f"FAIL [{parsed['name']}]: DB publish failed — {_err}")
 
             # Progress update every 3 items
             if (i + 1) % 3 == 0:
