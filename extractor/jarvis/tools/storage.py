@@ -142,13 +142,19 @@ def publish_project(data: dict) -> tuple[str | None, str | None]:
         if "pf_url" in payload:
             payload["data_source_url"] = payload.pop("pf_url")
             payload.setdefault("data_source", "propertyfinder.ae")
-        # Coerce price fields to int — Claude sometimes returns decimals (e.g. 2574.3)
-        for price_field in ("price_from", "price_to"):
-            if payload.get(price_field) is not None:
+        # Coerce all integer columns — Claude sometimes returns decimals (e.g. 2574.3)
+        _int_fields = (
+            "price_from", "price_to",
+            "bedroom_min", "bedroom_max",
+            "size_sqft_min", "size_sqft_max",
+            "handover_year",
+        )
+        for field in _int_fields:
+            if payload.get(field) is not None:
                 try:
-                    payload[price_field] = int(float(payload[price_field]))
+                    payload[field] = int(float(payload[field]))
                 except (ValueError, TypeError):
-                    payload[price_field] = None
+                    payload[field] = None
         res = db().table("projects").insert(payload).execute()
         row_id = res.data[0]["id"] if res.data else None
         logger.info(f"Published project '{data.get('name')}' id={row_id}")
