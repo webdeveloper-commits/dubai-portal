@@ -285,15 +285,55 @@ async def handle_approve(command: str):
 
 async def _ping_google(projects: list[dict]) -> bool:
     """
-    Submit URLs to Google Indexing API.
-    Requires GOOGLE_INDEXING credentials — stubbed for now, will be wired up
-    when OAuth is set up.
+    Submit URLs to Google Indexing API using a service account JSON key.
+    Set GOOGLE_SA_JSON env var to the full contents of the service account JSON.
+    The service account must be added as an Owner in Google Search Console.
     """
-    # TODO: implement Google Indexing API OAuth flow
-    # For now, log the URLs that would be submitted
-    for p in projects:
-        logger.info(f"[GOOGLE INDEX] Would ping: offplansearchuae.com/projects/{p['slug']}")
-    return True  # Return True so indexing flag is set
+    import json
+    import time
+    import os
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+    except ImportError:
+        logger.error("google-auth / google-api-python-client not installed — run: pip install google-auth google-api-python-client")
+        return False
+
+    sa_json = os.getenv("GOOGLE_SA_JSON", "")
+    if not sa_json:
+        logger.warning("GOOGLE_SA_JSON not set — skipping Google Indexing API")
+        await notify("Google Indexing skipped: GOOGLE_SA_JSON env var not set.\nSee setup instructions.")
+        return False
+
+    try:
+        sa_info = json.loads(sa_json)
+        credentials = service_account.Credentials.from_service_account_info(
+            sa_info,
+            scopes=["https://www.googleapis.com/auth/indexing"],
+        )
+        service = build("indexing", "v3", credentials=credentials, cache_discovery=False)
+
+        ok, failed = [], []
+        for p in projects:
+            url = f"https://offplansearchuae.com/projects/{p['slug']}"
+            try:
+                service.urlNotifications().publish(
+                    body={"url": url, "type": "URL_UPDATED"}
+                ).execute()
+                ok.append(p["slug"])
+                await asyncio.sleep(0.5)  # stay within quota (600 req/day)
+            except Exception as e:
+                logger.error(f"Indexing API failed for {url}: {e}")
+                failed.append(p["slug"])
+
+        if failed:
+            await notify(f"Google Indexing: {len(ok)} submitted, {len(failed)} failed:\n" + "\n".join(failed))
+        return len(ok) > 0
+
+    except Exception as e:
+        logger.error(f"_ping_google error: {e}")
+        await notify(f"Google Indexing API error: {e}")
+        return False
 
 
 async def run_enrichment_only():
