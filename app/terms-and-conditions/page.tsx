@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Terms and Conditions | Elysian Real Estate Dubai",
-  description: "Terms and conditions governing use of the Elysian Real Estate property portal, including listing accuracy, intellectual property, and UAE law compliance.",
-  alternates: { canonical: "https://elysian.ae/terms-and-conditions" },
+  title: "Terms and Conditions | Offplan Search UAE",
+  description: "Terms and conditions governing use of the Offplan Search UAE property portal, including listing accuracy, intellectual property, and UAE law compliance.",
+  alternates: { canonical: "https://offplansearchuae.com/terms-and-conditions" },
 };
 
 const LAST_UPDATED = "22 July 2026";
@@ -38,7 +38,7 @@ export default function TermsPage() {
           <Intro />
 
           <Section title="1. Acceptance of Terms">
-            <p>By accessing or using the Elysian Real Estate property portal (the "<strong>Portal</strong>") at <strong>dubai-portal.elysian.ae</strong> or any associated Elysian website, you agree to be bound by these Terms and Conditions ("<strong>Terms</strong>"), our <Link href="/privacy-policy">Privacy Policy</Link>, and all applicable UAE laws and regulations.</p>
+            <p>By accessing or using the Offplan Search UAE property portal (the "<strong>Portal</strong>") at <strong>offplansearchuae.com</strong>, you agree to be bound by these Terms and Conditions ("<strong>Terms</strong>"), our <Link href="/privacy-policy">Privacy Policy</Link>, and all applicable UAE laws and regulations.</p>
             <p>If you do not agree with any part of these Terms, you must immediately cease using the Portal. These Terms constitute a legally binding agreement between you ("<strong>User</strong>", "<strong>you</strong>") and Elysian Real Estate LLC ("<strong>Elysian</strong>", "<strong>we</strong>", "<strong>us</strong>").</p>
             <p>We reserve the right to modify these Terms at any time. Continued use of the Portal after changes are posted constitutes your acceptance of the revised Terms. The date of the most recent revision is shown at the top of this page.</p>
           </Section>

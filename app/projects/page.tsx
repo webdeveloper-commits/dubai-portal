@@ -6,9 +6,9 @@ import ProjectsEnquiryCTA from "./ProjectsEnquiryCTA";
 export const revalidate = 3600;
 
 export const metadata = {
-  title: "Off-Plan Projects & Properties in Dubai | Elysian Real Estate",
-  description: "Browse every off-plan and ready property we represent across Dubai and the UAE. Filter by area, developer, price, and handover date.",
-  alternates: { canonical: "https://elysian.ae/projects" },
+  title: "Off-Plan Projects & Properties in Dubai | Offplan Search UAE",
+  description: "Browse every off-plan and ready property across Dubai and the UAE. Filter by area, developer, price, and handover date.",
+  alternates: { canonical: "https://offplansearchuae.com/projects" },
 };
 
 function statusToTag(status: string): string | undefined {

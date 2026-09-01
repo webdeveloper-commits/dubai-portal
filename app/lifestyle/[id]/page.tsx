@@ -71,11 +71,11 @@ type Props = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const ls = LIFESTYLES[id];
-  if (!ls) return { title: "Lifestyle | Elysian Dubai" };
+  if (!ls) return { title: "Lifestyle | Offplan Search UAE" };
   return {
-    title: `${ls.label} Properties in Dubai | Elysian Real Estate`,
+    title: `${ls.label} Properties in Dubai | Offplan Search UAE`,
     description: `${ls.description} Browse our curated selection of ${ls.label.toLowerCase()} properties across Dubai.`,
-    alternates: { canonical: `https://elysian.ae/lifestyle/${id}` },
+    alternates: { canonical: `https://offplansearchuae.com/lifestyle/${id}` },
     openGraph: {
       title: `${ls.label} Properties in Dubai`,
       description: ls.description,

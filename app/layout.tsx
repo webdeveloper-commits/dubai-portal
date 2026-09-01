@@ -22,13 +22,13 @@ const montserrat = Montserrat({
 
 export const metadata: Metadata = {
   title: {
-    default: "Elysian Realty Dubai | Luxury Real Estate in Dubai",
-    template: "%s | Elysian Realty Dubai",
+    default: "Offplan Search UAE | Dubai Off-Plan Properties 2025–2026",
+    template: "%s | Offplan Search UAE",
   },
   description:
-    "Discover premium off-plan and ready properties in Dubai. Elysian Realty connects you with the finest luxury apartments, villas, and penthouses.",
-  keywords: ["Dubai real estate", "luxury properties Dubai", "off-plan Dubai", "buy apartment Dubai"],
-  metadataBase: new URL("https://elysianrealtydubai.ae"),
+    "Search off-plan and new-launch properties in Dubai. Compare prices, payment plans and handover dates from top developers — free expert advice.",
+  keywords: ["off-plan properties Dubai", "Dubai new launch projects", "buy off-plan Dubai", "Dubai real estate 2025", "Dubai property investment"],
+  metadataBase: new URL("https://offplansearchuae.com"),
   robots: { index: true, follow: true },
 };
 

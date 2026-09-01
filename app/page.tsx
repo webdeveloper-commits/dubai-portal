@@ -155,8 +155,35 @@ export default async function Home() {
     developer:  ((popupProject.developer_slug ?? "") as string).replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
   } : null;
 
+  const websiteSchema = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Offplan Search UAE",
+    url: "https://offplansearchuae.com",
+    potentialAction: {
+      "@type": "SearchAction",
+      target: { "@type": "EntryPoint", urlTemplate: "https://offplansearchuae.com/projects?q={search_term_string}" },
+      "query-input": "required name=search_term_string",
+    },
+  });
+
+  const localBizSchema = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "RealEstateAgent",
+    name: "Offplan Search UAE",
+    url: "https://offplansearchuae.com",
+    logo: "https://offplansearchuae.com/logo.png",
+    description: "Search off-plan and new-launch properties in Dubai. Compare prices, payment plans and handover dates from top developers.",
+    address: { "@type": "PostalAddress", addressLocality: "Dubai", addressCountry: "AE" },
+    areaServed: { "@type": "City", name: "Dubai" },
+    sameAs: ["https://offplansearchuae.com"],
+  });
+
   return (
-    <main>
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: websiteSchema }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: localBizSchema }} />
+      <main>
       <HeroSection projects={projects} />
       <FeaturedProjects projects={featuredProjects} />
       <HandpickedProjects projects={handpickedProjects} />
@@ -168,5 +195,6 @@ export default async function Home() {
       <AboutElysian />
       <FeaturedProjectPopup project={popup} />
     </main>
+    </>
   );
 }

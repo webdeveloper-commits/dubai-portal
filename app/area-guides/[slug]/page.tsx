@@ -33,9 +33,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .eq("is_published", true)
     .single();
 
-  if (!data) return { title: "Area Guide | Elysian Dubai" };
+  if (!data) return { title: "Area Guide | Offplan Search UAE" };
 
-  const title = (data.seo_title || `${data.name} Area Guide — Buy, Rent & Invest | Elysian Dubai`) as string;
+  const title = (data.seo_title || `${data.name} Area Guide — Buy, Rent & Invest | Offplan Search UAE`) as string;
   const desc  = (data.seo_description || `Explore ${data.name} in Dubai: average property prices, rental yields, lifestyle, schools, hospitals and more.`) as string;
 
   return {
@@ -43,11 +43,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description: desc,
     keywords: (data.seo_keywords as string) || undefined,
     openGraph: {
-      title, description: desc, type: "website", siteName: "Elysian Dubai",
+      title, description: desc, type: "website", siteName: "Offplan Search UAE",
       images: data.hero_image ? [{ url: data.hero_image as string }] : [],
     },
     twitter: { card: "summary_large_image", title, description: desc },
-    alternates: { canonical: `https://elysian.ae/area-guides/${slug}` },
+    alternates: { canonical: `https://offplansearchuae.com/area-guides/${slug}` },
   };
 }
 
@@ -179,9 +179,9 @@ export default async function AreaDetailPage({ params }: Props) {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home",        item: "https://elysian.ae" },
-      { "@type": "ListItem", position: 2, name: "Area Guides", item: "https://elysian.ae/area-guides" },
-      { "@type": "ListItem", position: 3, name: area.name,     item: `https://elysian.ae/area-guides/${slug}` },
+      { "@type": "ListItem", position: 1, name: "Home",        item: "https://offplansearchuae.com" },
+      { "@type": "ListItem", position: 2, name: "Area Guides", item: "https://offplansearchuae.com/area-guides" },
+      { "@type": "ListItem", position: 3, name: area.name,     item: `https://offplansearchuae.com/area-guides/${slug}` },
     ],
   });
 

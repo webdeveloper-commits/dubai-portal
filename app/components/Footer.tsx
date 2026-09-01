@@ -278,7 +278,7 @@ export default function Footer() {
             margin: 0,
           }}
         >
-          © {new Date().getFullYear()} Elysian Real Estate. All rights reserved. ·{" "}
+          © {new Date().getFullYear()} Offplan Search UAE. All rights reserved. ·{" "}
           <a href="/privacy-policy" style={{ color: "rgba(255,255,255,0.4)", textDecoration: "none" }}>Privacy Policy</a>{" "}
           ·{" "}
           <a href="/terms-and-conditions" style={{ color: "rgba(255,255,255,0.4)", textDecoration: "none" }}>Terms of Use</a>{" "}

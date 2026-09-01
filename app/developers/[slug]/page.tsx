@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .eq("slug", slug)
     .eq("published", true)
     .single();
-  if (!data) return { title: "Developer | Elysian Dubai" };
+  if (!data) return { title: "Developer | Offplan Search UAE" };
   const title = (data.seo_title || `${data.name} Dubai Properties | Off-Plan Projects 2026`) as string;
   const desc  = (data.seo_description || data.aeo_snippet || "") as string;
   return {
@@ -24,11 +24,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description: desc,
     keywords: (data.seo_keywords as string) || undefined,
     openGraph: {
-      title, description: desc, type: "website", siteName: "Elysian Dubai",
+      title, description: desc, type: "website", siteName: "Offplan Search UAE",
       images: data.logo_url ? [{ url: data.logo_url as string }] : [],
     },
     twitter: { card: "summary", title, description: desc },
-    alternates: { canonical: `https://elysian.ae/developers/${slug}` },
+    alternates: { canonical: `https://offplansearchuae.com/developers/${slug}` },
   };
 }
 
@@ -134,9 +134,9 @@ export default async function DeveloperPage({ params }: Props) {
   const breadcrumbSchema = JSON.stringify({
     "@context": "https://schema.org", "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home",       item: "https://elysian.ae" },
-      { "@type": "ListItem", position: 2, name: "Developers", item: "https://elysian.ae/developers" },
-      { "@type": "ListItem", position: 3, name: d.name,       item: `https://elysian.ae/developers/${slug}` },
+      { "@type": "ListItem", position: 1, name: "Home",       item: "https://offplansearchuae.com" },
+      { "@type": "ListItem", position: 2, name: "Developers", item: "https://offplansearchuae.com/developers" },
+      { "@type": "ListItem", position: 3, name: d.name,       item: `https://offplansearchuae.com/developers/${slug}` },
     ],
   });
 

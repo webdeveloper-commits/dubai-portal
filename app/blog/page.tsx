@@ -4,9 +4,9 @@ import BlogClientGrid from "./BlogClientGrid";
 export const revalidate = 3600;
 
 export const metadata = {
-  title: "Dubai Property Expert Insights | Elysian Real Estate Blog",
-  description: "Market analysis, area guides, investment tips, and everything you need to know about Dubai real estate.",
-  alternates: { canonical: "https://elysian.ae/blog" },
+  title: "Dubai Property Insights & Market News | Offplan Search UAE Blog",
+  description: "Market analysis, area guides, investment tips, and everything you need to know about Dubai off-plan real estate.",
+  alternates: { canonical: "https://offplansearchuae.com/blog" },
 };
 
 export default async function BlogPage() {

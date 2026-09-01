@@ -15,17 +15,17 @@ const breadcrumbSchema = JSON.stringify({
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
   itemListElement: [
-    { "@type": "ListItem", position: 1, name: "Home",        item: "https://elysian.ae" },
-    { "@type": "ListItem", position: 2, name: "Area Guides", item: "https://elysian.ae/area-guides" },
+    { "@type": "ListItem", position: 1, name: "Home",        item: "https://offplansearchuae.com" },
+    { "@type": "ListItem", position: 2, name: "Area Guides", item: "https://offplansearchuae.com/area-guides" },
   ],
 });
 
 export const revalidate = 3600;
 
 export const metadata = {
-  title: "Dubai Area Guides | Elysian Real Estate",
+  title: "Dubai Area Guides | Offplan Search UAE",
   description: "Explore our comprehensive guides to Dubai's most sought-after neighbourhoods — average prices, ROI, lifestyle, schools, and more.",
-  alternates: { canonical: "https://elysian.ae/area-guides" },
+  alternates: { canonical: "https://offplansearchuae.com/area-guides" },
 };
 
 export default async function AreaGuidesPage() {

@@ -5,9 +5,9 @@ import SearchableDevGrid from "./SearchableDevGrid";
 export const revalidate = 3600;
 
 export const metadata = {
-  title: "Top Property Developers in Dubai | Elysian Real Estate",
-  description: "Explore projects from the most trusted names in Dubai real estate — from iconic landmarks to master-planned communities.",
-  alternates: { canonical: "https://elysian.ae/developers" },
+  title: "Top Property Developers in Dubai | Offplan Search UAE",
+  description: "Explore off-plan projects from the most trusted developers in Dubai — from iconic landmarks to master-planned communities.",
+  alternates: { canonical: "https://offplansearchuae.com/developers" },
 };
 
 export default async function DevelopersPage() {

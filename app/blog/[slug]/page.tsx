@@ -14,7 +14,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .eq("slug", slug)
     .eq("published", true)
     .single();
-  if (!data) return { title: "Blog | Elysian Dubai" };
+  if (!data) return { title: "Blog | Offplan Search UAE" };
   const title = (data.seo_title || data.title) as string;
   const desc  = (data.seo_description || data.excerpt || "") as string;
   const img   = data.cover_image as string | null;
@@ -23,14 +23,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description: desc,
     keywords: (data.seo_keywords as string) || undefined,
     openGraph: {
-      title, description: desc, type: "article", siteName: "Elysian Dubai",
+      title, description: desc, type: "article", siteName: "Offplan Search UAE",
       images: img ? [{ url: img, width: 1200, height: 630, alt: title }] : [],
     },
     twitter: {
       card: "summary_large_image", title, description: desc,
       images: img ? [img] : [],
     },
-    alternates: { canonical: `https://elysian.ae/blog/${slug}` },
+    alternates: { canonical: `https://offplansearchuae.com/blog/${slug}` },
   };
 }
 
@@ -71,19 +71,19 @@ export default async function BlogPostPage({ params }: Props) {
     headline: p.title, description: p.excerpt || p.seo_description,
     image: p.cover_image,
     author: { "@type": "Person", name: p.author_name || "Elysian Advisory Team" },
-    publisher: { "@type": "Organization", name: "Elysian",
-      logo: { "@type": "ImageObject", url: "https://elysian.ae/logo.png" } },
+    publisher: { "@type": "Organization", name: "Offplan Search UAE",
+      logo: { "@type": "ImageObject", url: "https://offplansearchuae.com/logo.png" } },
     datePublished: p.created_at, dateModified: p.updated_at || p.created_at,
-    mainEntityOfPage: { "@type": "WebPage", "@id": `https://elysian.ae/blog/${slug}` },
+    mainEntityOfPage: { "@type": "WebPage", "@id": `https://offplansearchuae.com/blog/${slug}` },
     keywords: p.seo_keywords,
   });
 
   const breadcrumbSchema = JSON.stringify({
     "@context": "https://schema.org", "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home",  item: "https://elysian.ae" },
-      { "@type": "ListItem", position: 2, name: "Blog",  item: "https://elysian.ae/blog" },
-      { "@type": "ListItem", position: 3, name: p.title, item: `https://elysian.ae/blog/${slug}` },
+      { "@type": "ListItem", position: 1, name: "Home",  item: "https://offplansearchuae.com" },
+      { "@type": "ListItem", position: 2, name: "Blog",  item: "https://offplansearchuae.com/blog" },
+      { "@type": "ListItem", position: 3, name: p.title, item: `https://offplansearchuae.com/blog/${slug}` },
     ],
   });
 

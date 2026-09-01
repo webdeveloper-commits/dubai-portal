@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | Elysian Real Estate Dubai",
-  description: "How Elysian Real Estate collects, uses, and protects your personal data in accordance with UAE law and international privacy standards.",
-  alternates: { canonical: "https://elysian.ae/privacy-policy" },
+  title: "Privacy Policy | Offplan Search UAE",
+  description: "How Offplan Search UAE collects, uses, and protects your personal data in accordance with UAE law and international privacy standards.",
+  alternates: { canonical: "https://offplansearchuae.com/privacy-policy" },
 };
 
 const LAST_UPDATED = "22 July 2026";
@@ -39,7 +39,7 @@ export default function PrivacyPolicyPage() {
 
           <Section title="1. Who We Are">
             <p>Elysian Real Estate LLC ("<strong>Elysian</strong>", "<strong>we</strong>", "<strong>us</strong>", or "<strong>our</strong>") is a licensed real estate agency registered and operating in Dubai, United Arab Emirates, under the Real Estate Regulatory Authority (RERA). Our registered office is located at Elysian Sales Center, Umm Al Sheif, Sheikh Zayed Road, Dubai, UAE.</p>
-            <p>We operate the website at <strong>dubai-portal.elysian.ae</strong> (the "Portal") and the main company website at <strong>elysian.com</strong>. This Privacy Policy applies to all personal data we collect through these websites and through our property enquiry services.</p>
+            <p>We operate the property portal at <strong>offplansearchuae.com</strong> (the "Portal"). This Privacy Policy applies to all personal data we collect through this website and through our property enquiry services.</p>
             <p>For any privacy-related questions, you may contact our Data Protection Officer at: <a href="mailto:info@elysian.com">info@elysian.com</a></p>
           </Section>
 

@@ -14,7 +14,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .eq("slug", slug)
     .single();
 
-  if (!data) return { title: "Project | Elysian Dubai" };
+  if (!data) return { title: "Project | Offplan Search UAE" };
 
   const name     = data.name as string;
   const title    = (data.seo_title || `${name} | Off-Plan Property in Dubai`) as string;
@@ -40,11 +40,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description: desc,
       url: pageUrl,
       type: "website",
-      siteName: "Elysian Realty Dubai",
+      siteName: "Offplan Search UAE",
       locale: "en_AE",
       images: imageUrl
         ? [{ url: imageUrl, width: 1200, height: 630, alt: `${name} - Dubai property` }]
-        : [{ url: "https://elysianrealtydubai.ae/og-default.jpg", width: 1200, height: 630, alt: "Elysian Realty Dubai" }],
+        : [],
     },
     twitter: {
       card: "summary_large_image",
