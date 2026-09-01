@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 import { createClient } from "@supabase/supabase-js";
 
+export const revalidate = 3600; // regenerate every hour
+
 const BASE = "https://offplansearchuae.com";
 
 function supabase() {
